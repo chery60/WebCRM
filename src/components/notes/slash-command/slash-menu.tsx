@@ -1,0 +1,349 @@
+'use client';
+
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sparkles,
+  Type,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Code,
+  Table,
+  Minus,
+  Image,
+  Wand2,
+  FileText,
+  Languages,
+  MessageSquare,
+  Pencil,
+  CheckCircle,
+  Briefcase,
+} from 'lucide-react';
+
+export interface SlashCommand {
+  id: string;
+  name: string;
+  description: string;
+  category: 'ai-generate' | 'ai-action' | 'format' | 'widget';
+  icon: React.ReactNode;
+  command: string;
+}
+
+const commands: SlashCommand[] = [
+  // AI Generate
+  {
+    id: 'summarize',
+    name: 'Summarize',
+    description: 'Condense selected text',
+    category: 'ai-generate',
+    icon: <FileText className="h-4 w-4" />,
+    command: 'summarize',
+  },
+  {
+    id: 'expand',
+    name: 'Expand',
+    description: 'Elaborate on selected text',
+    category: 'ai-generate',
+    icon: <Sparkles className="h-4 w-4" />,
+    command: 'expand',
+  },
+  {
+    id: 'rewrite',
+    name: 'Rewrite',
+    description: 'Rephrase with different tone',
+    category: 'ai-generate',
+    icon: <Pencil className="h-4 w-4" />,
+    command: 'rewrite',
+  },
+  {
+    id: 'translate',
+    name: 'Translate',
+    description: 'Translate to another language',
+    category: 'ai-generate',
+    icon: <Languages className="h-4 w-4" />,
+    command: 'translate',
+  },
+  // AI Actions
+  {
+    id: 'continue',
+    name: 'Continue Writing',
+    description: 'AI continues from cursor',
+    category: 'ai-action',
+    icon: <Wand2 className="h-4 w-4" />,
+    command: 'continue',
+  },
+  {
+    id: 'grammar',
+    name: 'Fix Grammar',
+    description: 'Fix grammar and spelling',
+    category: 'ai-action',
+    icon: <CheckCircle className="h-4 w-4" />,
+    command: 'grammar',
+  },
+  {
+    id: 'professional',
+    name: 'Make Professional',
+    description: 'Make text more formal',
+    category: 'ai-action',
+    icon: <Briefcase className="h-4 w-4" />,
+    command: 'professional',
+  },
+  {
+    id: 'ask-ai',
+    name: 'Ask AI',
+    description: 'Ask AI anything',
+    category: 'ai-action',
+    icon: <MessageSquare className="h-4 w-4" />,
+    command: 'ask',
+  },
+  // Format
+  {
+    id: 'text',
+    name: 'Text',
+    description: 'Plain text paragraph',
+    category: 'format',
+    icon: <Type className="h-4 w-4" />,
+    command: 'text',
+  },
+  {
+    id: 'h1',
+    name: 'Heading 1',
+    description: 'Large section heading',
+    category: 'format',
+    icon: <Heading1 className="h-4 w-4" />,
+    command: 'h1',
+  },
+  {
+    id: 'h2',
+    name: 'Heading 2',
+    description: 'Medium section heading',
+    category: 'format',
+    icon: <Heading2 className="h-4 w-4" />,
+    command: 'h2',
+  },
+  {
+    id: 'h3',
+    name: 'Heading 3',
+    description: 'Small section heading',
+    category: 'format',
+    icon: <Heading3 className="h-4 w-4" />,
+    command: 'h3',
+  },
+  {
+    id: 'bullet',
+    name: 'Bullet List',
+    description: 'Unordered list',
+    category: 'format',
+    icon: <List className="h-4 w-4" />,
+    command: 'bullet',
+  },
+  {
+    id: 'numbered',
+    name: 'Numbered List',
+    description: 'Ordered list',
+    category: 'format',
+    icon: <ListOrdered className="h-4 w-4" />,
+    command: 'numbered',
+  },
+  {
+    id: 'todo',
+    name: 'To-do List',
+    description: 'Checkbox list',
+    category: 'format',
+    icon: <CheckSquare className="h-4 w-4" />,
+    command: 'todo',
+  },
+  {
+    id: 'quote',
+    name: 'Quote',
+    description: 'Blockquote',
+    category: 'format',
+    icon: <Quote className="h-4 w-4" />,
+    command: 'quote',
+  },
+  // Widgets
+  {
+    id: 'code',
+    name: 'Code Block',
+    description: 'Syntax highlighted code',
+    category: 'widget',
+    icon: <Code className="h-4 w-4" />,
+    command: 'code',
+  },
+  {
+    id: 'table',
+    name: 'Table',
+    description: 'Insert a table',
+    category: 'widget',
+    icon: <Table className="h-4 w-4" />,
+    command: 'table',
+  },
+  {
+    id: 'divider',
+    name: 'Divider',
+    description: 'Horizontal rule',
+    category: 'widget',
+    icon: <Minus className="h-4 w-4" />,
+    command: 'divider',
+  },
+  {
+    id: 'image',
+    name: 'Image',
+    description: 'Insert an image',
+    category: 'widget',
+    icon: <Image className="h-4 w-4" />,
+    command: 'image',
+  },
+];
+
+const categoryLabels: Record<string, string> = {
+  'ai-generate': 'AI Generate',
+  'ai-action': 'AI Actions',
+  format: 'Format',
+  widget: 'Widgets',
+};
+
+interface SlashMenuProps {
+  query: string;
+  onSelect: (command: SlashCommand) => void;
+  onClose: () => void;
+}
+
+export interface SlashMenuHandle {
+  onKeyDown: (event: KeyboardEvent) => boolean;
+}
+
+export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
+  ({ query, onSelect, onClose }, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0);
+
+    // Filter commands based on query
+    const filteredCommands = commands.filter((cmd) =>
+      cmd.name.toLowerCase().includes(query.toLowerCase()) ||
+      cmd.command.toLowerCase().includes(query.toLowerCase()) ||
+      cmd.description.toLowerCase().includes(query.toLowerCase())
+    );
+
+    // Group commands by category
+    const groupedCommands = filteredCommands.reduce<Record<string, SlashCommand[]>>(
+      (acc, cmd) => {
+        if (!acc[cmd.category]) {
+          acc[cmd.category] = [];
+        }
+        acc[cmd.category].push(cmd);
+        return acc;
+      },
+      {}
+    );
+
+    // Reset selection when query changes
+    useEffect(() => {
+      setSelectedIndex(0);
+    }, [query]);
+
+    // Handle keyboard navigation
+    const handleKeyDown = useCallback(
+      (event: KeyboardEvent) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          setSelectedIndex((prev) =>
+            prev < filteredCommands.length - 1 ? prev + 1 : 0
+          );
+          return true;
+        }
+
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          setSelectedIndex((prev) =>
+            prev > 0 ? prev - 1 : filteredCommands.length - 1
+          );
+          return true;
+        }
+
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (filteredCommands[selectedIndex]) {
+            onSelect(filteredCommands[selectedIndex]);
+          }
+          return true;
+        }
+
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onClose();
+          return true;
+        }
+
+        return false;
+      },
+      [filteredCommands, selectedIndex, onSelect, onClose]
+    );
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: handleKeyDown,
+    }));
+
+    if (filteredCommands.length === 0) {
+      return (
+        <div className="slash-command-menu">
+          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+            No commands found
+          </div>
+        </div>
+      );
+    }
+
+    let globalIndex = 0;
+
+    return (
+      <div className="slash-command-menu">
+        <ScrollArea className="max-h-[280px]">
+          {Object.entries(groupedCommands).map(([category, cmds]) => (
+            <div key={category}>
+              <div className="slash-command-category">
+                {categoryLabels[category] || category}
+              </div>
+              {cmds.map((cmd) => {
+                const currentIndex = globalIndex++;
+                const isSelected = currentIndex === selectedIndex;
+
+                return (
+                  <button
+                    key={cmd.id}
+                    className={cn(
+                      'slash-command-item w-full text-left',
+                      isSelected && 'is-selected'
+                    )}
+                    onClick={() => onSelect(cmd)}
+                    onMouseEnter={() => setSelectedIndex(currentIndex)}
+                  >
+                    <div className="slash-command-item-icon">
+                      {cmd.icon}
+                    </div>
+                    <div className="slash-command-item-content">
+                      <div className="slash-command-item-title">{cmd.name}</div>
+                      <div className="slash-command-item-description">
+                        {cmd.description}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </ScrollArea>
+      </div>
+    );
+  }
+);
+
+SlashMenu.displayName = 'SlashMenu';
+
+export { commands };
+
