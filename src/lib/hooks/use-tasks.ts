@@ -27,10 +27,10 @@ export function useTasks(filter?: TasksFilter, sort?: TasksSort) {
 }
 
 // Get tasks grouped by status (for List and Kanban views)
-export function useTasksByStatus() {
+export function useTasksByStatus(filter?: TasksFilter) {
     return useQuery({
-        queryKey: [TASKS_KEY, 'byStatus'],
-        queryFn: () => getTasksByStatus(),
+        queryKey: [TASKS_KEY, 'byStatus', filter],
+        queryFn: () => getTasksByStatus(filter),
         staleTime: 1000 * 60,
     });
 }

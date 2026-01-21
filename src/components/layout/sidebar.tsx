@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { WorkspaceSwitcher } from '@/components/sidebar/workspace-switcher';
+import { PipelineNavSection } from '@/components/pipelines/pipeline-nav-section';
 import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } from '@/lib/hooks/use-projects';
 import { useMoveNoteToProject } from '@/lib/hooks/use-notes';
 import {
@@ -77,7 +78,7 @@ interface NavItem {
 }
 
 const mainNavItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  // { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }, // TODO: Scoped out for later
   // { title: 'Notifications', href: '/notifications', icon: Bell }, // TODO: Scoped out for later
   // Notes is handled separately with projects
   { title: 'Tasks', href: '/tasks', icon: CheckSquare },
@@ -578,17 +579,14 @@ export function Sidebar() {
         {/* Navigation */}
         <ScrollArea className="flex-1 px-3">
           <nav className="space-y-1 py-2">
-            {/* Dashboard */}
-            <NavItemComponent
-              item={mainNavItems[0]}
-              collapsed={isCollapsed}
-            />
-            
             {/* Notes with Projects */}
             <NotesNavSection collapsed={isCollapsed} />
+
+            {/* Pipelines with Roadmaps */}
+            <PipelineNavSection collapsed={isCollapsed} />
             
             {/* Other nav items (Tasks, Calendar) */}
-            {mainNavItems.slice(1).map((item) => (
+            {mainNavItems.map((item) => (
               <NavItemComponent
                 key={item.href}
                 item={item}

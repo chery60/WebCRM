@@ -1,6 +1,7 @@
 import { db } from './dexie';
 import type { Note, Tag, User, Task, CalendarEvent, Employee } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { seedPipelines } from './seed-pipelines';
 
 // Default tags matching the Figma design
 const defaultTags: Tag[] = [
@@ -690,6 +691,9 @@ export async function seedDatabase() {
   }));
   await db.events.bulkAdd(eventsWithIds);
 
+  // Seed pipelines
+  await seedPipelines();
+
   console.log('Database seeded successfully');
   console.log(`Created ${defaultEmployees.length} employee records from users`);
 }
@@ -702,5 +706,8 @@ export async function clearDatabase() {
   await db.tasks.clear();
   await db.events.clear();
   await db.employees.clear();
+  await db.pipelines.clear();
+  await db.roadmaps.clear();
+  await db.featureRequests.clear();
   console.log('Database cleared');
 }

@@ -14,16 +14,18 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import type { Task, TaskStatus } from '@/types';
+import type { Task, TaskStatus, TaskTab } from '@/types';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 interface TaskRowProps {
     task: Task;
     assignees?: { id: string; name: string; avatar?: string }[];
+    tabs?: TaskTab[];
     isSelected?: boolean;
     onToggleSelect?: (id: string, selected: boolean) => void;
     onStatusChange?: (id: string, status: TaskStatus) => void;
+    onProjectChange?: (id: string, projectId: string | undefined) => void;
     onClick?: () => void;
     onEdit?: () => void;
     onDuplicate?: () => void;
@@ -33,9 +35,11 @@ interface TaskRowProps {
 export function TaskRow({
     task,
     assignees = [],
+    tabs = [],
     isSelected = false,
     onToggleSelect,
     onStatusChange,
+    onProjectChange,
     onClick,
     onEdit,
     onDuplicate,
@@ -127,6 +131,28 @@ export function TaskRow({
                     </div>
                 )}
             </div>
+
+            {/* Project Dropdown */}
+            {tabs.length > 0 && (
+                <div onClick={(e) => e.stopPropagation()}>
+                    <Select
+                        value={task.projectId || 'none'}
+                        onValueChange={(value) => onProjectChange?.(task.id, value === 'none' ? undefined : value)}
+                    >
+                        <SelectTrigger className="h-8 w-[120px] text-xs">
+                            <SelectValue placeholder="No Project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="none">No Project</SelectItem>
+                            {tabs.map((tab) => (
+                                <SelectItem key={tab.id} value={tab.id}>
+                                    {tab.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
 
             {/* Status Dropdown */}
             <div onClick={(e) => e.stopPropagation()}>
