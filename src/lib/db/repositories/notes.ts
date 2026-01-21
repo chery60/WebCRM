@@ -78,6 +78,8 @@ export const notesRepository = {
       content: data.content,
       tags: data.tags,
       projectId: data.projectId,
+      generatedFeatures: data.generatedFeatures,
+      generatedTasks: data.generatedTasks,
       authorId,
       authorName,
       authorAvatar,

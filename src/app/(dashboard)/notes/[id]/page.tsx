@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, MoreVertical, Trash2, Plus, Tag, FolderInput, FolderOpen } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Trash2, Plus, Tag, FolderInput, FolderOpen, Loader2, Check } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
 import { useProjects } from '@/lib/hooks/use-projects';
 import {
@@ -45,6 +45,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useDebounce } from '@/lib/hooks/use-debounce';
+import { GeneratedItemsSection } from '@/components/notes/generated-items-section';
+import type { GeneratedFeature, GeneratedTask } from '@/types';
+import { useRoadmaps } from '@/lib/hooks/use-roadmaps';
+import {
+  createFeatureFromGenerated,
+  createFeaturesFromGenerated,
+  createTaskFromGenerated,
+  createTasksFromGenerated
+} from '@/lib/services/bulk-creation';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 export default function NoteDetailPage() {
   const params = useParams();
@@ -54,7 +71,7 @@ export default function NoteDetailPage() {
   const { data: note, isLoading } = useNote(noteId);
   const { data: allTags = [] } = useTags();
   const { data: projects = [] } = useProjects();
-  const updateNote = useUpdateNote();
+  const { mutate: updateNote, isPending: isSaving } = useUpdateNote();
   const deleteNote = useDeleteNote();
 
   const [title, setTitle] = useState('');
@@ -64,10 +81,31 @@ export default function NoteDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  // AI Generated items state
+  const [generatedFeatures, setGeneratedFeatures] = useState<GeneratedFeature[]>([]);
+  const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
+
+  // Roadmap selection for creating features
+  const [showRoadmapDialog, setShowRoadmapDialog] = useState(false);
+  const [selectedRoadmapId, setSelectedRoadmapId] = useState<string>('');
+  const [pendingFeatureAction, setPendingFeatureAction] = useState<'single' | 'bulk' | null>(null);
+  const [pendingFeature, setPendingFeature] = useState<GeneratedFeature | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Fetch roadmaps for feature creation
+  const { data: roadmaps = [] } = useRoadmaps();
 
   // Track if we've initialized and last saved values to prevent save loops
   const isInitialized = useRef(false);
-  const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '' });
+  const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '', generatedFeatures: '[]', generatedTasks: '[]' });
+
+  // Keep refs for current state to access in unmount cleanup
+  const currentValues = useRef({ title, content, tags, projectId, generatedFeatures, generatedTasks });
+  useEffect(() => {
+    currentValues.current = { title, content, tags, projectId, generatedFeatures, generatedTasks };
+  }, [title, content, tags, projectId, generatedFeatures, generatedTasks]);
 
   // Initialize state when note loads
   useEffect(() => {
@@ -76,12 +114,21 @@ export default function NoteDetailPage() {
       setContent(note.content);
       setTags(note.tags);
       setProjectId(note.projectId);
+      // Load saved generated features and tasks
+      if (note.generatedFeatures && note.generatedFeatures.length > 0) {
+        setGeneratedFeatures(note.generatedFeatures);
+      }
+      if (note.generatedTasks && note.generatedTasks.length > 0) {
+        setGeneratedTasks(note.generatedTasks);
+      }
       // Store initial values as last saved
       lastSaved.current = {
         title: note.title,
         content: note.content,
         tags: JSON.stringify(note.tags),
         projectId: note.projectId || '',
+        generatedFeatures: JSON.stringify(note.generatedFeatures || []),
+        generatedTasks: JSON.stringify(note.generatedTasks || []),
       };
       isInitialized.current = true;
     }
@@ -93,10 +140,12 @@ export default function NoteDetailPage() {
   }, [noteId]);
 
   // Debounce content changes for auto-save
-  const debouncedContent = useDebounce(content, 1500);
-  const debouncedTitle = useDebounce(title, 1500);
+  const debouncedContent = useDebounce(content, 800);
+  const debouncedTitle = useDebounce(title, 800);
   const debouncedTags = useDebounce(tags, 500);
   const debouncedProjectId = useDebounce(projectId, 500);
+  const debouncedGeneratedFeatures = useDebounce(generatedFeatures, 500);
+  const debouncedGeneratedTasks = useDebounce(generatedTasks, 500);
 
   // Auto-save
   useEffect(() => {
@@ -104,11 +153,15 @@ export default function NoteDetailPage() {
 
     const currentTagsStr = JSON.stringify(debouncedTags);
     const currentProjectId = debouncedProjectId || '';
+    const currentFeaturesStr = JSON.stringify(debouncedGeneratedFeatures);
+    const currentTasksStr = JSON.stringify(debouncedGeneratedTasks);
     const hasChanges =
       debouncedTitle !== lastSaved.current.title ||
       debouncedContent !== lastSaved.current.content ||
       currentTagsStr !== lastSaved.current.tags ||
-      currentProjectId !== lastSaved.current.projectId;
+      currentProjectId !== lastSaved.current.projectId ||
+      currentFeaturesStr !== lastSaved.current.generatedFeatures ||
+      currentTasksStr !== lastSaved.current.generatedTasks;
 
     if (hasChanges) {
       // Update last saved values immediately to prevent duplicate saves
@@ -117,18 +170,60 @@ export default function NoteDetailPage() {
         content: debouncedContent,
         tags: currentTagsStr,
         projectId: currentProjectId,
+        generatedFeatures: currentFeaturesStr,
+        generatedTasks: currentTasksStr,
       };
 
-      updateNote.mutate(
-        { id: noteId, data: { title: debouncedTitle, content: debouncedContent, tags: debouncedTags, projectId: debouncedProjectId } },
+      updateNote(
+        { 
+          id: noteId, 
+          data: { 
+            title: debouncedTitle, 
+            content: debouncedContent, 
+            tags: debouncedTags, 
+            projectId: debouncedProjectId,
+            generatedFeatures: debouncedGeneratedFeatures,
+            generatedTasks: debouncedGeneratedTasks,
+          } 
+        },
         {
           onSuccess: () => {
-            toast.success('Note saved', { duration: 1500 });
+            setLastSavedAt(new Date());
           },
         }
       );
     }
-  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, noteId, isLoading, updateNote]);
+  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, noteId, isLoading, updateNote]);
+
+  // Save on unmount / navigation
+  useEffect(() => {
+    return () => {
+      if (!isInitialized.current) return;
+
+      const { title, content, tags, projectId, generatedFeatures, generatedTasks } = currentValues.current;
+      const currentTagsStr = JSON.stringify(tags);
+      const currentProjectId = projectId || '';
+      const currentFeaturesStr = JSON.stringify(generatedFeatures);
+      const currentTasksStr = JSON.stringify(generatedTasks);
+
+      const hasChanges =
+        title !== lastSaved.current.title ||
+        content !== lastSaved.current.content ||
+        currentTagsStr !== lastSaved.current.tags ||
+        currentProjectId !== lastSaved.current.projectId ||
+        currentFeaturesStr !== lastSaved.current.generatedFeatures ||
+        currentTasksStr !== lastSaved.current.generatedTasks;
+
+      if (hasChanges) {
+        // Force immediate save on unmount
+        // We use the mutation directly without optimistic updates to ensure the request fires
+        updateNote({
+          id: noteId,
+          data: { title, content, tags, projectId, generatedFeatures, generatedTasks }
+        });
+      }
+    };
+  }, [noteId, updateNote]);
 
   const handleDelete = useCallback(() => {
     deleteNote.mutate(noteId, {
@@ -149,6 +244,117 @@ export default function NoteDetailPage() {
   const handleRemoveTag = useCallback((tagName: string) => {
     setTags(tags.filter((t) => t !== tagName));
   }, [tags]);
+
+  // Handle features generated from AI
+  const handleFeaturesGenerated = useCallback((features: GeneratedFeature[]) => {
+    setGeneratedFeatures(prev => [...prev, ...features]);
+    toast.success(`${features.length} features generated`);
+  }, []);
+
+  // Handle tasks generated from AI
+  const handleTasksGenerated = useCallback((tasks: GeneratedTask[]) => {
+    setGeneratedTasks(prev => [...prev, ...tasks]);
+    toast.success(`${tasks.length} tasks generated`);
+  }, []);
+
+  // Create a single feature in the pipeline
+  const handleCreateFeature = useCallback((feature: GeneratedFeature) => {
+    if (roadmaps.length === 0) {
+      toast.error('No roadmaps available. Please create a roadmap first.');
+      return;
+    }
+    setPendingFeature(feature);
+    setPendingFeatureAction('single');
+    setShowRoadmapDialog(true);
+  }, [roadmaps.length]);
+
+  // Create a single task
+  const handleCreateTask = useCallback(async (task: GeneratedTask) => {
+    setIsCreating(true);
+    try {
+      await createTaskFromGenerated(task, { defaultStatus: 'planned' });
+      toast.success(`Task "${task.title}" created`);
+      setGeneratedTasks(prev => prev.filter(t => t.id !== task.id));
+    } catch (error) {
+      toast.error(`Failed to create task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCreating(false);
+    }
+  }, []);
+
+  // Create all selected features
+  const handleCreateAllFeatures = useCallback(() => {
+    const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
+    if (selectedFeatures.length === 0) {
+      toast.error('No features selected');
+      return;
+    }
+    if (roadmaps.length === 0) {
+      toast.error('No roadmaps available. Please create a roadmap first.');
+      return;
+    }
+    setPendingFeatureAction('bulk');
+    setShowRoadmapDialog(true);
+  }, [generatedFeatures, roadmaps.length]);
+
+  // Create all selected tasks
+  const handleCreateAllTasks = useCallback(async () => {
+    const selectedTasks = generatedTasks.filter(t => t.isSelected);
+    if (selectedTasks.length === 0) {
+      toast.error('No tasks selected');
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const result = await createTasksFromGenerated(selectedTasks, { defaultStatus: 'planned' });
+      if (result.totalCreated > 0) {
+        toast.success(`${result.totalCreated} tasks created`);
+        setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+      }
+      if (result.totalFailed > 0) {
+        toast.error(`${result.totalFailed} tasks failed to create`);
+      }
+    } catch (error) {
+      toast.error(`Failed to create tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [generatedTasks]);
+
+  // Confirm feature creation with selected roadmap
+  const handleConfirmFeatureCreation = useCallback(async () => {
+    if (!selectedRoadmapId) {
+      toast.error('Please select a roadmap');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      if (pendingFeatureAction === 'single' && pendingFeature) {
+        await createFeatureFromGenerated(pendingFeature, { roadmapId: selectedRoadmapId });
+        toast.success(`Feature "${pendingFeature.title}" created in pipeline`);
+        setGeneratedFeatures(prev => prev.filter(f => f.id !== pendingFeature.id));
+      } else if (pendingFeatureAction === 'bulk') {
+        const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
+        const result = await createFeaturesFromGenerated(selectedFeatures, { roadmapId: selectedRoadmapId });
+        if (result.totalCreated > 0) {
+          toast.success(`${result.totalCreated} features created in pipeline`);
+          setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+        }
+        if (result.totalFailed > 0) {
+          toast.error(`${result.totalFailed} features failed to create`);
+        }
+      }
+    } catch (error) {
+      toast.error(`Failed to create features: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCreating(false);
+      setShowRoadmapDialog(false);
+      setPendingFeature(null);
+      setPendingFeatureAction(null);
+      setSelectedRoadmapId('');
+    }
+  }, [selectedRoadmapId, pendingFeatureAction, pendingFeature, generatedFeatures]);
 
   if (isLoading) {
     return (
@@ -187,6 +393,19 @@ export default function NoteDetailPage() {
             </Link>
           </Button>
           <h1 className="text-2xl font-medium">Notes</h1>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {isSaving ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Saving...</span>
+            </div>
+          ) : lastSavedAt ? (
+            <div className="flex items-center gap-1.5 text-muted-foreground/80">
+              <Check className="h-3.5 w-3.5" />
+              <span>Saved</span>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -301,8 +520,23 @@ export default function NoteDetailPage() {
               onChange={setContent}
               placeholder="Start typing, or press '/' for commands..."
               className="min-h-[500px]"
+              savedFeatures={generatedFeatures}
+              onFeaturesGenerated={handleFeaturesGenerated}
+              onTasksGenerated={handleTasksGenerated}
             />
           </div>
+
+          {/* Generated Items Section */}
+          <GeneratedItemsSection
+            features={generatedFeatures}
+            tasks={generatedTasks}
+            onFeaturesChange={setGeneratedFeatures}
+            onTasksChange={setGeneratedTasks}
+            onCreateFeature={handleCreateFeature}
+            onCreateTask={handleCreateTask}
+            onCreateAllFeatures={handleCreateAllFeatures}
+            onCreateAllTasks={handleCreateAllTasks}
+          />
         </div>
       </div>
 
@@ -335,6 +569,64 @@ export default function NoteDetailPage() {
         noteTitle={title || note.title}
         currentProjectId={note.projectId}
       />
+
+      {/* Roadmap selection dialog for creating features */}
+      <Dialog open={showRoadmapDialog} onOpenChange={setShowRoadmapDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Roadmap</DialogTitle>
+            <DialogDescription>
+              Choose a roadmap to add the {pendingFeatureAction === 'bulk'
+                ? `${generatedFeatures.filter(f => f.isSelected).length} selected features`
+                : 'feature'} to.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <Select
+              value={selectedRoadmapId}
+              onValueChange={setSelectedRoadmapId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a roadmap" />
+              </SelectTrigger>
+              <SelectContent>
+                {roadmaps.map((roadmap) => (
+                  <SelectItem key={roadmap.id} value={roadmap.id}>
+                    {roadmap.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {roadmaps.length === 0 && (
+              <p className="text-sm text-muted-foreground mt-2">
+                No roadmaps available. Create a roadmap in Pipelines first.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRoadmapDialog(false);
+                setPendingFeature(null);
+                setPendingFeatureAction(null);
+                setSelectedRoadmapId('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmFeatureCreation}
+              disabled={!selectedRoadmapId || isCreating}
+            >
+              {isCreating ? 'Creating...' : 'Create Features'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

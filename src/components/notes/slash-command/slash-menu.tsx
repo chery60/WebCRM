@@ -24,18 +24,73 @@ import {
   Pencil,
   CheckCircle,
   Briefcase,
+  FileTextIcon,
+  LayoutTemplate,
+  Lightbulb,
+  ListTodo,
+  Zap,
+  Target,
 } from 'lucide-react';
 
 export interface SlashCommand {
   id: string;
   name: string;
   description: string;
-  category: 'ai-generate' | 'ai-action' | 'format' | 'widget';
+  category: 'ai-prd' | 'ai-generate' | 'ai-action' | 'format' | 'widget';
   icon: React.ReactNode;
   command: string;
 }
 
 const commands: SlashCommand[] = [
+  // AI PRD Commands (New - Prioritized at top)
+  {
+    id: 'generate-prd',
+    name: 'Generate PRD',
+    description: 'Create a full PRD from your idea',
+    category: 'ai-prd',
+    icon: <FileTextIcon className="h-4 w-4" />,
+    command: 'generate-prd',
+  },
+  {
+    id: 'prd-template',
+    name: 'PRD from Template',
+    description: 'Start with a structured PRD template',
+    category: 'ai-prd',
+    icon: <LayoutTemplate className="h-4 w-4" />,
+    command: 'prd-template',
+  },
+  {
+    id: 'generate-features',
+    name: 'Generate Features',
+    description: 'Extract features from this PRD',
+    category: 'ai-prd',
+    icon: <Lightbulb className="h-4 w-4" />,
+    command: 'generate-features',
+  },
+  {
+    id: 'generate-tasks',
+    name: 'Generate Tasks',
+    description: 'Create tasks from features',
+    category: 'ai-prd',
+    icon: <ListTodo className="h-4 w-4" />,
+    command: 'generate-tasks',
+  },
+  {
+    id: 'improve-prd',
+    name: 'Improve PRD',
+    description: 'Enhance and fill gaps in PRD',
+    category: 'ai-prd',
+    icon: <Zap className="h-4 w-4" />,
+    command: 'improve-prd',
+  },
+  {
+    id: 'generate-section',
+    name: 'Generate Section',
+    description: 'Generate a specific PRD section',
+    category: 'ai-prd',
+    icon: <Target className="h-4 w-4" />,
+    command: 'generate-section',
+  },
   // AI Generate
   {
     id: 'summarize',
@@ -203,11 +258,15 @@ const commands: SlashCommand[] = [
 ];
 
 const categoryLabels: Record<string, string> = {
+  'ai-prd': '✨ PRD & Product',
   'ai-generate': 'AI Generate',
   'ai-action': 'AI Actions',
   format: 'Format',
   widget: 'Widgets',
 };
+
+// Order for category display
+const categoryOrder = ['ai-prd', 'ai-generate', 'ai-action', 'format', 'widget'];
 
 interface SlashMenuProps {
   query: string;
@@ -301,10 +360,17 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
 
     let globalIndex = 0;
 
+    // Sort categories by defined order
+    const sortedCategories = Object.keys(groupedCommands).sort(
+      (a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b)
+    );
+
     return (
       <div className="slash-command-menu">
-        <ScrollArea className="max-h-[280px]">
-          {Object.entries(groupedCommands).map(([category, cmds]) => (
+        <ScrollArea className="max-h-[320px]">
+          {sortedCategories.map((category) => {
+            const cmds = groupedCommands[category];
+            return (
             <div key={category}>
               <div className="slash-command-category">
                 {categoryLabels[category] || category}
@@ -336,7 +402,8 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </ScrollArea>
       </div>
     );

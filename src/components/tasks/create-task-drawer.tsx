@@ -31,8 +31,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
-import type { TaskFormData, TaskStatus, TaskChecklist } from '@/types';
+import type { TaskFormData, TaskStatus, TaskChecklist, TaskTab } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 interface CreateTaskDrawerProps {
     open: boolean;
@@ -41,6 +48,8 @@ interface CreateTaskDrawerProps {
     defaultStatus?: TaskStatus;
     users: { id: string; name: string; avatar?: string }[];
     availableLabels: string[];
+    tabs?: TaskTab[];
+    defaultProjectId?: string;
 }
 
 export function CreateTaskDrawer({
@@ -50,12 +59,15 @@ export function CreateTaskDrawer({
     defaultStatus = 'planned',
     users = [],
     availableLabels = [],
+    tabs = [],
+    defaultProjectId,
 }: CreateTaskDrawerProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [dueDate, setDueDate] = useState<Date | null>(null);
     const [labels, setLabels] = useState<string[]>([]);
     const [assignees, setAssignees] = useState<string[]>([]);
+    const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId);
     const [checklists, setChecklists] = useState<TaskChecklist[]>([]);
     const [openAssignee, setOpenAssignee] = useState(false);
     const [openLabel, setOpenLabel] = useState(false);
@@ -142,6 +154,7 @@ export function CreateTaskDrawer({
             dueDate,
             labels,
             assignees,
+            projectId,
             checklists: cleanChecklists,
         });
 
@@ -151,6 +164,7 @@ export function CreateTaskDrawer({
         setDueDate(null);
         setLabels([]);
         setAssignees([]);
+        setProjectId(defaultProjectId);
         setChecklists([]);
         onClose();
     };
@@ -175,8 +189,8 @@ export function CreateTaskDrawer({
                         />
                     </div>
 
-                    {/* Add Members, Add Labels, Due Date */}
-                    <div className="grid grid-cols-3 gap-4">
+                    {/* Add Members, Add Labels, Due Date, Project */}
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Add Members</label>
                             <Popover open={openAssignee} onOpenChange={setOpenAssignee}>
@@ -341,6 +355,25 @@ export function CreateTaskDrawer({
                                     />
                                 </PopoverContent>
                             </Popover>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Project</label>
+                            <Select
+                                value={projectId || 'none'}
+                                onValueChange={(value) => setProjectId(value === 'none' ? undefined : value)}
+                            >
+                                <SelectTrigger className="w-full h-10">
+                                    <SelectValue placeholder="Select project" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No Project</SelectItem>
+                                    {tabs.map((tab) => (
+                                        <SelectItem key={tab.id} value={tab.id}>
+                                            {tab.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 

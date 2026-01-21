@@ -31,6 +31,11 @@ export async function getTasks(
         );
     }
 
+    if (filter?.projectId !== undefined) {
+        const originalQuery = query;
+        query = originalQuery.and((task) => task.projectId === filter.projectId);
+    }
+
     if (filter?.search) {
         const searchLower = filter.search.toLowerCase();
         const originalQuery = query;
@@ -77,8 +82,8 @@ export async function getTasks(
 }
 
 // Get tasks grouped by status
-export async function getTasksByStatus(): Promise<Record<TaskStatus, Task[]>> {
-    const allTasks = await getTasks();
+export async function getTasksByStatus(filter?: TasksFilter): Promise<Record<TaskStatus, Task[]>> {
+    const allTasks = await getTasks(filter);
 
     return {
         planned: allTasks.filter((t) => t.status === 'planned'),
@@ -113,6 +118,7 @@ export async function createTask(data: TaskFormData): Promise<Task> {
         dueDate: data.dueDate,
         labels: data.labels,
         assignees: data.assignees,
+        projectId: data.projectId,
         checklists: data.checklists,
         attachments: [],
         activities: [],

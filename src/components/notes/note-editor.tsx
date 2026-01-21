@@ -18,6 +18,9 @@ import { EditorToolbar } from './editor-toolbar';
 import { SlashMenu, type SlashCommand, type SlashMenuHandle } from './slash-command/slash-menu';
 import { useAIService } from '@/lib/ai/use-ai-service';
 import { Loader2 } from 'lucide-react';
+import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
+import { PRDTemplateSelector } from './prd-template-selector';
+import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
 
 interface NoteEditorProps {
   content: string;
@@ -25,6 +28,12 @@ interface NoteEditorProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  /** Previously saved features (for task generation) */
+  savedFeatures?: GeneratedFeature[];
+  /** Callback when features are generated */
+  onFeaturesGenerated?: (features: GeneratedFeature[]) => void;
+  /** Callback when tasks are generated */
+  onTasksGenerated?: (tasks: GeneratedTask[]) => void;
 }
 
 export function NoteEditor({
@@ -33,6 +42,9 @@ export function NoteEditor({
   placeholder = 'Start typing, or press "/" for commands...',
   autoFocus = false,
   className,
+  savedFeatures = [],
+  onFeaturesGenerated,
+  onTasksGenerated,
 }: NoteEditorProps) {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -41,6 +53,14 @@ export function NoteEditor({
   const slashMenuRef = useRef<SlashMenuHandle>(null);
   const slashStartPosRef = useRef<number | null>(null);
   const { generateContent } = useAIService();
+  
+  // AI Generation Panel state
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  
+  // Track if editor has been initialized with content
+  const isInitialContentSet = useRef(false);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, editor: ReturnType<typeof useEditor>) => {
@@ -84,6 +104,31 @@ export function NoteEditor({
         case 'image':
           // For now, just insert a placeholder
           editor.chain().focus().setImage({ src: 'https://placehold.co/600x400?text=Image' }).run();
+          break;
+
+        // PRD-specific commands - open AI panel
+        case 'generate-prd':
+          setAIPanelMode('generate-prd');
+          setShowAIPanel(true);
+          break;
+        case 'prd-template':
+          setShowTemplateSelector(true);
+          break;
+        case 'generate-features':
+          setAIPanelMode('generate-features');
+          setShowAIPanel(true);
+          break;
+        case 'generate-tasks':
+          setAIPanelMode('generate-tasks');
+          setShowAIPanel(true);
+          break;
+        case 'improve-prd':
+          setAIPanelMode('improve-prd');
+          setShowAIPanel(true);
+          break;
+        case 'generate-section':
+          setAIPanelMode('generate-section');
+          setShowAIPanel(true);
           break;
 
         // AI commands
@@ -209,6 +254,43 @@ export function NoteEditor({
     },
   });
 
+  // Sync editor content when the content prop changes from external source (e.g., database load)
+  // This ensures the editor updates when navigating to an existing note
+  useEffect(() => {
+    if (!editor) return;
+    
+    // Skip if content is empty (new note) or if we've already set the initial content
+    if (!content) {
+      isInitialContentSet.current = false;
+      return;
+    }
+    
+    // Only set content if it's the first time we're receiving content from the database
+    // This prevents overwriting user edits when debounced saves trigger re-renders
+    if (!isInitialContentSet.current) {
+      try {
+        const parsedContent = JSON.parse(content);
+        const currentContent = editor.getJSON();
+        
+        // Only update if the content is actually different
+        if (JSON.stringify(currentContent) !== JSON.stringify(parsedContent)) {
+          editor.commands.setContent(parsedContent);
+        }
+        isInitialContentSet.current = true;
+      } catch (e) {
+        // If parsing fails, content might be plain text or invalid
+        console.warn('Failed to parse note content:', e);
+      }
+    }
+  }, [editor, content]);
+
+  // Reset initialization flag when editor is destroyed/recreated
+  useEffect(() => {
+    return () => {
+      isInitialContentSet.current = false;
+    };
+  }, []);
+
   const handleSlashSelect = useCallback(
     (command: SlashCommand) => {
       if (!editor || slashStartPosRef.current === null) return;
@@ -233,6 +315,20 @@ export function NoteEditor({
     setShowSlashMenu(false);
     setSlashQuery('');
     slashStartPosRef.current = null;
+  }, []);
+
+  // Handle PRD content generated from AI panel
+  const handlePRDGenerated = useCallback((generatedContent: string) => {
+    if (editor) {
+      editor.chain().focus().insertContent(generatedContent).run();
+    }
+  }, [editor]);
+
+  // Handle template selection
+  const handleTemplateSelect = useCallback((_templateType: PRDTemplateType) => {
+    setShowTemplateSelector(false);
+    setAIPanelMode('prd-template');
+    setShowAIPanel(true);
   }, []);
 
   return (
@@ -269,6 +365,25 @@ export function NoteEditor({
           />
         </div>
       )}
+
+      {/* AI Generation Panel */}
+      <AIGenerationPanel
+        open={showAIPanel}
+        onClose={() => setShowAIPanel(false)}
+        mode={aiPanelMode}
+        currentContent={editor?.state.doc.textContent || ''}
+        savedFeatures={savedFeatures}
+        onPRDGenerated={handlePRDGenerated}
+        onFeaturesGenerated={onFeaturesGenerated}
+        onTasksGenerated={onTasksGenerated}
+      />
+
+      {/* PRD Template Selector */}
+      <PRDTemplateSelector
+        open={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onSelect={handleTemplateSelect}
+      />
     </div>
   );
 }

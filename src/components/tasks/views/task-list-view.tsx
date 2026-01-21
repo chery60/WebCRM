@@ -7,7 +7,7 @@ import { TaskRow } from '../task-row';
 import { TaskStatusBadge } from '../task-status-badge';
 import { BulkActionBar } from '../bulk-action-bar';
 import { cn } from '@/lib/utils';
-import type { Task, TaskStatus } from '@/types';
+import type { Task, TaskStatus, TaskTab } from '@/types';
 import {
     DndContext,
     closestCorners,
@@ -34,10 +34,12 @@ import { createPortal } from 'react-dom';
 interface TaskListViewProps {
     tasksByStatus: Record<TaskStatus, Task[]>;
     users: { id: string; name: string; avatar?: string }[];
+    tabs?: TaskTab[];
     onTaskClick: (task: Task) => void;
     onCreateTask: (status: TaskStatus) => void;
     onToggleComplete: (id: string, completed: boolean) => void;
     onStatusChange: (id: string, status: TaskStatus) => void;
+    onProjectChange?: (id: string, projectId: string | undefined) => void;
     onEditTask: (task: Task) => void;
     onDuplicateTask: (id: string) => void;
     onDeleteTask: (id: string) => void;
@@ -48,11 +50,13 @@ interface StatusSectionProps {
     status: TaskStatus;
     tasks: Task[];
     users: { id: string; name: string; avatar?: string }[];
+    tabs?: TaskTab[];
     selectedTaskIds: Set<string>;
     onTaskClick: (task: Task) => void;
     onCreateTask: () => void;
     onToggleSelect: (id: string, selected: boolean) => void;
     onStatusChange: (id: string, status: TaskStatus) => void;
+    onProjectChange?: (id: string, projectId: string | undefined) => void;
     onEditTask: (task: Task) => void;
     onDuplicateTask: (id: string) => void;
     onDeleteTask: (id: string) => void;
@@ -62,11 +66,13 @@ function StatusSection({
     status,
     tasks,
     users,
+    tabs,
     selectedTaskIds,
     onTaskClick,
     onCreateTask,
     onToggleSelect,
     onStatusChange,
+    onProjectChange,
     onEditTask,
     onDuplicateTask,
     onDeleteTask,
@@ -118,10 +124,12 @@ function StatusSection({
                                     key={task.id}
                                     task={task}
                                     assignees={users}
+                                    tabs={tabs}
                                     isSelected={selectedTaskIds.has(task.id)}
                                     onToggleSelect={onToggleSelect}
                                     onClick={() => onTaskClick(task)}
                                     onStatusChange={onStatusChange}
+                                    onProjectChange={onProjectChange}
                                     onEdit={() => onEditTask(task)}
                                     onDuplicate={() => onDuplicateTask(task.id)}
                                     onDelete={() => onDeleteTask(task.id)}
@@ -152,10 +160,12 @@ const dropAnimation: DropAnimation = {
 export function TaskListView({
     tasksByStatus,
     users,
+    tabs,
     onTaskClick,
     onCreateTask,
     onToggleComplete,
     onStatusChange,
+    onProjectChange,
     onEditTask,
     onDuplicateTask,
     onDeleteTask,
@@ -363,11 +373,13 @@ export function TaskListView({
                         status={status}
                         tasks={optimisticTasks[status]}
                         users={users}
+                        tabs={tabs}
                         selectedTaskIds={selectedTaskIds}
                         onTaskClick={onTaskClick}
                         onCreateTask={() => onCreateTask(status)}
                         onToggleSelect={handleToggleSelect}
                         onStatusChange={onStatusChange}
+                        onProjectChange={onProjectChange}
                         onEditTask={onEditTask}
                         onDuplicateTask={onDuplicateTask}
                         onDeleteTask={onDeleteTask}
