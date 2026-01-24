@@ -11,6 +11,12 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   ChevronDown,
   ChevronUp,
   Lightbulb,
@@ -18,10 +24,12 @@ import {
   Sparkles,
   Trash2,
   Plus,
-  CheckCircle,
+  Wand2,
 } from 'lucide-react';
 import { FeaturePreviewCard } from './feature-preview-card';
 import { TaskPreviewCard } from './task-preview-card';
+import { NotesGeneratedBulkActionBar } from './notes-generated-bulk-action-bar';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import type { GeneratedFeature, GeneratedTask } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -34,10 +42,16 @@ interface GeneratedItemsSectionProps {
   tasks: GeneratedTask[];
   onFeaturesChange: (features: GeneratedFeature[]) => void;
   onTasksChange: (tasks: GeneratedTask[]) => void;
-  onCreateFeature: (feature: GeneratedFeature) => void;
-  onCreateTask: (task: GeneratedTask) => void;
-  onCreateAllFeatures: () => void;
-  onCreateAllTasks: () => void;
+  // Props for Add dropdown actions
+  onOpenCreateTaskDrawer: () => void;
+  onOpenCreateFeatureDrawer: () => void;
+  onOpenAITaskGeneration: () => void;
+  onOpenAIFeatureGeneration: () => void;
+  // Bulk action props - open modal dialogs
+  onOpenBulkTaskDialog: () => void;
+  onOpenBulkFeatureDialog: () => void;
+  /** Always show the section, even when empty (shows empty state with Add button) */
+  alwaysShow?: boolean;
   className?: string;
 }
 
@@ -50,10 +64,13 @@ export function GeneratedItemsSection({
   tasks,
   onFeaturesChange,
   onTasksChange,
-  onCreateFeature,
-  onCreateTask,
-  onCreateAllFeatures,
-  onCreateAllTasks,
+  onOpenCreateTaskDrawer,
+  onOpenCreateFeatureDrawer,
+  onOpenAITaskGeneration,
+  onOpenAIFeatureGeneration,
+  onOpenBulkTaskDialog,
+  onOpenBulkFeatureDialog,
+  alwaysShow = false,
   className,
 }: GeneratedItemsSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
@@ -61,12 +78,23 @@ export function GeneratedItemsSection({
     features.length > 0 ? 'features' : 'tasks'
   );
 
+  // Delete confirmation dialog states
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteDialogType, setDeleteDialogType] = useState<'single-feature' | 'single-task' | 'clear-features' | 'clear-tasks' | 'bulk'>('bulk');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   const selectedFeaturesCount = features.filter(f => f.isSelected).length;
   const selectedTasksCount = tasks.filter(t => t.isSelected).length;
   const totalCount = features.length + tasks.length;
 
-  // No items to show
-  if (totalCount === 0) {
+  // Clear all selections
+  const clearAllSelections = () => {
+    onFeaturesChange(features.map(f => ({ ...f, isSelected: false })));
+    onTasksChange(tasks.map(t => ({ ...t, isSelected: false })));
+  };
+
+  // No items to show - hide unless alwaysShow is true
+  if (totalCount === 0 && !alwaysShow) {
     return null;
   }
 
@@ -84,14 +112,18 @@ export function GeneratedItemsSection({
     );
   };
 
-  // Remove feature
-  const removeFeature = (id: string) => {
-    onFeaturesChange(features.filter(f => f.id !== id));
+  // Request delete feature (opens confirmation dialog)
+  const requestDeleteFeature = (id: string) => {
+    setPendingDeleteId(id);
+    setDeleteDialogType('single-feature');
+    setShowDeleteDialog(true);
   };
 
-  // Remove task
-  const removeTask = (id: string) => {
-    onTasksChange(tasks.filter(t => t.id !== id));
+  // Request delete task (opens confirmation dialog)
+  const requestDeleteTask = (id: string) => {
+    setPendingDeleteId(id);
+    setDeleteDialogType('single-task');
+    setShowDeleteDialog(true);
   };
 
   // Select all features
@@ -104,15 +136,133 @@ export function GeneratedItemsSection({
     onTasksChange(tasks.map(t => ({ ...t, isSelected: true })));
   };
 
-  // Clear all features
-  const clearAllFeatures = () => {
-    onFeaturesChange([]);
+  // Request clear all features (opens confirmation dialog)
+  const requestClearAllFeatures = () => {
+    setDeleteDialogType('clear-features');
+    setShowDeleteDialog(true);
   };
 
-  // Clear all tasks
-  const clearAllTasks = () => {
-    onTasksChange([]);
+  // Request clear all tasks (opens confirmation dialog)
+  const requestClearAllTasks = () => {
+    setDeleteDialogType('clear-tasks');
+    setShowDeleteDialog(true);
   };
+
+  // Request bulk delete (opens confirmation dialog)
+  const requestBulkDelete = () => {
+    setDeleteDialogType('bulk');
+    setShowDeleteDialog(true);
+  };
+
+  // Handle confirmed delete
+  const handleConfirmDelete = () => {
+    switch (deleteDialogType) {
+      case 'single-feature':
+        if (pendingDeleteId) {
+          onFeaturesChange(features.filter(f => f.id !== pendingDeleteId));
+        }
+        break;
+      case 'single-task':
+        if (pendingDeleteId) {
+          onTasksChange(tasks.filter(t => t.id !== pendingDeleteId));
+        }
+        break;
+      case 'clear-features':
+        onFeaturesChange([]);
+        break;
+      case 'clear-tasks':
+        onTasksChange([]);
+        break;
+      case 'bulk':
+        onFeaturesChange(features.filter(f => !f.isSelected));
+        onTasksChange(tasks.filter(t => !t.isSelected));
+        break;
+    }
+    setShowDeleteDialog(false);
+    setPendingDeleteId(null);
+  };
+
+  // Get delete dialog content
+  const getDeleteDialogContent = () => {
+    switch (deleteDialogType) {
+      case 'single-feature':
+        const feature = features.find(f => f.id === pendingDeleteId);
+        return {
+          title: 'Delete Feature',
+          description: `Are you sure you want to delete "${feature?.title || 'this feature'}"? This action cannot be undone.`,
+        };
+      case 'single-task':
+        const task = tasks.find(t => t.id === pendingDeleteId);
+        return {
+          title: 'Delete Task',
+          description: `Are you sure you want to delete "${task?.title || 'this task'}"? This action cannot be undone.`,
+        };
+      case 'clear-features':
+        return {
+          title: 'Clear All Features',
+          description: `Are you sure you want to delete all ${features.length} features? This action cannot be undone.`,
+        };
+      case 'clear-tasks':
+        return {
+          title: 'Clear All Tasks',
+          description: `Are you sure you want to delete all ${tasks.length} tasks? This action cannot be undone.`,
+        };
+      case 'bulk':
+        const totalSelected = selectedFeaturesCount + selectedTasksCount;
+        return {
+          title: 'Delete Selected Items',
+          description: `Are you sure you want to delete ${totalSelected} selected item${totalSelected > 1 ? 's' : ''}? This action cannot be undone.`,
+        };
+      default:
+        return { title: 'Delete', description: 'Are you sure?' };
+    }
+  };
+
+  // Empty state when alwaysShow is true but no items
+  if (totalCount === 0 && alwaysShow) {
+    return (
+      <div className={cn('border-t bg-muted/30', className)}>
+        <div className="px-4 py-6">
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <span className="font-medium">Tasks & Features</span>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md">
+              Add tasks and features to track work items for this note. You can create them manually or generate them using AI.
+            </p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Add
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-52">
+                <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
+                  <ListTodo className="h-4 w-4 mr-2" />
+                  Create a Task
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
+                  <Lightbulb className="h-4 w-4 mr-2" />
+                  Create a Feature
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenAITaskGeneration}>
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Create Task using AI
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Create Feature using AI
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('border-t bg-muted/30', className)}>
@@ -175,20 +325,11 @@ export function GeneratedItemsSection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={clearAllFeatures}
+                        onClick={requestClearAllFeatures}
                         className="text-xs text-muted-foreground"
                       >
                         <Trash2 className="h-3 w-3 mr-1" />
                         Clear
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={onCreateAllFeatures}
-                        disabled={selectedFeaturesCount === 0}
-                        className="gap-1"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Create {selectedFeaturesCount > 0 ? `(${selectedFeaturesCount})` : 'Selected'}
                       </Button>
                     </>
                   )}
@@ -205,23 +346,43 @@ export function GeneratedItemsSection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={clearAllTasks}
+                        onClick={requestClearAllTasks}
                         className="text-xs text-muted-foreground"
                       >
                         <Trash2 className="h-3 w-3 mr-1" />
                         Clear
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={onCreateAllTasks}
-                        disabled={selectedTasksCount === 0}
-                        className="gap-1"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Create {selectedTasksCount > 0 ? `(${selectedTasksCount})` : 'Selected'}
-                      </Button>
                     </>
                   )}
+                  
+                  {/* Add Dropdown Button */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" className="gap-1">
+                        <Plus className="h-4 w-4" />
+                        Add
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
+                        <ListTodo className="h-4 w-4 mr-2" />
+                        Create a Task
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
+                        <Lightbulb className="h-4 w-4 mr-2" />
+                        Create a Feature
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={onOpenAITaskGeneration}>
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Create Task using AI
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Create Feature using AI
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
@@ -244,8 +405,7 @@ export function GeneratedItemsSection({
                           feature={feature}
                           isSelected={feature.isSelected}
                           onToggleSelect={() => toggleFeatureSelection(feature.id)}
-                          onRemove={() => removeFeature(feature.id)}
-                          onCreate={() => onCreateFeature(feature)}
+                          onDelete={() => requestDeleteFeature(feature.id)}
                         />
                       ))}
                     </div>
@@ -272,8 +432,7 @@ export function GeneratedItemsSection({
                           task={task}
                           isSelected={task.isSelected}
                           onToggleSelect={() => toggleTaskSelection(task.id)}
-                          onRemove={() => removeTask(task.id)}
-                          onCreate={() => onCreateTask(task)}
+                          onDelete={() => requestDeleteTask(task.id)}
                         />
                       ))}
                     </div>
@@ -284,6 +443,25 @@ export function GeneratedItemsSection({
           </div>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Bulk Action Bar */}
+      <NotesGeneratedBulkActionBar
+        selectedTasksCount={selectedTasksCount}
+        selectedFeaturesCount={selectedFeaturesCount}
+        onClearSelection={clearAllSelections}
+        onOpenTaskDialog={onOpenBulkTaskDialog}
+        onOpenFeatureDialog={onOpenBulkFeatureDialog}
+        onDelete={requestBulkDelete}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title={getDeleteDialogContent().title}
+        description={getDeleteDialogContent().description}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

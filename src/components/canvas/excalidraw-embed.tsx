@@ -391,18 +391,32 @@ function ExcalidrawWrapper({
     );
   }
 
+  // CRITICAL: Excalidraw requires collaborators to be a Map, not undefined or plain object
+  // This prevents the "props.appState.collaborators.forEach is not a function" error
+  const baseAppState = {
+    viewBackgroundColor: '#ffffff',
+    currentItemFontFamily: 1,
+    collaborators: new Map(),
+  };
+
+  const excalidrawInitialData = initialData ? {
+    elements: initialData.elements || [],
+    appState: {
+      ...baseAppState,
+      ...initialData.appState,
+      // Ensure collaborators is always a Map
+      collaborators: new Map(),
+    },
+    files: initialData.files || {},
+  } : {
+    elements: [],
+    appState: baseAppState,
+  };
+
   return (
     <Excalidraw
       excalidrawAPI={excalidrawAPI}
-      initialData={initialData ? {
-        elements: initialData.elements || [],
-        appState: {
-          viewBackgroundColor: '#ffffff',
-          currentItemFontFamily: 1,
-          ...initialData.appState,
-        },
-        files: initialData.files || {},
-      } : undefined}
+      initialData={excalidrawInitialData}
       onChange={onChange}
       viewModeEnabled={viewModeEnabled}
       zenModeEnabled={false}

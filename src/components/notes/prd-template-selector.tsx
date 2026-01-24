@@ -149,7 +149,7 @@ export function PRDTemplateSelector({ open, onClose, onSelect }: PRDTemplateSele
                         'hover:shadow-md',
                         isSelected
                           ? 'border-primary bg-primary/5 shadow-md'
-                          : 'border-border hover:border-muted-foreground/30'
+                          : 'border-input hover:border-muted-foreground/50'
                       )}
                       onClick={() => handleSelect(type)}
                       onMouseEnter={() => setHoveredTemplate(type)}

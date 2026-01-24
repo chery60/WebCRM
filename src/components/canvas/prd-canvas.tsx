@@ -872,12 +872,27 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // However, Excalidraw generally ignores initialData after mount. 
   // The critical part is preventing CanvasContent from being re-created unnecessarily.
   const excalidrawInitialData = useMemo(() => {
-    if (!initialData) return undefined;
+    // CRITICAL: Excalidraw requires collaborators to be a Map, not undefined or plain object
+    // This prevents the "props.appState.collaborators.forEach is not a function" error
+    const baseAppState = {
+      viewBackgroundColor: '#ffffff',
+      collaborators: new Map(),
+    };
+    
+    if (!initialData) {
+      return {
+        elements: [],
+        appState: baseAppState,
+      };
+    }
+    
     return {
-      elements: initialData.elements,
+      elements: initialData.elements || [],
       appState: {
+        ...baseAppState,
         ...initialData.appState,
-        viewBackgroundColor: '#ffffff',
+        // Ensure collaborators is always a Map even if initialData.appState has it as something else
+        collaborators: new Map(),
       },
       files: initialData.files,
     };

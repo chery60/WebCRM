@@ -121,27 +121,27 @@ export function TaskDestinationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-4">
+        <div className="py-2">
           <RadioGroup
             value={selectedOption}
             onValueChange={(value) => {
               setSelectedOption(value as 'all' | 'existing' | 'new');
               setError('');
             }}
-            className="space-y-3"
+            className="space-y-2"
           >
             {/* All Tasks Option */}
             <div
               className={cn(
-                'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                 selectedOption === 'all'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground/30'
+                  ? 'border-primary'
+                  : 'border-input hover:border-muted-foreground/50'
               )}
               onClick={() => setSelectedOption('all')}
             >
-              <RadioGroupItem value="all" id="all" className="mt-0.5" />
-              <div className="flex-1">
+              <RadioGroupItem value="all" id="all" className="mt-1" />
+              <div className="flex-1 min-w-0">
                 <Label
                   htmlFor="all"
                   className="font-medium cursor-pointer flex items-center gap-2"
@@ -149,7 +149,7 @@ export function TaskDestinationDialog({
                   <Layers className="h-4 w-4 text-muted-foreground" />
                   All Tasks
                 </Label>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Add to the default task list without a specific project
                 </p>
               </div>
@@ -158,15 +158,15 @@ export function TaskDestinationDialog({
             {/* Existing Project Option */}
             <div
               className={cn(
-                'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                 selectedOption === 'existing'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground/30'
+                  ? 'border-primary'
+                  : 'border-input hover:border-muted-foreground/50'
               )}
               onClick={() => setSelectedOption('existing')}
             >
-              <RadioGroupItem value="existing" id="existing" className="mt-0.5" />
-              <div className="flex-1">
+              <RadioGroupItem value="existing" id="existing" className="mt-1" />
+              <div className="flex-1 min-w-0">
                 <Label
                   htmlFor="existing"
                   className="font-medium cursor-pointer flex items-center gap-2"
@@ -179,13 +179,13 @@ export function TaskDestinationDialog({
                     </Badge>
                   )}
                 </Label>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Add to an existing project tab
                 </p>
 
                 {/* Project Selection */}
                 {selectedOption === 'existing' && (
-                  <div className="mt-3">
+                  <div className="mt-4">
                     {tabs.length === 0 ? (
                       <p className="text-sm text-muted-foreground italic">
                         No projects yet. Create one below.
@@ -228,15 +228,15 @@ export function TaskDestinationDialog({
             {/* New Project Option */}
             <div
               className={cn(
-                'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                 selectedOption === 'new'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground/30'
+                  ? 'border-primary'
+                  : 'border-input hover:border-muted-foreground/50'
               )}
               onClick={() => setSelectedOption('new')}
             >
-              <RadioGroupItem value="new" id="new" className="mt-0.5" />
-              <div className="flex-1">
+              <RadioGroupItem value="new" id="new" className="mt-1" />
+              <div className="flex-1 min-w-0">
                 <Label
                   htmlFor="new"
                   className="font-medium cursor-pointer flex items-center gap-2"
@@ -244,13 +244,13 @@ export function TaskDestinationDialog({
                   <Plus className="h-4 w-4 text-muted-foreground" />
                   Create New Project
                 </Label>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Create a new project tab for these tasks
                 </p>
 
                 {/* New Project Input */}
                 {selectedOption === 'new' && (
-                  <div className="mt-3">
+                  <div className="mt-4">
                     <Input
                       placeholder="Enter project name..."
                       value={newProjectName}
@@ -270,7 +270,7 @@ export function TaskDestinationDialog({
 
           {/* Error Message */}
           {error && (
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive mt-3">{error}</p>
           )}
         </div>
 
