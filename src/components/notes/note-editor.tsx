@@ -311,9 +311,9 @@ export function NoteEditor({
     };
   }, []);
 
-  // Canvas AI generation handler
+  // Canvas AI generation handler - receives existingElements from inline canvas for positioning
   const handleCanvasGenerate = useCallback(
-    async (type: CanvasGenerationType, existingElements: any[]): Promise<GeneratedCanvasContent | null> => {
+    async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
       // Get current PRD content from editor
       const prdContent = editor?.state.doc.textContent || '';
       
@@ -341,7 +341,7 @@ export function NoteEditor({
           prdContent: enhancedPrdContent,
           productDescription: prdContent.substring(0, 500), // Use first 500 chars as description
           provider: activeProvider || undefined,
-          existingElements, // Pass for offset calculation
+          existingElements, // Pass for offset calculation to avoid overlapping
         });
 
         if (!result.success || !result.content) {

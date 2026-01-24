@@ -131,8 +131,8 @@ export interface PRDCanvasProps {
   readOnly?: boolean;
   /** Whether to show the mini view by default */
   defaultCollapsed?: boolean;
-  /** Callback for AI generation */
-  onGenerateContent?: (type: CanvasGenerationType) => Promise<GeneratedCanvasContent | null>;
+  /** Callback for AI generation - receives type and existing elements for positioning */
+  onGenerateContent?: (type: CanvasGenerationType, existingElements: any[]) => Promise<GeneratedCanvasContent | null>;
   /** Whether AI generation is in progress */
   isGenerating?: boolean;
   /** Current generation type */
@@ -639,7 +639,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     }
 
     try {
-      const result = await onGenerateContent(type);
+      // Get existing elements to pass to generator for proper positioning
+      const existingElements = excalidrawAPIRef.current 
+        ? excalidrawAPIRef.current.getSceneElements() 
+        : (initialData?.elements || []);
+      
+      const result = await onGenerateContent(type, existingElements);
 
       // Validate result
       if (!result) {

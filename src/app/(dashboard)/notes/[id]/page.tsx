@@ -163,10 +163,10 @@ export default function NoteDetailPage() {
     productDescription: title,
   });
 
-  // Handle canvas generation
+  // Handle canvas generation - receives existing elements for proper positioning
   const handleGenerateCanvasContent = useCallback(
-    async (type: CanvasGenerationType) => {
-      const result = await generateDiagram(type);
+    async (type: CanvasGenerationType, existingElements: any[]) => {
+      const result = await generateDiagram(type, existingElements);
       return result;
     },
     [generateDiagram]
