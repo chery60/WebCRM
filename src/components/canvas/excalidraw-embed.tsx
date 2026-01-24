@@ -465,6 +465,11 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
   const resizeStartY = useRef<number>(0);
   const resizeStartHeight = useRef<number>(0);
   
+  // Controlled dropdown states - needed because TipTap NodeView interferes with Radix triggers
+  const [aiDropdownOpen, setAiDropdownOpen] = useState(false);
+  const [templatesDropdownOpen, setTemplatesDropdownOpen] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  
   // Generate a stable unique ID for this canvas instance
   const instanceIdRef = useRef<string>(`embed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
@@ -636,9 +641,26 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
+  // Helper to handle button clicks inside TipTap NodeView
+  // We need to stop propagation AND prevent default to stop TipTap from interfering
+  const handleDropdownTriggerClick = (
+    e: React.MouseEvent,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>,
+    currentOpen: boolean
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(!currentOpen);
+  };
+
   // Canvas Header component - reused in both views
   const CanvasHeader = ({ inFullscreen = false }: { inFullscreen?: boolean }) => (
-    <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30 shrink-0">
+    <div 
+      className="flex items-center justify-between px-4 py-2 border-b bg-muted/30 shrink-0"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="font-medium text-sm">
@@ -648,13 +670,20 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
       <div className="flex items-center gap-1">
         {/* AI Generate Dropdown */}
         {onGenerateContent && (
-          <DropdownMenu>
+          <DropdownMenu 
+            modal={true} 
+            open={aiDropdownOpen} 
+            onOpenChange={setAiDropdownOpen}
+          >
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={isGenerating}
                 className="gap-2 h-7"
+                onClick={(e) => handleDropdownTriggerClick(e, setAiDropdownOpen, aiDropdownOpen)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 {isGenerating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -666,7 +695,10 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
               <CategorizedMenuItems
-                onGenerate={handleGenerate}
+                onGenerate={(type) => {
+                  handleGenerate(type);
+                  setAiDropdownOpen(false);
+                }}
                 isGenerating={isGenerating}
                 generatingType={generatingType}
               />
@@ -675,9 +707,20 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
         )}
 
         {/* Templates Dropdown */}
-        <DropdownMenu>
+        <DropdownMenu 
+          modal={true}
+          open={templatesDropdownOpen}
+          onOpenChange={setTemplatesDropdownOpen}
+        >
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 h-7">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 h-7"
+              onClick={(e) => handleDropdownTriggerClick(e, setTemplatesDropdownOpen, templatesDropdownOpen)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
               <FolderOpen className="h-3.5 w-3.5" />
               Templates
             </Button>
@@ -688,7 +731,10 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
             {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
               <DropdownMenuItem
                 key={template.id}
-                onClick={() => handleLoadTemplate(template.id)}
+                onClick={() => {
+                  handleLoadTemplate(template.id);
+                  setTemplatesDropdownOpen(false);
+                }}
                 className="flex items-center gap-3"
               >
                 <span className="text-lg">{template.thumbnail}</span>
@@ -702,18 +748,35 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
         </DropdownMenu>
 
         {/* Export Dropdown */}
-        <DropdownMenu>
+        <DropdownMenu 
+          modal={true}
+          open={exportDropdownOpen}
+          onOpenChange={setExportDropdownOpen}
+        >
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7"
+              onClick={(e) => handleDropdownTriggerClick(e, setExportDropdownOpen, exportDropdownOpen)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
               <Download className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleExportPNG}>
+            <DropdownMenuItem onClick={() => {
+              handleExportPNG();
+              setExportDropdownOpen(false);
+            }}>
               Export as PNG
               <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportSVG}>
+            <DropdownMenuItem onClick={() => {
+              handleExportSVG();
+              setExportDropdownOpen(false);
+            }}>
               Export as SVG
               <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
             </DropdownMenuItem>
