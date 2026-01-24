@@ -30,9 +30,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
-import { useProjects } from '@/lib/hooks/use-projects';
+import { useProjects, useCreateProject } from '@/lib/hooks/use-projects';
 import {
   Select,
   SelectContent,
@@ -76,6 +84,7 @@ export default function NoteDetailPage() {
   const { data: projects = [] } = useProjects();
   const { mutate: updateNote, isPending: isSaving } = useUpdateNote();
   const deleteNote = useDeleteNote();
+  const createProject = useCreateProject();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -84,6 +93,8 @@ export default function NoteDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   // AI Generated items state
@@ -331,6 +342,20 @@ export default function NoteDetailPage() {
     }
     setShowTagPopover(false);
   }, [tags]);
+
+  // Handle creating a new project from the dropdown
+  const handleCreateProject = useCallback(async () => {
+    if (!newProjectName.trim()) return;
+    try {
+      const newProject = await createProject.mutateAsync({ name: newProjectName.trim() });
+      setProjectId(newProject.id);
+      setNewProjectName('');
+      setShowCreateProjectDialog(false);
+      toast.success('Project created');
+    } catch (error) {
+      toast.error('Failed to create project');
+    }
+  }, [newProjectName, createProject]);
 
   // Handle features generated from AI - ensure isSelected is false by default
   const handleFeaturesGenerated = useCallback((features: GeneratedFeature[]) => {
@@ -690,7 +715,13 @@ export default function NoteDetailPage() {
               {/* Project Selector */}
               <Select
                 value={projectId || 'none'}
-                onValueChange={(val) => setProjectId(val === 'none' ? undefined : val)}
+                onValueChange={(val) => {
+                  if (val === 'create-new') {
+                    setShowCreateProjectDialog(true);
+                  } else {
+                    setProjectId(val === 'none' ? undefined : val);
+                  }
+                }}
               >
                 <SelectTrigger className="w-[160px] h-8">
                   <FolderOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -703,6 +734,12 @@ export default function NoteDetailPage() {
                       {p.name}
                     </SelectItem>
                   ))}
+                  <SelectItem value="create-new" className="text-primary">
+                    <span className="flex items-center gap-2">
+                      <Plus className="h-3.5 w-3.5" />
+                      Create New Project
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
@@ -848,6 +885,49 @@ export default function NoteDetailPage() {
         noteTitle={title || note.title}
         currentProjectId={note.projectId}
       />
+
+      {/* Create Project Dialog */}
+      <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="newProjectName">Project Name</Label>
+            <Input
+              id="newProjectName"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Enter project name"
+              className="mt-2"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCreateProject();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateProject} 
+              disabled={!newProjectName.trim() || createProject.isPending}
+            >
+              {createProject.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Feature destination dialog */}
       <FeatureDestinationDialog
