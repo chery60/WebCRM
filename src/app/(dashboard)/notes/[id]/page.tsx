@@ -795,7 +795,7 @@ export default function NoteDetailPage() {
               onChange={handleCanvasChange}
               prdContent={prdPlainText}
               productDescription={title}
-              defaultCollapsed={true}
+              defaultCollapsed={false}
               onGenerateContent={handleGenerateCanvasContent}
               isGenerating={isCanvasGenerating}
               generatingType={canvasGeneratingType}
@@ -814,6 +814,7 @@ export default function NoteDetailPage() {
             onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
             onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
             onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
+            alwaysShow={true}
           />
         </div>
       </div>
