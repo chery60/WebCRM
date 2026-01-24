@@ -29,6 +29,18 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { PRDCanvas, type PRDCanvasRef, type CanvasGenerationType, type CanvasData } from '@/components/canvas/prd-canvas';
 import { useCanvasGeneration } from '@/lib/hooks/use-canvas-generation';
 
+// localStorage key for draft note data
+const DRAFT_NOTE_STORAGE_KEY = 'venture_draft_note';
+
+interface DraftNoteData {
+  title: string;
+  content: string;
+  tags: string[];
+  projectId?: string;
+  canvasData?: CanvasData;
+  lastSaved: number;
+}
+
 function NewNoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,16 +51,72 @@ function NewNoteContent() {
   const { data: projects = [] } = useProjects();
   const createNote = useCreateNote();
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(initialProjectId);
+  // Load draft from localStorage on mount
+  const loadDraft = useCallback((): DraftNoteData | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem(DRAFT_NOTE_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Failed to load draft from localStorage:', e);
+    }
+    return null;
+  }, []);
+
+  // Initialize state from localStorage draft or defaults
+  const [title, setTitle] = useState(() => {
+    const draft = typeof window !== 'undefined' ? loadDraft() : null;
+    return draft?.title || '';
+  });
+  const [content, setContent] = useState(() => {
+    const draft = typeof window !== 'undefined' ? loadDraft() : null;
+    return draft?.content || '';
+  });
+  const [tags, setTags] = useState<string[]>(() => {
+    const draft = typeof window !== 'undefined' ? loadDraft() : null;
+    return draft?.tags || [];
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(() => {
+    const draft = typeof window !== 'undefined' ? loadDraft() : null;
+    return draft?.projectId || initialProjectId;
+  });
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Canvas state
-  const [canvasData, setCanvasData] = useState<CanvasData | undefined>(undefined);
+  // Canvas state - initialize from localStorage draft
+  const [canvasData, setCanvasData] = useState<CanvasData | undefined>(() => {
+    const draft = typeof window !== 'undefined' ? loadDraft() : null;
+    return draft?.canvasData;
+  });
   const canvasRef = useRef<PRDCanvasRef>(null);
+
+  // Save draft to localStorage whenever data changes
+  const saveDraft = useCallback((data: Partial<DraftNoteData>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const currentDraft = loadDraft() || { title: '', content: '', tags: [], lastSaved: Date.now() };
+      const updatedDraft: DraftNoteData = {
+        ...currentDraft,
+        ...data,
+        lastSaved: Date.now(),
+      };
+      localStorage.setItem(DRAFT_NOTE_STORAGE_KEY, JSON.stringify(updatedDraft));
+    } catch (e) {
+      console.error('Failed to save draft to localStorage:', e);
+    }
+  }, [loadDraft]);
+
+  // Clear draft from localStorage
+  const clearDraft = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(DRAFT_NOTE_STORAGE_KEY);
+    } catch (e) {
+      console.error('Failed to clear draft from localStorage:', e);
+    }
+  }, []);
   
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
@@ -92,21 +160,45 @@ function NewNoteContent() {
     [generateDiagram]
   );
 
-  // Handle canvas data changes
+  // Handle canvas data changes - also save to localStorage
   const handleCanvasChange = useCallback((data: CanvasData) => {
     setCanvasData(data);
-  }, []);
+    saveDraft({ canvasData: data });
+  }, [saveDraft]);
 
   const handleAddTag = useCallback((tagName: string) => {
     if (!tags.includes(tagName)) {
-      setTags([...tags, tagName]);
+      const newTags = [...tags, tagName];
+      setTags(newTags);
+      saveDraft({ tags: newTags });
     }
     setShowTagPopover(false);
-  }, [tags]);
+  }, [tags, saveDraft]);
 
   const handleRemoveTag = useCallback((tagName: string) => {
-    setTags(tags.filter((t) => t !== tagName));
-  }, [tags]);
+    const newTags = tags.filter((t) => t !== tagName);
+    setTags(newTags);
+    saveDraft({ tags: newTags });
+  }, [tags, saveDraft]);
+
+  // Handle title change - also save to localStorage
+  const handleTitleChange = useCallback((value: string) => {
+    setTitle(value);
+    saveDraft({ title: value });
+  }, [saveDraft]);
+
+  // Handle content change - also save to localStorage
+  const handleContentChange = useCallback((value: string) => {
+    setContent(value);
+    saveDraft({ content: value });
+  }, [saveDraft]);
+
+  // Handle project change - also save to localStorage
+  const handleProjectChange = useCallback((value: string) => {
+    const projectId = value === 'none' ? undefined : value;
+    setSelectedProjectId(projectId);
+    saveDraft({ projectId });
+  }, [saveDraft]);
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) {
@@ -134,6 +226,9 @@ function NewNoteContent() {
         authorAvatar: currentUser.avatar,
       });
 
+      // Clear the draft from localStorage after successful save
+      clearDraft();
+      
       toast.success('Note created');
       if (newNote) {
         router.push(`/notes/${newNote.id}`);
@@ -143,7 +238,7 @@ function NewNoteContent() {
     } finally {
       setIsSaving(false);
     }
-  }, [title, content, tags, selectedProjectId, canvasData, createNote, router, currentUser]);
+  }, [title, content, tags, selectedProjectId, canvasData, createNote, router, currentUser, clearDraft]);
 
   // Auto-save when leaving the page with content
   useEffect(() => {
@@ -174,7 +269,7 @@ function NewNoteContent() {
           {/* Project Selector */}
           <Select
             value={selectedProjectId || 'none'}
-            onValueChange={(val) => setSelectedProjectId(val === 'none' ? undefined : val)}
+            onValueChange={handleProjectChange}
           >
             <SelectTrigger className="w-[180px] h-8">
               <FolderOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -200,7 +295,7 @@ function NewNoteContent() {
         <div className="flex-1">
           <Input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="Add Title Here"
             className="text-2xl font-semibold border-0 p-0 h-auto focus-visible:ring-0 bg-transparent"
             autoFocus
@@ -266,7 +361,7 @@ function NewNoteContent() {
       {/* Editor */}
       <NoteEditor
         content={content}
-        onChange={setContent}
+        onChange={handleContentChange}
         placeholder="Start typing, or press '/' for commands..."
         autoFocus={false}
       />

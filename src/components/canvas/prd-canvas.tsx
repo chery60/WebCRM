@@ -385,8 +385,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   },
   ref
 ) {
-  // When defaultCollapsed is false, always show expanded view directly
+  // When defaultCollapsed is false, never allow collapsing - always show the canvas
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  // Track if collapsing is allowed (only when defaultCollapsed is true)
+  const allowCollapse = defaultCollapsed;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasContent, setHasContent] = useState(false);
   const [annotations, setAnnotations] = useState<CanvasAnnotation[]>(initialData?.annotations || []);
@@ -841,11 +843,11 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         return;
       }
 
-      // Escape: Collapse canvas or exit fullscreen
+      // Escape: Exit fullscreen, or collapse canvas (only if allowed)
       if (e.key === 'Escape') {
         if (isFullscreen) {
           setIsFullscreen(false);
-        } else {
+        } else if (allowCollapse) {
           setIsCollapsed(true);
         }
         return;
@@ -861,7 +863,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCollapsed, isFullscreen, handleExportPNG, handleExportSVG, handleClearCanvas]);
+  }, [isCollapsed, isFullscreen, allowCollapse, handleExportPNG, handleExportSVG, handleClearCanvas]);
 
   // Memoize initial data for Excalidraw to prevent re-initialization on every render
   // We only want to update this when the component mounts or when we explicitly want to reset
@@ -919,7 +921,8 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   ), [handleExcalidrawAPI, excalidrawInitialData, stableOnChange, readOnly, uiOptions]);
 
   // Collapsed mini view - Don't render Excalidraw here to avoid infinite loops
-  if (isCollapsed) {
+  // Only show collapsed view if collapsing is allowed AND currently collapsed
+  if (allowCollapse && isCollapsed) {
     return (
       <div
         ref={containerRef}
@@ -1142,24 +1145,26 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
               </Tooltip>
             </TooltipProvider>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setIsCollapsed(true)}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>Collapse</span>
-                  <kbd className="ml-2 text-xs">Esc</kbd>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {allowCollapse && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setIsCollapsed(true)}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span>Collapse</span>
+                    <kbd className="ml-2 text-xs">Esc</kbd>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </>
         )}
       </div>
