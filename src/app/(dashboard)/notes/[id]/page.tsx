@@ -888,33 +888,36 @@ export default function NoteDetailPage() {
 
       {/* Create Project Dialog */}
       <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+        <DialogContent className="w-[400px] h-[320px] p-6 flex flex-col">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-lg">Create New Project</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="newProjectName">Project Name</Label>
-            <Input
-              id="newProjectName"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="Enter project name"
-              className="mt-2"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreateProject();
-                }
-              }}
-            />
+          <div className="flex-1 space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="newProjectName" className="text-sm font-medium">Project Name</Label>
+              <Input
+                id="newProjectName"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Enter project name"
+                className="h-10"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateProject();
+                  }
+                }}
+              />
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)}>
+          <DialogFooter className="pt-6 gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)} className="px-4">
               Cancel
             </Button>
             <Button 
               onClick={handleCreateProject} 
               disabled={!newProjectName.trim() || createProject.isPending}
+              className="px-4"
             >
               {createProject.isPending ? (
                 <>
