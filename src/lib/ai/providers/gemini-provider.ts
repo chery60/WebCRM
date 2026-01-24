@@ -215,6 +215,25 @@ Format the output as structured data that can be parsed.`,
 - **Definition of Done**: Clear completion criteria
 
 Be practical and specific. Tasks should be completable in 1-8 hours ideally.`,
+      'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
+
+RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
+[
+  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
+  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
+  {"type":"arrow","x":190,"y":170,"points":[[0,0],[0,50]]}
+]
+
+ELEMENT TYPES:
+- rectangle: x, y, width, height, text, backgroundColor
+- ellipse: x, y, width, height, text, backgroundColor  
+- diamond: x, y, width, height, text, backgroundColor
+- arrow: x, y, points (array of [x,y] pairs)
+- text: x, y, text, fontSize, strokeColor
+
+COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple)
+
+CRITICAL: Output ONLY the JSON array. No other text before or after.`,
     };
 
     return prompts[type] || 'You are a helpful AI assistant powered by Google Gemini. Be helpful and accurate.';
@@ -235,6 +254,7 @@ Be practical and specific. Tasks should be completable in 1-8 hours ideally.`,
       'improve-prd': 0.4,
       'generate-features': 0.4,
       'generate-tasks': 0.3,
+      'generate-canvas': 0.3,
     };
     return temperatures[type] ?? 0.7;
   }
@@ -254,6 +274,7 @@ Be practical and specific. Tasks should be completable in 1-8 hours ideally.`,
       'improve-prd': 4000,
       'generate-features': 8192,
       'generate-tasks': 4000,
+      'generate-canvas': 8192,
     };
     return tokens[type] ?? 2000;
   }

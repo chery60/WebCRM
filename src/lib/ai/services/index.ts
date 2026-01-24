@@ -24,3 +24,9 @@ export type {
   TaskBreakdownOptions,
   TaskEstimationOptions 
 } from './task-generator';
+
+export { CanvasGeneratorService, canvasGenerator } from './canvas-generator';
+export type { 
+  CanvasGenerationOptions, 
+  CanvasGenerationResult 
+} from './canvas-generator';

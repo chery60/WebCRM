@@ -10,9 +10,13 @@ function rowToNote(row: any): Note {
         title: row.title,
         content: typeof row.content === 'string' ? row.content : JSON.stringify(row.content),
         tags: row.tags || [],
+        projectId: row.project_id || undefined,
         authorId: row.author_id,
         authorName: row.author_name,
         authorAvatar: row.author_avatar,
+        generatedFeatures: row.generated_features || [],
+        generatedTasks: row.generated_tasks || [],
+        canvasData: row.canvas_data || undefined,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
         isDeleted: row.is_deleted,
@@ -93,9 +97,13 @@ export const notesRepository = {
             title: data.title,
             content: data.content,
             tags: data.tags,
+            project_id: data.projectId || null,
             author_id: authorId,
             author_name: authorName,
             author_avatar: authorAvatar || null,
+            generated_features: data.generatedFeatures || [],
+            generated_tasks: data.generatedTasks || [],
+            canvas_data: data.canvasData || null,
             is_deleted: false,
         };
 
@@ -123,6 +131,16 @@ export const notesRepository = {
         if (data.title !== undefined) row.title = data.title;
         if (data.content !== undefined) row.content = data.content;
         if (data.tags !== undefined) row.tags = data.tags;
+        if (data.projectId !== undefined) row.project_id = data.projectId || null;
+        if (data.generatedFeatures !== undefined) row.generated_features = data.generatedFeatures;
+        if (data.generatedTasks !== undefined) row.generated_tasks = data.generatedTasks;
+        if (data.canvasData !== undefined) row.canvas_data = data.canvasData || null;
+
+        // Don't make an update call if there's nothing to update
+        if (Object.keys(row).length === 0) {
+            // Return current note data instead of making an empty update
+            return this.getById(id);
+        }
 
         const { data: updatedData, error } = await supabase
             .from('notes')
@@ -132,7 +150,7 @@ export const notesRepository = {
             .single();
 
         if (error || !updatedData) {
-            console.error('Error updating note:', error);
+            console.error('Error updating note:', error?.message || error?.code || JSON.stringify(error));
             return undefined;
         }
 
@@ -206,5 +224,41 @@ export const notesRepository = {
     async count(filter?: NotesFilter): Promise<number> {
         const notes = await this.getAll(filter);
         return notes.length;
+    },
+
+    // Duplicate a note
+    async duplicate(id: string): Promise<Note | undefined> {
+        const note = await this.getById(id);
+        if (!note) return undefined;
+
+        const supabase = getSupabaseClient();
+        if (!supabase) return undefined;
+
+        const noteData = {
+            title: `${note.title} (Copy)`,
+            content: note.content,
+            tags: note.tags,
+            project_id: note.projectId || null,
+            author_id: note.authorId,
+            author_name: note.authorName,
+            author_avatar: note.authorAvatar || null,
+            generated_features: note.generatedFeatures || [],
+            generated_tasks: note.generatedTasks || [],
+            canvas_data: note.canvasData || null,
+            is_deleted: false,
+        };
+
+        const { data: insertedData, error } = await supabase
+            .from('notes')
+            .insert(noteData)
+            .select()
+            .single();
+
+        if (error || !insertedData) {
+            console.error('Error duplicating note:', error);
+            return undefined;
+        }
+
+        return rowToNote(insertedData);
     }
 };

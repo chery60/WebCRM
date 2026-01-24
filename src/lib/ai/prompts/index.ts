@@ -25,3 +25,10 @@ export {
   SECTION_GENERATION_PROMPTS,
   getSectionPrompt,
 } from './generation-prompts';
+
+export {
+  CANVAS_SYSTEM_PROMPT,
+  CANVAS_GENERATION_PROMPTS,
+  extractPRDContextForCanvas,
+  parseCanvasResponse,
+} from './canvas-prompts';

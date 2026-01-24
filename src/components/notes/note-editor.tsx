@@ -20,7 +20,12 @@ import { useAIService } from '@/lib/ai/use-ai-service';
 import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
+import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
 import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
+import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
+import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/excalidraw-embed';
+import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
+import { toast } from 'sonner';
 
 interface NoteEditorProps {
   content: string;
@@ -59,8 +64,16 @@ export function NoteEditor({
   const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   
+  // Canvas AI generation state
+  const [isCanvasGenerating, setIsCanvasGenerating] = useState(false);
+  const [canvasGeneratingType, setCanvasGeneratingType] = useState<CanvasGenerationType | null>(null);
+  const { activeProvider } = useAISettingsStore();
+  
   // Track if editor has been initialized with content
   const isInitialContentSet = useRef(false);
+  
+  // Ref to track editor instance for context
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, editor: ReturnType<typeof useEditor>) => {
@@ -104,6 +117,10 @@ export function NoteEditor({
         case 'image':
           // For now, just insert a placeholder
           editor.chain().focus().setImage({ src: 'https://placehold.co/600x400?text=Image' }).run();
+          break;
+        case 'canvas':
+          // Insert an Excalidraw canvas
+          editor.chain().focus().insertExcalidraw().run();
           break;
 
         // PRD-specific commands - open AI panel
@@ -203,6 +220,9 @@ export function NoteEditor({
       TableCell,
       TableHeader,
       Image,
+      ExcalidrawExtension.configure({
+        defaultMinHeight: 400,
+      }),
     ],
     content: content ? JSON.parse(content) : undefined,
     autofocus: autoFocus ? 'end' : false,
@@ -291,6 +311,112 @@ export function NoteEditor({
     };
   }, []);
 
+  // Canvas AI generation handler
+  const handleCanvasGenerate = useCallback(
+    async (type: CanvasGenerationType, existingElements: any[]): Promise<GeneratedCanvasContent | null> => {
+      // Get current PRD content from editor
+      const prdContent = editor?.state.doc.textContent || '';
+      
+      if (!prdContent.trim()) {
+        toast.error('Please add some PRD content before generating diagrams');
+        return null;
+      }
+
+      setIsCanvasGenerating(true);
+      setCanvasGeneratingType(type);
+
+      try {
+        // Build enhanced context with existing elements info
+        let enhancedPrdContent = prdContent;
+        
+        if (existingElements && existingElements.length > 0) {
+          const existingContext = summarizeCanvasElements(existingElements);
+          if (existingContext) {
+            enhancedPrdContent = `${prdContent}\n\n[Existing Canvas: ${existingContext}]`;
+          }
+        }
+
+        const result = await canvasGenerator.generateDiagram({
+          type,
+          prdContent: enhancedPrdContent,
+          productDescription: prdContent.substring(0, 500), // Use first 500 chars as description
+          provider: activeProvider || undefined,
+          existingElements, // Pass for offset calculation
+        });
+
+        if (!result.success || !result.content) {
+          toast.error(result.error || 'Failed to generate diagram');
+          return null;
+        }
+
+        toast.success(`${result.content.title} generated successfully`);
+        return result.content;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        toast.error(`Generation failed: ${errorMessage}`);
+        return null;
+      } finally {
+        setIsCanvasGenerating(false);
+        setCanvasGeneratingType(null);
+      }
+    },
+    [editor, activeProvider]
+  );
+
+  // Set up AI context for inline canvases
+  useEffect(() => {
+    const context = {
+      getPrdContent: () => editor?.state.doc.textContent || '',
+      getProductDescription: () => (editor?.state.doc.textContent || '').substring(0, 500),
+      generateContent: handleCanvasGenerate,
+      isGenerating: isCanvasGenerating,
+      generatingType: canvasGeneratingType,
+    };
+    
+    setInlineCanvasAIContext(context);
+    
+    // Cleanup on unmount
+    return () => {
+      setInlineCanvasAIContext(null);
+    };
+  }, [editor, handleCanvasGenerate, isCanvasGenerating, canvasGeneratingType]);
+
+  // Helper function to summarize canvas elements for AI context
+  function summarizeCanvasElements(elements: any[]): string {
+    if (!elements || elements.length === 0) return '';
+
+    const typeCounts: Record<string, number> = {};
+    const textContents: string[] = [];
+    
+    for (const el of elements) {
+      if (el.isDeleted) continue;
+      
+      const type = el.type || 'unknown';
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+      
+      if (el.text && typeof el.text === 'string' && el.text.trim()) {
+        textContents.push(el.text.trim().substring(0, 30));
+      }
+    }
+
+    const parts: string[] = [];
+    
+    const typeDescriptions = Object.entries(typeCounts)
+      .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
+      .join(', ');
+    
+    if (typeDescriptions) {
+      parts.push(typeDescriptions);
+    }
+    
+    if (textContents.length > 0) {
+      const sampleTexts = textContents.slice(0, 5).join(', ');
+      parts.push(`labels: ${sampleTexts}${textContents.length > 5 ? '...' : ''}`);
+    }
+
+    return parts.join('; ');
+  }
+
   const handleSlashSelect = useCallback(
     (command: SlashCommand) => {
       if (!editor || slashStartPosRef.current === null) return;
@@ -376,6 +502,12 @@ export function NoteEditor({
         onPRDGenerated={handlePRDGenerated}
         onFeaturesGenerated={onFeaturesGenerated}
         onTasksGenerated={onTasksGenerated}
+        onInsertCanvas={() => {
+          // Insert an inline Excalidraw canvas after PRD content
+          if (editor) {
+            editor.chain().focus().insertExcalidraw().run();
+          }
+        }}
       />
 
       {/* PRD Template Selector */}

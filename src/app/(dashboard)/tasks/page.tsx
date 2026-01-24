@@ -33,7 +33,7 @@ import {
     useDuplicateTask,
     useReorderTasks,
 } from '@/lib/hooks/use-tasks';
-import { useTaskTabStore } from '@/lib/stores/task-tab-store';
+import { useTaskTabsManager } from '@/lib/hooks/use-task-tabs';
 import type { Task, TaskFormData, TaskStatus, TaskSortField, SortDirection, TaskTab } from '@/types';
 import { db } from '@/lib/db/dexie';
 import { useQuery } from '@tanstack/react-query';
@@ -57,8 +57,8 @@ export default function TasksPage() {
     const [newTabName, setNewTabName] = useState('');
     const [editingTab, setEditingTab] = useState<TaskTab | null>(null);
 
-    // Task tab store
-    const { tabs, activeTabId, addTab, updateTab, deleteTab, setActiveTab } = useTaskTabStore();
+    // Task tab manager (handles both local storage and Supabase)
+    const { tabs, activeTabId, addTab, updateTab, deleteTab, setActiveTab, isLoading: tabsLoading } = useTaskTabsManager();
 
     // Filter based on active tab
     const filter = activeTabId ? { projectId: activeTabId } : undefined;
@@ -156,9 +156,9 @@ export default function TasksPage() {
     };
 
     // Tab management handlers
-    const handleAddTab = () => {
+    const handleAddTab = async () => {
         if (newTabName.trim()) {
-            const newTab = addTab(newTabName.trim());
+            const newTab = await addTab(newTabName.trim());
             setNewTabName('');
             setAddTabDialogOpen(false);
             setActiveTab(newTab.id);
@@ -184,7 +184,7 @@ export default function TasksPage() {
         setEditTabDialogOpen(true);
     };
 
-    const isLoading = loadingByStatus || loadingAll;
+    const isLoading = loadingByStatus || loadingAll || tabsLoading;
 
     return (
         <div className="flex-1 flex flex-col">

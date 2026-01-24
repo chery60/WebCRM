@@ -6,3 +6,8 @@ export { eventsRepository } from './events';
 export { notesRepository } from './notes';
 export { tagsRepository } from './tags';
 export { employeesRepository } from './employees';
+export { pipelinesRepository } from './pipelines';
+export { roadmapsRepository } from './roadmaps';
+export { featureRequestsRepository } from './feature-requests';
+export { projectsRepository } from './projects';
+export { taskTabsRepository } from './task-tabs';

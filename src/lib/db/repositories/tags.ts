@@ -1,8 +1,10 @@
 import { db } from '../dexie';
 import type { Tag, TagColor } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { tagsRepository as supabaseTagsRepository } from './supabase/tags';
 
-export const tagsRepository = {
+const dexieTagsRepository = {
   // Get all tags
   async getAll(): Promise<Tag[]> {
     return db.tags.toArray();
@@ -53,4 +55,7 @@ export const tagsRepository = {
     return !!tag;
   }
 };
+
+// Export the appropriate repository based on the database backend
+export const tagsRepository = USE_SUPABASE ? supabaseTagsRepository : dexieTagsRepository;
 

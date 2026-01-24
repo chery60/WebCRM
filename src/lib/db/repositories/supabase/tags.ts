@@ -71,16 +71,16 @@ export const tagsRepository = {
     },
 
     // Create a new tag
-    async create(tag: Omit<Tag, 'id'>): Promise<Tag | null> {
+    async create(name: string, color: Tag['color'], category: Tag['category'] = 'custom'): Promise<Tag | null> {
         const supabase = getSupabaseClient();
         if (!supabase) return null;
 
         const { data, error } = await supabase
             .from('tags')
             .insert({
-                name: tag.name,
-                color: tag.color,
-                category: tag.category,
+                name,
+                color,
+                category,
             })
             .select()
             .single();
@@ -93,6 +93,30 @@ export const tagsRepository = {
         return rowToTag(data);
     },
 
+    // Get tag by name
+    async getByName(name: string): Promise<Tag | undefined> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return undefined;
+
+        const { data, error } = await supabase
+            .from('tags')
+            .select('*')
+            .ilike('name', name)
+            .single();
+
+        if (error || !data) {
+            return undefined;
+        }
+
+        return rowToTag(data);
+    },
+
+    // Check if tag exists
+    async exists(name: string): Promise<boolean> {
+        const tag = await this.getByName(name);
+        return !!tag;
+    },
+
     // Update a tag
     async update(id: string, updates: Partial<Tag>): Promise<Tag | undefined> {
         const supabase = getSupabaseClient();
@@ -103,6 +127,11 @@ export const tagsRepository = {
         if (updates.color !== undefined) row.color = updates.color;
         if (updates.category !== undefined) row.category = updates.category;
 
+        // Don't make an update call if there's nothing to update
+        if (Object.keys(row).length === 0) {
+            return this.getById(id);
+        }
+
         const { data, error } = await supabase
             .from('tags')
             .update(row)
@@ -111,7 +140,7 @@ export const tagsRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error updating tag:', error);
+            console.error('Error updating tag:', error?.message || error?.code || JSON.stringify(error));
             return undefined;
         }
 

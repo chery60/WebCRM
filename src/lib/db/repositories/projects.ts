@@ -1,8 +1,10 @@
 import { db } from '../dexie';
 import type { Project } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { projectsRepository as supabaseProjectsRepository } from './supabase/projects';
 
-export const projectsRepository = {
+const dexieProjectsRepository = {
   async getAll(): Promise<Project[]> {
     return db.projects
       .filter(p => !p.isDeleted)
@@ -70,3 +72,6 @@ export const projectsRepository = {
       .count();
   },
 };
+
+// Export the appropriate repository based on the database backend
+export const projectsRepository = USE_SUPABASE ? supabaseProjectsRepository : dexieProjectsRepository;

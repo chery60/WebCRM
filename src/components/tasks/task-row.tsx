@@ -132,27 +132,25 @@ export function TaskRow({
                 )}
             </div>
 
-            {/* Project Dropdown */}
-            {tabs.length > 0 && (
-                <div onClick={(e) => e.stopPropagation()}>
-                    <Select
-                        value={task.projectId || 'none'}
-                        onValueChange={(value) => onProjectChange?.(task.id, value === 'none' ? undefined : value)}
-                    >
-                        <SelectTrigger className="h-8 w-[120px] text-xs">
-                            <SelectValue placeholder="No Project" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">No Project</SelectItem>
-                            {tabs.map((tab) => (
-                                <SelectItem key={tab.id} value={tab.id}>
-                                    {tab.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            )}
+            {/* Project Dropdown - Always show so users can assign tasks to projects */}
+            <div onClick={(e) => e.stopPropagation()}>
+                <Select
+                    value={task.projectId || 'none'}
+                    onValueChange={(value) => onProjectChange?.(task.id, value === 'none' ? undefined : value)}
+                >
+                    <SelectTrigger className="h-8 w-[120px] text-xs">
+                        <SelectValue placeholder="No Project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">No Project</SelectItem>
+                        {tabs.map((tab) => (
+                            <SelectItem key={tab.id} value={tab.id}>
+                                {tab.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
 
             {/* Status Dropdown */}
             <div onClick={(e) => e.stopPropagation()}>

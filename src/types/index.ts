@@ -11,6 +11,7 @@ export interface Note {
   authorAvatar?: string;
   generatedFeatures?: GeneratedFeature[]; // AI-generated features stored with the note
   generatedTasks?: GeneratedTask[]; // AI-generated tasks stored with the note
+  canvasData?: string; // JSON string of Excalidraw canvas data
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
@@ -104,17 +105,17 @@ export interface FeatureRequest {
   status: FeatureRequestStatus;
   priority: FeatureRequestPriority;
   phase?: string; // e.g., "Phase 1", "Phase 2", "Future"
-  
+
   // Assignees
   assignees: string[];
-  
+
   // Tags/Labels
   tags: string[];
-  
+
   // Dates
   dueDate?: Date;
   startDate?: Date;
-  
+
   // Feature Understanding Fields
   problemStatement?: string; // What problem does this solve?
   proposedSolution?: string; // How will we solve it?
@@ -124,14 +125,14 @@ export interface FeatureRequest {
   dependencies: string[]; // IDs of dependent features or text descriptions
   estimatedEffort?: string; // e.g., "2 weeks", "1 sprint", "3 story points"
   businessValue?: BusinessValue; // Why is this important?
-  
+
   // Activity & Attachments
   activities: FeatureActivity[];
   attachments: FeatureAttachment[];
-  
+
   // Ordering for drag-drop
   order: number;
-  
+
   // Metadata
   createdBy: string;
   createdByName: string;
@@ -342,6 +343,7 @@ export interface NoteFormData {
   projectId?: string;
   generatedFeatures?: GeneratedFeature[];
   generatedTasks?: GeneratedTask[];
+  canvasData?: string; // JSON string of Excalidraw canvas data
 }
 
 // Filter and sort types
@@ -373,20 +375,21 @@ export interface AICommand {
 // AI Provider Types
 export type AIProviderType = 'openai' | 'anthropic' | 'gemini';
 
-export type AIGenerationType = 
-  | 'summarize' 
-  | 'expand' 
-  | 'rewrite' 
-  | 'translate' 
-  | 'continue' 
-  | 'grammar' 
+export type AIGenerationType =
+  | 'summarize'
+  | 'expand'
+  | 'rewrite'
+  | 'translate'
+  | 'continue'
+  | 'grammar'
   | 'professional'
   | 'ask'
   | 'generate-prd'
   | 'generate-prd-section'
   | 'improve-prd'
   | 'generate-features'
-  | 'generate-tasks';
+  | 'generate-tasks'
+  | 'generate-canvas';
 
 export interface AIGenerateRequest {
   prompt: string;

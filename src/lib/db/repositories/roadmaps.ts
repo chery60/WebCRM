@@ -1,8 +1,10 @@
 import { db } from '../dexie';
 import type { Roadmap } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { roadmapsRepository as supabaseRoadmapsRepository } from './supabase/roadmaps';
 
-export const roadmapsRepository = {
+const dexieRoadmapsRepository = {
   // Get all roadmaps
   async getAll(pipelineId?: string): Promise<Roadmap[]> {
     let roadmaps = await db.roadmaps
@@ -78,3 +80,6 @@ export const roadmapsRepository = {
     return roadmaps.length;
   },
 };
+
+// Export the appropriate repository based on the database backend
+export const roadmapsRepository = USE_SUPABASE ? supabaseRoadmapsRepository : dexieRoadmapsRepository;

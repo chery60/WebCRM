@@ -30,6 +30,7 @@ import {
   ListTodo,
   Zap,
   Target,
+  PenTool,
 } from 'lucide-react';
 
 export interface SlashCommand {
@@ -254,6 +255,14 @@ const commands: SlashCommand[] = [
     category: 'widget',
     icon: <Image className="h-4 w-4" />,
     command: 'image',
+  },
+  {
+    id: 'canvas',
+    name: 'Canvas',
+    description: 'Insert an Excalidraw whiteboard',
+    category: 'widget',
+    icon: <PenTool className="h-4 w-4" />,
+    command: 'canvas',
   },
 ];
 

@@ -1,8 +1,10 @@
 import { db } from '../dexie';
 import type { FeatureRequest, FeatureRequestFilter, FeatureRequestSort, FeatureActivity, FeatureAttachment } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { featureRequestsRepository as supabaseFeatureRequestsRepository } from './supabase/feature-requests';
 
-export const featureRequestsRepository = {
+const dexieFeatureRequestsRepository = {
   // Get all feature requests with optional filtering and sorting
   async getAll(
     roadmapId?: string,
@@ -302,3 +304,6 @@ export const featureRequestsRepository = {
     return Array.from(phases).sort();
   },
 };
+
+// Export the appropriate repository based on the database backend
+export const featureRequestsRepository = USE_SUPABASE ? supabaseFeatureRequestsRepository : dexieFeatureRequestsRepository;

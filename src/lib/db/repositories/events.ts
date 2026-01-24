@@ -1,6 +1,8 @@
 import { db } from '../dexie';
 import type { CalendarEvent, EventFormData } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { eventsRepository as supabaseEventsRepository } from './supabase/events';
 
 // Helper to ensure a value is a Date object
 function toDate(value: Date | string | number): Date {
@@ -19,7 +21,7 @@ function normalizeEventDates(event: CalendarEvent): CalendarEvent {
     };
 }
 
-export const eventsRepository = {
+const dexieEventsRepository = {
     async getAll(): Promise<CalendarEvent[]> {
         const events = await db.events.filter(e => !e.isDeleted).toArray();
         return events.map(normalizeEventDates);
@@ -85,3 +87,6 @@ export const eventsRepository = {
         });
     },
 };
+
+// Export the appropriate repository based on the database backend
+export const eventsRepository = USE_SUPABASE ? supabaseEventsRepository : dexieEventsRepository;

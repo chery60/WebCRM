@@ -3,6 +3,15 @@
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { CalendarEvent, EventFormData } from '@/types';
 
+// Helper to get current user ID
+async function getCurrentUserId(): Promise<string | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
+}
+
 // Helper to convert database row to CalendarEvent type
 function rowToEvent(row: any): CalendarEvent {
     return {
@@ -92,6 +101,12 @@ export const eventsRepository = {
         const supabase = getSupabaseClient();
         if (!supabase) return null;
 
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            console.error('User not authenticated');
+            return null;
+        }
+
         const eventData = {
             title: data.title,
             description: data.description,
@@ -105,6 +120,7 @@ export const eventsRepository = {
             location: data.location,
             attachments: data.attachments || [],
             source: 'local',
+            user_id: userId,
             is_deleted: false,
         };
 
@@ -140,13 +156,18 @@ export const eventsRepository = {
         if (updates.location !== undefined) row.location = updates.location;
         if (updates.attachments !== undefined) row.attachments = updates.attachments;
 
+        // Don't make an update call if there's nothing to update
+        if (Object.keys(row).length === 0) {
+            return;
+        }
+
         const { error } = await supabase
             .from('calendar_events')
             .update(row)
             .eq('id', id);
 
         if (error) {
-            console.error('Error updating event:', error);
+            console.error('Error updating event:', error?.message || error?.code || JSON.stringify(error));
         }
     },
 

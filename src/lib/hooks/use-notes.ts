@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { notesRepository } from '@/lib/db/repositories/notes';
+import { notesRepository } from '@/lib/db/repositories/unified-notes';
 import type { Note, NotesFilter, NotesSort, NoteFormData } from '@/types';
 
 // Query keys

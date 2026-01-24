@@ -200,6 +200,11 @@ export const employeesRepository = {
 
         const row = employeeToRow(updates as Partial<Employee>);
 
+        // Don't make an update call if there's nothing to update
+        if (Object.keys(row).length === 0) {
+            return this.getById(id);
+        }
+
         const { data, error } = await supabase
             .from('employees')
             .update(row)
@@ -208,7 +213,7 @@ export const employeesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error updating employee:', error);
+            console.error('Error updating employee:', error?.message || error?.code || JSON.stringify(error));
             return undefined;
         }
 

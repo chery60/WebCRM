@@ -1,8 +1,10 @@
 import { db } from '../dexie';
 import type { Pipeline } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { USE_SUPABASE } from '../database';
+import { pipelinesRepository as supabasePipelinesRepository } from './supabase/pipelines';
 
-export const pipelinesRepository = {
+const dexiePipelinesRepository = {
   // Get all pipelines
   async getAll(): Promise<Pipeline[]> {
     const pipelines = await db.pipelines
@@ -67,3 +69,6 @@ export const pipelinesRepository = {
     return await db.pipelines.filter((p) => !p.isDeleted).count();
   },
 };
+
+// Export the appropriate repository based on the database backend
+export const pipelinesRepository = USE_SUPABASE ? supabasePipelinesRepository : dexiePipelinesRepository;

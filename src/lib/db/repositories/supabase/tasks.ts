@@ -14,6 +14,7 @@ function rowToTask(row: any): Task {
         dueDate: row.due_date ? new Date(row.due_date) : null,
         labels: row.labels || [],
         assignees: row.assignees || [],
+        projectId: row.project_id || undefined,
         checklists: row.checklists || [],
         attachments: row.attachments || [],
         activities: row.activities || [],
@@ -23,6 +24,15 @@ function rowToTask(row: any): Task {
         updatedAt: new Date(row.updated_at),
         isDeleted: row.is_deleted,
     };
+}
+
+// Helper to get current user ID
+async function getCurrentUserId(): Promise<string | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
 }
 
 // Helper to convert Task to database row
@@ -36,6 +46,7 @@ function taskToRow(task: Partial<Task>) {
     if (task.dueDate !== undefined) row.due_date = task.dueDate?.toISOString() || null;
     if (task.labels !== undefined) row.labels = task.labels;
     if (task.assignees !== undefined) row.assignees = task.assignees;
+    if (task.projectId !== undefined) row.project_id = task.projectId || null;
     if (task.checklists !== undefined) row.checklists = task.checklists;
     if (task.attachments !== undefined) row.attachments = task.attachments;
     if (task.activities !== undefined) row.activities = task.activities;
@@ -141,6 +152,12 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
     const supabase = getSupabaseClient();
     if (!supabase) return null;
 
+    const userId = await getCurrentUserId();
+    if (!userId) {
+        console.error('User not authenticated');
+        return null;
+    }
+
     // Get highest order for the status
     const { data: existingTasks } = await supabase
         .from('tasks')
@@ -159,11 +176,13 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
         due_date: data.dueDate?.toISOString() || null,
         labels: data.labels,
         assignees: data.assignees,
+        project_id: data.projectId || null,
         checklists: data.checklists,
         attachments: [],
         activities: [],
         subtask_progress: calculateSubtaskProgress(data.checklists),
         comment_count: 0,
+        user_id: userId,
         is_deleted: false,
     };
 
@@ -195,6 +214,11 @@ export async function updateTask(
         row.subtask_progress = calculateSubtaskProgress(updates.checklists);
     }
 
+    // Don't make an update call if there's nothing to update
+    if (Object.keys(row).length === 0) {
+        return getTaskById(id);
+    }
+
     const { data, error } = await supabase
         .from('tasks')
         .update(row)
@@ -203,7 +227,7 @@ export async function updateTask(
         .single();
 
     if (error || !data) {
-        console.error('Error updating task:', error);
+        console.error('Error updating task:', error?.message || error?.code || JSON.stringify(error));
         return undefined;
     }
 

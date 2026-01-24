@@ -7,7 +7,8 @@
  */
 
 import { featureRequestsRepository } from '@/lib/db/repositories/feature-requests';
-import { createTask } from '@/lib/db/repositories/tasks';
+import { createTask } from '@/lib/db/repositories/unified-tasks';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import type { 
   GeneratedFeature, 
   GeneratedTask, 
@@ -31,6 +32,12 @@ export interface CreateFeatureOptions {
   sourceNoteId?: string;
   /** Default status for new features */
   defaultStatus?: FeatureRequestStatus;
+  /** User ID for the creator (required for RLS) */
+  userId?: string;
+  /** User name for the creator */
+  userName?: string;
+  /** User avatar for the creator */
+  userAvatar?: string;
 }
 
 export interface CreateTaskOptions {
@@ -40,6 +47,8 @@ export interface CreateTaskOptions {
   sourceNoteId?: string;
   /** Optional: Link to the parent feature */
   featureId?: string;
+  /** Optional: Project/Tab ID for organizing tasks */
+  projectId?: string;
 }
 
 export interface BulkCreateResult<T> {
@@ -98,10 +107,10 @@ function generatedFeatureToCreateData(
     // Additional fields for tracking AI generation
     problemStatement: `Generated from AI based on PRD content.`,
     proposedSolution: feature.description,
-    // Creator info - will be set by the current user context
-    createdBy: 'ai-generated',
-    createdByName: 'AI Assistant',
-    createdByAvatar: undefined,
+    // Creator info - use actual user from options
+    createdBy: options.userId || 'ai-generated',
+    createdByName: options.userName || 'AI Assistant',
+    createdByAvatar: options.userAvatar,
   };
 }
 
@@ -186,6 +195,7 @@ function generatedTaskToFormData(
     dueDate: null,
     labels: [priorityLabel, roleLabel],
     assignees: [],
+    projectId: options.projectId,
     checklists: [],
   };
 }
@@ -198,7 +208,11 @@ export async function createTaskFromGenerated(
   options: CreateTaskOptions = {}
 ): Promise<Task> {
   const formData = generatedTaskToFormData(task, options);
-  return createTask(formData);
+  const createdTask = await createTask(formData);
+  if (!createdTask) {
+    throw new Error('Failed to create task');
+  }
+  return createdTask;
 }
 
 /**

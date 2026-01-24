@@ -11,7 +11,7 @@ import {
     deleteTask,
     duplicateTask,
     reorderTasks,
-} from '@/lib/db/repositories/tasks';
+} from '@/lib/db/repositories/unified-tasks';
 import type { Task, TaskFormData, TasksFilter, TasksSort, TaskStatus } from '@/types';
 
 const TASKS_KEY = 'tasks';

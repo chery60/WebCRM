@@ -22,15 +22,19 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, Eye, MoreVertical, Plus, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { PRDCanvas, type PRDCanvasRef, type CanvasGenerationType, type CanvasData } from '@/components/canvas/prd-canvas';
+import { useCanvasGeneration } from '@/lib/hooks/use-canvas-generation';
 
 function NewNoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialProjectId = searchParams?.get('project') || undefined;
   
+  const { currentUser } = useAuthStore();
   const { data: allTags = [] } = useTags();
   const { data: projects = [] } = useProjects();
   const createNote = useCreateNote();
@@ -42,7 +46,56 @@ function NewNoteContent() {
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Canvas state
+  const [canvasData, setCanvasData] = useState<CanvasData | undefined>(undefined);
+  const canvasRef = useRef<PRDCanvasRef>(null);
+  
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+  // Extract plain text from content for AI context
+  const [prdPlainText, setPrdPlainText] = useState('');
+  useEffect(() => {
+    try {
+      if (content) {
+        const parsed = JSON.parse(content);
+        const extractText = (node: any): string => {
+          if (typeof node === 'string') return node;
+          if (node.text) return node.text;
+          if (node.content) {
+            return node.content.map(extractText).join(' ');
+          }
+          return '';
+        };
+        setPrdPlainText(extractText(parsed));
+      }
+    } catch {
+      setPrdPlainText('');
+    }
+  }, [content]);
+
+  // Canvas generation hook
+  const {
+    isGenerating: isCanvasGenerating,
+    generatingType: canvasGeneratingType,
+    generateDiagram,
+  } = useCanvasGeneration({
+    prdContent: prdPlainText,
+    productDescription: title,
+  });
+
+  // Handle canvas generation
+  const handleGenerateCanvasContent = useCallback(
+    async (type: CanvasGenerationType) => {
+      const result = await generateDiagram(type);
+      return result;
+    },
+    [generateDiagram]
+  );
+
+  // Handle canvas data changes
+  const handleCanvasChange = useCallback((data: CanvasData) => {
+    setCanvasData(data);
+  }, []);
 
   const handleAddTag = useCallback((tagName: string) => {
     if (!tags.includes(tagName)) {
@@ -61,6 +114,11 @@ function NewNoteContent() {
       return;
     }
 
+    if (!currentUser) {
+      toast.error('Please sign in to create notes');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const newNote = await createNote.mutateAsync({
@@ -69,20 +127,23 @@ function NewNoteContent() {
           content,
           tags,
           projectId: selectedProjectId,
+          canvasData: canvasData ? JSON.stringify(canvasData) : undefined,
         },
-        authorId: 'user-1', // Default user
-        authorName: 'Brian F.',
-        authorAvatar: '/avatars/brian.jpg',
+        authorId: currentUser.id,
+        authorName: currentUser.name || currentUser.email,
+        authorAvatar: currentUser.avatar,
       });
 
       toast.success('Note created');
-      router.push(`/notes/${newNote.id}`);
+      if (newNote) {
+        router.push(`/notes/${newNote.id}`);
+      }
     } catch (error) {
       toast.error('Failed to create note');
     } finally {
       setIsSaving(false);
     }
-  }, [title, content, tags, selectedProjectId, createNote, router]);
+  }, [title, content, tags, selectedProjectId, canvasData, createNote, router, currentUser]);
 
   // Auto-save when leaving the page with content
   useEffect(() => {
@@ -209,6 +270,21 @@ function NewNoteContent() {
         placeholder="Start typing, or press '/' for commands..."
         autoFocus={false}
       />
+
+      {/* PRD Canvas - Whiteboard for visual planning */}
+      <div className="mt-6">
+        <PRDCanvas
+          ref={canvasRef}
+          initialData={canvasData}
+          onChange={handleCanvasChange}
+          prdContent={prdPlainText}
+          productDescription={title}
+          defaultCollapsed={false}
+          onGenerateContent={handleGenerateCanvasContent}
+          isGenerating={isCanvasGenerating}
+          generatingType={canvasGeneratingType}
+        />
+      </div>
     </div>
   );
 }

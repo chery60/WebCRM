@@ -3,13 +3,13 @@
 import { useCallback, useState, useMemo } from 'react';
 import type { AIGenerateRequest, AIGenerateResponse, AIProviderType } from '@/types';
 import { useAISettingsStore, getProviderDisplayName } from '@/lib/stores/ai-settings-store';
-import { 
-  createProvider, 
-  createActiveProvider, 
+import {
+  createProvider,
+  createActiveProvider,
   getAvailableProviders,
   hasAvailableProvider,
   getFallbackProvider,
-  PROVIDER_METADATA 
+  PROVIDER_METADATA
 } from './provider-factory';
 import type { AIServiceProvider } from './interface';
 
@@ -48,12 +48,12 @@ export interface UseAIServiceReturn {
 export function useAIService(options?: UseAIServiceOptions): UseAIServiceReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  
-  const { 
-    activeProvider, 
-    providers, 
+
+  const {
+    activeProvider,
+    providers,
     setActiveProvider,
-    hasConfiguredProvider 
+    hasConfiguredProvider
   } = useAISettingsStore();
 
   // Get the current provider instance
@@ -100,10 +100,18 @@ export function useAIService(options?: UseAIServiceOptions): UseAIServiceReturn 
 
       try {
         const provider = getProviderInstance();
+        console.log(`useAIService: Generating content with provider ${provider.name}, model: ${options?.model || request.model || 'default'}`);
+
         const response = await provider.generateContent({
           ...request,
           model: options?.model || request.model,
         });
+
+        console.log(`useAIService: Generation complete. Response length: ${response.content?.length || 0}`);
+        if (!response.content) {
+          console.warn('useAIService: Empty content received from provider');
+        }
+
         return response;
       } catch (err) {
         const error = err instanceof Error ? err : new Error('AI generation failed');
@@ -197,25 +205,43 @@ export async function generateAIContent(
   providerType?: AIProviderType
 ): Promise<AIGenerateResponse> {
   const state = useAISettingsStore.getState();
-  
+
   let provider: AIServiceProvider;
-  
+
+  console.log('[generateAIContent] Request type:', request.type);
+  console.log('[generateAIContent] Provider type requested:', providerType);
+  console.log('[generateAIContent] Active provider from store:', state.activeProvider);
+
   if (providerType) {
     const config = state.providers[providerType];
-    if (config.isEnabled && config.apiKey) {
+    console.log('[generateAIContent] Provider config for', providerType, ':', config ? { isEnabled: config.isEnabled, hasApiKey: !!config.apiKey } : 'not found');
+    if (config && config.isEnabled && config.apiKey) {
       provider = createProvider({
         provider: providerType,
         apiKey: config.apiKey,
         model: config.defaultModel,
       });
+      console.log('[generateAIContent] Using configured provider:', providerType);
     } else {
       provider = getFallbackProvider();
+      console.log('[generateAIContent] Using fallback provider (Mock AI)');
     }
   } else {
-    provider = createActiveProvider() || getFallbackProvider();
+    const activeProvider = createActiveProvider();
+    if (activeProvider) {
+      provider = activeProvider;
+      console.log('[generateAIContent] Using active provider:', state.activeProvider);
+    } else {
+      provider = getFallbackProvider();
+      console.log('[generateAIContent] Using fallback provider (Mock AI) - no active provider');
+    }
   }
 
-  return provider.generateContent(request);
+  console.log('[generateAIContent] Final provider name:', provider.name);
+  const response = await provider.generateContent(request);
+  console.log('[generateAIContent] Response from provider:', { contentLength: response.content?.length || 0, tokens: response.tokens });
+  
+  return response;
 }
 
 // Export provider metadata for UI

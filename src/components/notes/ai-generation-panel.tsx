@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -70,6 +69,8 @@ interface AIGenerationPanelProps {
   onFeaturesGenerated?: (features: GeneratedFeature[]) => void;
   /** Callback when tasks are generated */
   onTasksGenerated?: (tasks: GeneratedTask[]) => void;
+  /** Callback to insert an inline canvas after PRD generation */
+  onInsertCanvas?: () => void;
 }
 
 // Provider icon component
@@ -97,6 +98,7 @@ export function AIGenerationPanel({
   onPRDGenerated,
   onFeaturesGenerated,
   onTasksGenerated,
+  onInsertCanvas,
 }: AIGenerationPanelProps) {
   // State
   const [prompt, setPrompt] = useState('');
@@ -115,6 +117,23 @@ export function AIGenerationPanel({
 
   // Get the provider to use
   const effectiveProvider = selectedProvider || activeProvider || undefined;
+
+  // Reset state when panel opens
+  useEffect(() => {
+    if (open) {
+      console.log('[AIGenerationPanel] Panel opened, resetting state');
+      console.log('[AIGenerationPanel] Mode:', mode);
+      console.log('[AIGenerationPanel] Has provider:', hasProvider);
+      console.log('[AIGenerationPanel] Available providers:', availableProviders);
+      console.log('[AIGenerationPanel] Active provider:', activeProvider);
+      setStep('input');
+      setPrompt('');
+      setGeneratedContent('');
+      setGeneratedFeatures([]);
+      setGeneratedTasks([]);
+      setError(null);
+    }
+  }, [open, mode, hasProvider, availableProviders, activeProvider]);
 
   // Mode configuration
   const modeConfig: Record<GenerationMode, {
@@ -185,12 +204,20 @@ export function AIGenerationPanel({
 
   // Handle generation
   const handleGenerate = useCallback(async () => {
+    console.log('[AIGenerationPanel] handleGenerate called');
+    console.log('[AIGenerationPanel] hasProvider:', hasProvider);
+    console.log('[AIGenerationPanel] effectiveProvider:', effectiveProvider);
+    console.log('[AIGenerationPanel] mode:', mode);
+    console.log('[AIGenerationPanel] prompt:', prompt);
+    
+    // Note: We allow generation even without a configured provider because
+    // the Mock AI provider will be used as a fallback for testing/demo purposes
     if (!hasProvider) {
-      setError('Please configure an AI provider in Settings > Apps first');
-      return;
+      console.log('[AIGenerationPanel] No provider configured, will use Mock AI');
     }
 
     if (config.requiresContent && !currentContent.trim()) {
+      console.log('[AIGenerationPanel] Content required but not provided');
       setError('This feature requires content in the editor. Please add some PRD content first.');
       return;
     }
@@ -201,7 +228,9 @@ export function AIGenerationPanel({
     try {
       switch (mode) {
         case 'generate-prd': {
+          console.log('[AIGenerationPanel] Calling prdGenerator.quickGenerate');
           const result = await prdGenerator.quickGenerate(prompt, effectiveProvider);
+          console.log('[AIGenerationPanel] PRD generated, content length:', result.content?.length);
           setGeneratedContent(result.content);
           setStep('preview');
           break;
@@ -340,6 +369,13 @@ export function AIGenerationPanel({
   const handleApply = useCallback(() => {
     if (generatedContent && onPRDGenerated) {
       onPRDGenerated(generatedContent);
+      // Insert an inline canvas after PRD content for visual planning
+      if (onInsertCanvas && (mode === 'generate-prd' || mode === 'prd-template')) {
+        // Small delay to ensure PRD content is inserted first
+        setTimeout(() => {
+          onInsertCanvas();
+        }, 100);
+      }
     }
     if (generatedFeatures.length > 0 && onFeaturesGenerated) {
       onFeaturesGenerated(generatedFeatures.filter(f => f.isSelected));
@@ -348,7 +384,7 @@ export function AIGenerationPanel({
       onTasksGenerated(generatedTasks.filter(t => t.isSelected));
     }
     handleClose();
-  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated]);
+  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated, onInsertCanvas, mode]);
 
   // Handle close and reset
   const handleClose = useCallback(() => {
@@ -377,7 +413,7 @@ export function AIGenerationPanel({
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <SheetContent className="w-full sm:max-w-[600px] p-0 flex flex-col h-full overflow-hidden">
+      <SheetContent className="w-full sm:max-w-[600px] p-0 flex flex-col h-full overflow-hidden gap-0">
         <SheetHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -390,7 +426,7 @@ export function AIGenerationPanel({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="px-6 py-4 space-y-6">
             {step === 'input' ? (
               <>
@@ -422,11 +458,11 @@ export function AIGenerationPanel({
                   </div>
                 )}
 
-                {/* No Provider Warning */}
+                {/* No Provider Info */}
                 {!hasProvider && (
-                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                      <strong>No AI provider configured.</strong> Please go to{' '}
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>Using Demo Mode (Mock AI).</strong> For real AI generation, go to{' '}
                       <a href="/settings/apps" className="underline">Settings → Apps</a> to add your API key.
                     </p>
                   </div>
@@ -621,7 +657,7 @@ export function AIGenerationPanel({
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t shrink-0 flex justify-between gap-3 bg-background">
@@ -632,7 +668,7 @@ export function AIGenerationPanel({
               </Button>
               <Button
                 onClick={handleGenerate}
-                disabled={isGenerating || !hasProvider || (!prompt.trim() && !config.requiresContent)}
+                disabled={isGenerating || (!prompt.trim() && !config.requiresContent)}
               >
                 {isGenerating ? (
                   <>

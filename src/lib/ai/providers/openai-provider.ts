@@ -125,6 +125,25 @@ export class OpenAIProvider implements AIServiceProvider {
       'improve-prd': 'You are a senior product manager. Review and improve the PRD to make it more comprehensive and actionable.',
       'generate-features': 'You are a product strategist. Extract and define features from the PRD with clear acceptance criteria.',
       'generate-tasks': 'You are a technical project manager. Break down features into actionable tasks with estimates.',
+      'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
+
+RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
+[
+  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
+  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
+  {"type":"arrow","x":190,"y":170,"points":[[0,0],[0,50]]}
+]
+
+ELEMENT TYPES:
+- rectangle: x, y, width, height, text, backgroundColor
+- ellipse: x, y, width, height, text, backgroundColor  
+- diamond: x, y, width, height, text, backgroundColor
+- arrow: x, y, points (array of [x,y] pairs)
+- text: x, y, text, fontSize, strokeColor
+
+COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple)
+
+CRITICAL: Output ONLY the JSON array. No other text before or after.`,
     };
 
     return prompts[type] || 'You are a helpful AI assistant.';
@@ -146,6 +165,7 @@ export class OpenAIProvider implements AIServiceProvider {
       'improve-prd': 0.4,
       'generate-features': 0.4,
       'generate-tasks': 0.3,
+      'generate-canvas': 0.3,
     };
     return temperatures[type] ?? 0.7;
   }
@@ -165,6 +185,7 @@ export class OpenAIProvider implements AIServiceProvider {
       'improve-prd': 4000,
       'generate-features': 4000,
       'generate-tasks': 4000,
+      'generate-canvas': 8000,
     };
     return tokens[type] ?? 2000;
   }

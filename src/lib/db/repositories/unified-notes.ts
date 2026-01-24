@@ -28,4 +28,5 @@ export const notesRepository = {
     restore: (id: string): Promise<void> => repo.restore(id),
     getDeleted: (): Promise<Note[]> => repo.getDeleted(),
     count: (filter?: NotesFilter): Promise<number> => repo.count(filter),
+    duplicate: (id: string): Promise<Note | undefined> => repo.duplicate ? repo.duplicate(id) : Promise.resolve(undefined),
 };
