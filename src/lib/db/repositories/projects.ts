@@ -71,6 +71,22 @@ const dexieProjectsRepository = {
       .filter(n => !n.isDeleted && n.projectId === projectId)
       .count();
   },
+
+  async getAllNoteCounts(): Promise<Map<string, number>> {
+    const notes = await db.notes
+      .filter(n => !n.isDeleted && n.projectId !== undefined)
+      .toArray();
+
+    const counts = new Map<string, number>();
+    notes.forEach(note => {
+      if (note.projectId) {
+        const current = counts.get(note.projectId) || 0;
+        counts.set(note.projectId, current + 1);
+      }
+    });
+
+    return counts;
+  },
 };
 
 // Export the appropriate repository based on the database backend

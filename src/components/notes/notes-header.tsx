@@ -98,7 +98,7 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
             <h1 className="text-2xl font-semibold">{projectName}</h1>
           </>
         ) : (
-          <h1 className="text-2xl font-semibold">Notes</h1>
+          <h1 className="text-2xl font-semibold">PRDs</h1>
         )}
 
         {/* View Switcher */}

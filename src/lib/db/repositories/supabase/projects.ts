@@ -9,6 +9,7 @@ function rowToProject(row: any): Project {
     id: row.id,
     name: row.name,
     description: row.description || undefined,
+    instructions: row.instructions || undefined,
     icon: row.icon || undefined,
     color: row.color || undefined,
     createdAt: new Date(row.created_at),
@@ -82,6 +83,7 @@ export const projectsRepository = {
       .insert({
         name: data.name,
         description: data.description || null,
+        instructions: data.instructions || null,
         icon: data.icon || null,
         color: data.color || null,
         user_id: userId,
@@ -106,6 +108,7 @@ export const projectsRepository = {
     const updateData: Record<string, any> = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.description !== undefined) updateData.description = data.description;
+    if (data.instructions !== undefined) updateData.instructions = data.instructions;
     if (data.icon !== undefined) updateData.icon = data.icon;
     if (data.color !== undefined) updateData.color = data.color;
     if (data.isDeleted !== undefined) updateData.is_deleted = data.isDeleted;
@@ -172,5 +175,32 @@ export const projectsRepository = {
     }
 
     return count || 0;
+  },
+
+  // Get note counts for all projects (returns map of projectId -> count)
+  async getAllNoteCounts(): Promise<Map<string, number>> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return new Map();
+
+    // Use a raw query to get counts grouped by project_id
+    const { data, error } = await supabase
+      .from('notes')
+      .select('project_id')
+      .eq('is_deleted', false)
+      .not('project_id', 'is', null);
+
+    if (error) {
+      console.error('Error fetching note counts:', error);
+      return new Map();
+    }
+
+    // Count notes per project
+    const counts = new Map<string, number>();
+    (data || []).forEach((row: { project_id: string }) => {
+      const current = counts.get(row.project_id) || 0;
+      counts.set(row.project_id, current + 1);
+    });
+
+    return counts;
   },
 };

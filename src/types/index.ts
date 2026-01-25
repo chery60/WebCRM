@@ -22,6 +22,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  instructions?: string; // Default AI instructions for generating PRDs in this project
   icon?: string; // Emoji or icon identifier
   color?: string; // Color for the project
   createdAt: Date;
@@ -355,6 +356,8 @@ export interface NotesFilter {
   search?: string;
   authorId?: string;
   projectId?: string; // Filter notes by project
+  /** When true, returns all PRDs regardless of project assignment (for sidebar) */
+  includeAllProjects?: boolean;
 }
 
 export interface NotesSort {

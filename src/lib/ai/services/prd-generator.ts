@@ -43,6 +43,8 @@ export interface PRDGenerationOptions {
   detailLevel?: 'concise' | 'standard' | 'comprehensive';
   /** AI provider to use */
   provider?: AIProviderType;
+  /** Project-specific instructions for PRD formatting and structure */
+  projectInstructions?: string;
 }
 
 export interface SectionGenerationOptions {
@@ -56,6 +58,8 @@ export interface SectionGenerationOptions {
   guidance?: string;
   /** AI provider to use */
   provider?: AIProviderType;
+  /** Project-specific instructions for PRD formatting and structure */
+  projectInstructions?: string;
 }
 
 export interface PRDImprovementOptions {
@@ -67,6 +71,8 @@ export interface PRDImprovementOptions {
   guidance?: string;
   /** AI provider to use */
   provider?: AIProviderType;
+  /** Project-specific instructions for PRD formatting and structure */
+  projectInstructions?: string;
 }
 
 // ============================================================================
@@ -85,13 +91,14 @@ export class PRDGeneratorService {
       audience = 'mixed',
       detailLevel = 'standard',
       provider,
+      projectInstructions,
     } = options;
 
     const template = getTemplate(templateType);
     const templateContext = getTemplateContextPrompt(templateType);
 
     // Build the comprehensive prompt
-    const systemPrompt = this.buildSystemPrompt(templateContext, audience, detailLevel);
+    const systemPrompt = this.buildSystemPrompt(templateContext, audience, detailLevel, projectInstructions);
     const userPrompt = this.buildUserPrompt(description, template, context);
 
     const request: AIGenerateRequest = {
@@ -127,6 +134,7 @@ export class PRDGeneratorService {
       existingContent,
       guidance,
       provider,
+      projectInstructions,
     } = options;
 
     const sectionDef = PRD_SECTIONS.find(s => s.id === sectionId);
@@ -135,26 +143,32 @@ export class PRDGeneratorService {
     }
 
     const sectionPrompt = getSectionPrompt(sectionId);
-    
+
     let prompt = `Generate the "${sectionDef.title}" section for this product:\n\n`;
     prompt += `Product Description:\n${description}\n\n`;
-    
+
     if (existingContent) {
       prompt += `Existing PRD Content (for context):\n${existingContent}\n\n`;
     }
-    
+
     prompt += `Section Guidelines:\n${sectionPrompt}\n\n`;
-    
+
     if (guidance) {
       prompt += `Additional Guidance:\n${guidance}\n\n`;
     }
 
     prompt += `Generate the ${sectionDef.title} section now:`;
 
+    // Build system prompt with project instructions if provided
+    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
+    if (projectInstructions) {
+      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when generating the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting.`;
+    }
+
     const request: AIGenerateRequest = {
       type: 'generate-prd-section',
       prompt,
-      context: MASTER_PRD_SYSTEM_PROMPT,
+      context: systemPrompt,
       provider,
     };
 
@@ -183,6 +197,7 @@ export class PRDGeneratorService {
       focusAreas,
       guidance,
       provider,
+      projectInstructions,
     } = options;
 
     let prompt = PRD_IMPROVEMENT_PROMPT + '\n\n';
@@ -202,10 +217,16 @@ export class PRDGeneratorService {
 
     prompt += `Please provide an improved version of this PRD:`;
 
+    // Build system prompt with project instructions if provided
+    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
+    if (projectInstructions) {
+      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when improving the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting.`;
+    }
+
     const request: AIGenerateRequest = {
       type: 'improve-prd',
       prompt,
-      context: MASTER_PRD_SYSTEM_PROMPT,
+      context: systemPrompt,
       provider,
     };
 
@@ -232,7 +253,7 @@ export class PRDGeneratorService {
   /**
    * Generate PRD from a brief one-liner (quick start)
    */
-  async quickGenerate(oneLiner: string, provider?: AIProviderType): Promise<PRDGenerationResult> {
+  async quickGenerate(oneLiner: string, provider?: AIProviderType, projectInstructions?: string): Promise<PRDGenerationResult> {
     const prompt = `Generate a comprehensive PRD for the following product idea:
 
 "${oneLiner}"
@@ -245,10 +266,16 @@ Expand this into a full product vision and create a detailed PRD that covers:
 
 Be creative but practical. Make assumptions where needed and document them.`;
 
+    // Build system prompt with project instructions if provided
+    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
+    if (projectInstructions) {
+      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when generating the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting. Structure your PRD according to the user's specifications above.`;
+    }
+
     const request: AIGenerateRequest = {
       type: 'generate-prd',
       prompt,
-      context: MASTER_PRD_SYSTEM_PROMPT,
+      context: systemPrompt,
       provider,
     };
 
@@ -278,7 +305,8 @@ Be creative but practical. Make assumptions where needed and document them.`;
   private buildSystemPrompt(
     templateContext: string,
     audience: 'technical' | 'business' | 'mixed',
-    detailLevel: 'concise' | 'standard' | 'comprehensive'
+    detailLevel: 'concise' | 'standard' | 'comprehensive',
+    projectInstructions?: string
   ): string {
     let prompt = MASTER_PRD_SYSTEM_PROMPT + '\n\n';
     prompt += templateContext + '\n\n';
@@ -298,6 +326,11 @@ Be creative but practical. Make assumptions where needed and document them.`;
       comprehensive: 'Provide exhaustive detail. Include edge cases, multiple examples, and deep analysis.',
     };
     prompt += `## Detail Level\n${detailGuidance[detailLevel]}\n\n`;
+
+    // Add project-specific instructions if provided
+    if (projectInstructions) {
+      prompt += `## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when generating the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting. Structure your PRD according to the user's specifications above.\n\n`;
+    }
 
     return prompt;
   }

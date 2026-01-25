@@ -39,6 +39,8 @@ interface NoteEditorProps {
   className?: string;
   /** Previously saved features (for task generation) */
   savedFeatures?: GeneratedFeature[];
+  /** Project-specific instructions for PRD generation */
+  projectInstructions?: string;
   /** Callback when features are generated */
   onFeaturesGenerated?: (features: GeneratedFeature[]) => void;
   /** Callback when tasks are generated */
@@ -52,6 +54,7 @@ export function NoteEditor({
   autoFocus = false,
   className,
   savedFeatures = [],
+  projectInstructions,
   onFeaturesGenerated,
   onTasksGenerated,
 }: NoteEditorProps) {
@@ -536,6 +539,7 @@ export function NoteEditor({
         mode={aiPanelMode}
         currentContent={editor?.state.doc.textContent || ''}
         savedFeatures={savedFeatures}
+        projectInstructions={projectInstructions}
         onPRDGenerated={handlePRDGenerated}
         onFeaturesGenerated={onFeaturesGenerated}
         onTasksGenerated={onTasksGenerated}

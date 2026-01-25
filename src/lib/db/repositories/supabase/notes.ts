@@ -50,6 +50,15 @@ export const notesRepository = {
             query = query.or(`title.ilike.%${filter.search}%,content::text.ilike.%${filter.search}%`);
         }
 
+        // Filter by project: if projectId provided, show PRDs for that project
+        // If includeAllProjects is true, return all PRDs (for sidebar)
+        // If no projectId and not includeAllProjects, show only unassigned PRDs
+        if (filter?.projectId) {
+            query = query.eq('project_id', filter.projectId);
+        } else if (!filter?.includeAllProjects) {
+            query = query.is('project_id', null);
+        }
+
         // Apply sorting
         if (sort) {
             const column = sort.field === 'createdAt' ? 'created_at' :
