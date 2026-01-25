@@ -62,3 +62,10 @@ export function useProjectNoteCount(projectId: string | undefined) {
     enabled: !!projectId,
   });
 }
+
+export function useAllProjectNoteCounts() {
+  return useQuery({
+    queryKey: ['projects', 'allNoteCounts'],
+    queryFn: () => projectsRepository.getAllNoteCounts(),
+  });
+}

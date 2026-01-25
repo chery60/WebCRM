@@ -207,7 +207,7 @@ function NewNoteContent() {
     }
 
     if (!currentUser) {
-      toast.error('Please sign in to create notes');
+      toast.error('Please sign in to create PRDs');
       return;
     }
 
@@ -229,12 +229,12 @@ function NewNoteContent() {
       // Clear the draft from localStorage after successful save
       clearDraft();
       
-      toast.success('Note created');
+      toast.success('PRD created');
       if (newNote) {
         router.push(`/notes/${newNote.id}`);
       }
     } catch (error) {
-      toast.error('Failed to create note');
+      toast.error('Failed to create PRD');
     } finally {
       setIsSaving(false);
     }
@@ -263,7 +263,7 @@ function NewNoteContent() {
           <Button variant="ghost" size="sm" asChild>
             <Link href={backUrl}>
               <ArrowLeft className="h-4 w-4 mr-1" />
-              Notes
+              PRD
             </Link>
           </Button>
           {/* Project Selector */}
@@ -286,7 +286,7 @@ function NewNoteContent() {
           </Select>
         </div>
         <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? 'Saving...' : 'Save Note'}
+          {isSaving ? 'Saving...' : 'Save PRD'}
         </Button>
       </div>
 
@@ -296,7 +296,7 @@ function NewNoteContent() {
           <Input
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Add Title Here"
+            placeholder="Untitled"
             className="text-2xl font-semibold border-0 p-0 h-auto focus-visible:ring-0 bg-transparent"
             autoFocus
           />

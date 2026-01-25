@@ -60,7 +60,7 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
             <h1 className="text-2xl font-semibold">{projectName}</h1>
           </>
         ) : (
-          <h1 className="text-2xl font-semibold">Notes</h1>
+          <h1 className="text-2xl font-semibold">PRDs</h1>
         )}
 
         {/* View Switcher */}
@@ -145,11 +145,11 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Add note button */}
+        {/* Add PRD button */}
         <Button asChild size="sm" className="gap-2">
           <Link href={projectId ? `/notes/new?project=${projectId}` : '/notes/new'}>
             <Plus className="h-4 w-4" />
-            Add Notes
+            Add PRD
           </Link>
         </Button>
       </div>

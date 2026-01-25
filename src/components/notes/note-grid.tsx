@@ -35,17 +35,17 @@ export function NoteGrid({ notes, isLoading, projectId, projectsMap }: NoteGridP
           )}
         </div>
         <h3 className="font-semibold text-lg mb-2">
-          {projectId ? 'No notes in this project' : 'No notes yet'}
+          {projectId ? 'No PRDs in this project' : 'No PRDs yet'}
         </h3>
         <p className="text-muted-foreground mb-4 max-w-sm">
-          {projectId 
-            ? 'Create your first note in this project to get started.'
-            : 'Create your first note to get started. Use the AI features to help you write faster.'
+          {projectId
+            ? 'Create your first PRD in this project to get started.'
+            : 'Create your first PRD to get started. Use the AI features to help you write faster.'
           }
         </p>
         <Button asChild>
           <Link href={projectId ? `/notes/new?project=${projectId}` : '/notes/new'}>
-            Create your first note
+            Create your first PRD
           </Link>
         </Button>
       </div>

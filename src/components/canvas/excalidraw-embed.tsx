@@ -391,18 +391,27 @@ function ExcalidrawWrapper({
     );
   }
 
+  // Clean appState to remove properties that can't be serialized/deserialized properly
+  // Excalidraw expects collaborators to be a Map, but JSON serialization converts it to an array/object
+  const cleanedInitialData = initialData ? (() => {
+    const { collaborators, ...cleanAppState } = initialData.appState || {};
+    return {
+      elements: initialData.elements || [],
+      appState: {
+        viewBackgroundColor: '#ffffff',
+        currentItemFontFamily: 1,
+        ...cleanAppState,
+        // Ensure collaborators is a Map (required by Excalidraw)
+        collaborators: new Map(),
+      },
+      files: initialData.files || {},
+    };
+  })() : undefined;
+
   return (
     <Excalidraw
       excalidrawAPI={excalidrawAPI}
-      initialData={initialData ? {
-        elements: initialData.elements || [],
-        appState: {
-          viewBackgroundColor: '#ffffff',
-          currentItemFontFamily: 1,
-          ...initialData.appState,
-        },
-        files: initialData.files || {},
-      } : undefined}
+      initialData={cleanedInitialData}
       onChange={onChange}
       viewModeEnabled={viewModeEnabled}
       zenModeEnabled={false}

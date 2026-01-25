@@ -13,11 +13,19 @@ export const noteKeys = {
   detail: (id: string) => [...noteKeys.details(), id] as const,
 };
 
-// Get all notes
+// Get all notes/PRDs
 export function useNotes(filter?: NotesFilter, sort?: NotesSort) {
   return useQuery({
     queryKey: noteKeys.list(filter, sort),
     queryFn: () => notesRepository.getAll(filter, sort),
+  });
+}
+
+// Get all PRDs for sidebar (includes all projects)
+export function useAllPRDs() {
+  return useQuery({
+    queryKey: noteKeys.list({ includeAllProjects: true }),
+    queryFn: () => notesRepository.getAll({ includeAllProjects: true }),
   });
 }
 
@@ -35,21 +43,22 @@ export function useCreateNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ 
-      data, 
-      authorId, 
-      authorName, 
-      authorAvatar 
-    }: { 
-      data: NoteFormData; 
-      authorId: string; 
-      authorName: string; 
+    mutationFn: async ({
+      data,
+      authorId,
+      authorName,
+      authorAvatar
+    }: {
+      data: NoteFormData;
+      authorId: string;
+      authorName: string;
       authorAvatar?: string;
     }) => {
       return notesRepository.create(data, authorId, authorName, authorAvatar);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: noteKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'allNoteCounts'] });
     },
   });
 }
@@ -79,6 +88,7 @@ export function useDeleteNote() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: noteKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'allNoteCounts'] });
     },
   });
 }
@@ -93,6 +103,7 @@ export function useRestoreNote() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: noteKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'allNoteCounts'] });
     },
   });
 }
@@ -109,6 +120,7 @@ export function useMoveNoteToProject() {
       queryClient.invalidateQueries({ queryKey: noteKeys.detail(noteId) });
       queryClient.invalidateQueries({ queryKey: noteKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'allNoteCounts'] });
     },
   });
 }
@@ -123,6 +135,7 @@ export function useDuplicateNote() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: noteKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'allNoteCounts'] });
     },
   });
 }

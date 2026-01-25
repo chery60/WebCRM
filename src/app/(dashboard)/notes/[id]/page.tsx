@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
-import { useProjects } from '@/lib/hooks/use-projects';
+import { useProjects, useProject } from '@/lib/hooks/use-projects';
 import {
   Select,
   SelectContent,
@@ -75,6 +75,9 @@ export default function NoteDetailPage() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>(undefined);
+
+  // Fetch project instructions when projectId changes
+  const { data: currentProject } = useProject(projectId);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
@@ -617,6 +620,7 @@ export default function NoteDetailPage() {
               placeholder="Start typing, or press '/' for commands..."
               className="min-h-[500px]"
               savedFeatures={generatedFeatures}
+              projectInstructions={currentProject?.instructions}
               onFeaturesGenerated={handleFeaturesGenerated}
               onTasksGenerated={handleTasksGenerated}
             />

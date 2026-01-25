@@ -38,11 +38,14 @@ import {
   Plus,
   FolderOpen,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WorkspaceSwitcher } from '@/components/sidebar/workspace-switcher';
 import { PipelineNavSection } from '@/components/pipelines/pipeline-nav-section';
 import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } from '@/lib/hooks/use-projects';
-import { useMoveNoteToProject } from '@/lib/hooks/use-notes';
+import { useMoveNoteToProject, useAllPRDs, useCreateNote } from '@/lib/hooks/use-notes';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { FileText } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -67,7 +70,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { MoreHorizontal, Pencil, Trash2, Folder } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Project } from '@/types';
 
@@ -108,24 +112,30 @@ const bottomNavItems: NavItem[] = [
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
-function NotesNavSection({ collapsed }: { collapsed: boolean }) {
+function PRDNavSection({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const router = useRouter();
   const { data: projects = [] } = useProjects();
+  const { data: allPRDs = [] } = useAllPRDs();
+  const { currentUser } = useAuthStore();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+  const createNote = useCreateNote();
   const moveNote = useMoveNoteToProject();
-  
-  const [isOpen, setIsOpen] = useState(false);
+
+  const [isOpen, setIsOpen] = useState(true);
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  
+  const [newProjectInstructions, setNewProjectInstructions] = useState('');
+  const [creatingPRDForProject, setCreatingPRDForProject] = useState<string | null>(null);
+
   // Rename dialog state
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [projectToRename, setProjectToRename] = useState<Project | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  
+
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -133,11 +143,33 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
   // Drag and drop state
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
-  const isNotesActive = pathname.startsWith('/notes');
-  const currentProjectId = searchParams.get('project');
-  
-  // All Notes is active when on /notes page without a project query param
-  const isAllNotesActive = pathname === '/notes' && !currentProjectId;
+  // Track last processed pathname to prevent infinite loops
+  const lastProcessedPathnameRef = useRef<string>('');
+
+  const isPRDActive = pathname.startsWith('/notes') || pathname.startsWith('/projects');
+
+  // Group PRDs by project
+  const prdsByProject = allPRDs.reduce((acc, prd) => {
+    const projectId = prd.projectId || 'unassigned';
+    if (!acc[projectId]) {
+      acc[projectId] = [];
+    }
+    acc[projectId].push(prd);
+    return acc;
+  }, {} as Record<string, typeof allPRDs>);
+
+  // Toggle project expansion
+  const toggleProject = (projectId: string) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  };
 
   // Handle drag over for drop zones
   const handleDragOver = (e: React.DragEvent, targetId: string | null) => {
@@ -159,40 +191,120 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
     e.preventDefault();
     e.stopPropagation();
     setDragOverTarget(null);
-    
+
     const noteId = e.dataTransfer.getData('application/note-id');
     if (noteId) {
-      const targetName = projectId 
+      const targetName = projectId
         ? projects.find(p => p.id === projectId)?.name || 'project'
-        : 'All Notes';
-      
+        : 'Unassigned';
+
       moveNote.mutate(
         { noteId, projectId },
         {
           onSuccess: () => {
-            toast.success(`Note moved to ${targetName}`);
+            toast.success(`PRD moved to ${targetName}`);
           },
           onError: () => {
-            toast.error('Failed to move note');
+            toast.error('Failed to move PRD');
           },
         }
       );
     }
   };
 
-  // Auto-expand when notes section is active
+  // Auto-expand when PRD section is active
   useEffect(() => {
-    if (isNotesActive) {
+    if (isPRDActive) {
       setIsOpen(true);
     }
-  }, [isNotesActive]);
+  }, [isPRDActive]);
+
+  // Auto-expand project when viewing its PRD or settings
+  useEffect(() => {
+    // Skip if we've already processed this pathname
+    if (pathname === lastProcessedPathnameRef.current) {
+      return;
+    }
+
+    let projectIdToExpand: string | null = null;
+
+    // Check if we're on a PRD page
+    const prdMatch = pathname.match(/^\/notes\/([^/]+)$/);
+    if (prdMatch) {
+      const prdId = prdMatch[1];
+      const prd = allPRDs.find(p => p.id === prdId);
+      if (prd?.projectId) {
+        projectIdToExpand = prd.projectId;
+      }
+    }
+    // Check if we're on a project settings page
+    if (!projectIdToExpand) {
+      const projectMatch = pathname.match(/^\/projects\/([^/]+)\/settings$/);
+      if (projectMatch) {
+        projectIdToExpand = projectMatch[1];
+      }
+    }
+
+    // Expand project if needed
+    if (projectIdToExpand) {
+      setExpandedProjects(prev => {
+        if (prev.has(projectIdToExpand!)) {
+          return prev; // Already expanded, no need to update
+        }
+        const next = new Set(prev);
+        next.add(projectIdToExpand!);
+        return next;
+      });
+    }
+
+    // Update ref to mark this pathname as processed
+    lastProcessedPathnameRef.current = pathname;
+  }, [pathname, allPRDs]);
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    await createProject.mutateAsync({ name: newProjectName.trim() });
+    const newProject = await createProject.mutateAsync({
+      name: newProjectName.trim(),
+      instructions: newProjectInstructions.trim() || undefined,
+    });
     setNewProjectName('');
+    setNewProjectInstructions('');
     setShowCreateDialog(false);
     toast.success('Project created');
+    // Auto-expand the new project
+    if (newProject?.id) {
+      setExpandedProjects(prev => new Set(prev).add(newProject.id));
+    }
+  };
+
+  const handleCreatePRD = async (projectId: string) => {
+    if (!currentUser) {
+      toast.error('Please sign in to create PRDs');
+      return;
+    }
+
+    setCreatingPRDForProject(projectId);
+    try {
+      const newPRD = await createNote.mutateAsync({
+        data: {
+          title: 'Untitled',
+          content: '',
+          tags: [],
+          projectId,
+        },
+        authorId: currentUser.id,
+        authorName: currentUser.name || currentUser.email,
+        authorAvatar: currentUser.avatar,
+      });
+
+      if (newPRD) {
+        router.push(`/notes/${newPRD.id}`);
+      }
+    } catch (error) {
+      toast.error('Failed to create PRD');
+    } finally {
+      setCreatingPRDForProject(null);
+    }
   };
 
   const handleRenameClick = (project: Project) => {
@@ -230,19 +342,19 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link href="/notes">
+          <Link href="/projects">
             <div className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-              isNotesActive
+              isPRDActive
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
             )}>
-              <StickyNote className="h-5 w-5 shrink-0" />
+              <FileText className="h-5 w-5 shrink-0" />
             </div>
           </Link>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={10}>
-          Notes
+          PRD
         </TooltipContent>
       </Tooltip>
     );
@@ -255,104 +367,159 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
           <button className="w-full text-left">
             <div className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-              isNotesActive && !isOpen
+              isPRDActive && !isOpen
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
             )}>
-              <StickyNote className="h-5 w-5 shrink-0" />
-              <span className="flex-1">Notes</span>
+              <FileText className="h-5 w-5 shrink-0" />
+              <span className="flex-1">PRD</span>
               <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 pt-1 space-y-1">
-          {/* All Notes link */}
+        <CollapsibleContent className="pl-2 pt-1 space-y-0.5">
+          {/* All PRDs link */}
           <Link
             href="/notes"
             className={cn(
               'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
-              isAllNotesActive
+              pathname === '/notes'
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-              dragOverTarget === 'all-notes' && 'ring-2 ring-primary bg-primary/10'
+              dragOverTarget === 'all-prds' && 'ring-2 ring-primary bg-primary/10'
             )}
-            onDragOver={(e) => handleDragOver(e, 'all-notes')}
+            onDragOver={(e) => handleDragOver(e, 'all-prds')}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, undefined)}
           >
-            <StickyNote className="h-4 w-4" />
-            <span>All Notes</span>
+            <FileText className="h-4 w-4" />
+            <span>All PRDs</span>
           </Link>
 
-          {/* Projects */}
+          {/* Projects with nested PRDs */}
           {projects.map((project) => {
-            const isProjectActive = pathname === '/notes' && currentProjectId === project.id;
-            
+            const isExpanded = expandedProjects.has(project.id);
+            const projectPRDs = prdsByProject[project.id] || [];
+            const isProjectSettingsActive = pathname === `/projects/${project.id}/settings`;
+            const isAnyPRDActive = projectPRDs.some(prd => pathname === `/notes/${prd.id}`);
+
             return (
-              <ContextMenu key={project.id}>
-                <ContextMenuTrigger asChild>
-                  <div 
-                    className="group relative"
-                    onDragOver={(e) => handleDragOver(e, project.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, project.id)}
-                  >
+              <div key={project.id}>
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className="group relative"
+                      onDragOver={(e) => handleDragOver(e, project.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, project.id)}
+                    >
+                      <button
+                        onClick={() => toggleProject(project.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full pr-8',
+                          (isExpanded && (isProjectSettingsActive || isAnyPRDActive))
+                            ? 'text-sidebar-foreground font-medium'
+                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                          dragOverTarget === project.id && 'ring-2 ring-primary bg-primary/10'
+                        )}
+                      >
+                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform shrink-0', !isExpanded && '-rotate-90')} />
+                        <FolderOpen className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{project.name}</span>
+                      </button>
+
+                      {/* More options button (visible on hover) */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem onClick={() => handleRenameClick(project)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteClick(project)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="w-40">
+                    <ContextMenuItem onClick={() => handleRenameClick(project)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Rename
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onClick={() => handleDeleteClick(project)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+
+                {/* Expanded project content */}
+                {isExpanded && (
+                  <div className="pl-5 space-y-0.5 mt-0.5">
+                    {/* Project Settings */}
                     <Link
-                      href={`/notes?project=${project.id}`}
+                      href={`/projects/${project.id}/settings`}
                       className={cn(
-                        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors pr-8',
-                        isProjectActive
+                        'flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors',
+                        isProjectSettingsActive
                           ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-                        dragOverTarget === project.id && 'ring-2 ring-primary bg-primary/10'
+                          : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                       )}
                     >
-                      <FolderOpen className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{project.name}</span>
+                      <Settings className="h-3.5 w-3.5" />
+                      <span>Settings</span>
                     </Link>
-                    
-                    {/* More options button (visible on hover) */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
-                          onClick={(e) => e.stopPropagation()}
+
+                    {/* New PRD button */}
+                    <button
+                      onClick={() => handleCreatePRD(project.id)}
+                      disabled={creatingPRDForProject === project.id}
+                      className="flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors w-full text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:opacity-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{creatingPRDForProject === project.id ? 'Creating...' : 'New PRD'}</span>
+                    </button>
+
+                    {/* PRDs list */}
+                    {projectPRDs.map((prd) => {
+                      const isPRDActive = pathname === `/notes/${prd.id}`;
+                      return (
+                        <Link
+                          key={prd.id}
+                          href={`/notes/${prd.id}`}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors',
+                            isPRDActive
+                              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                              : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                          )}
                         >
-                          <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem onClick={() => handleRenameClick(project)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteClick(project)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <StickyNote className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{prd.title || 'Untitled'}</span>
+                        </Link>
+                      );
+                    })}
                   </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent className="w-40">
-                  <ContextMenuItem onClick={() => handleRenameClick(project)}>
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Rename
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem 
-                    onClick={() => handleDeleteClick(project)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
+                )}
+              </div>
             );
           })}
 
@@ -368,34 +535,103 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
       </Collapsible>
 
       {/* Create Project Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="projectName">Project Name</Label>
-            <Input
-              id="projectName"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="Enter project name"
-              className="mt-2"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreateProject();
-                }
-              }}
-            />
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        setShowCreateDialog(open);
+        if (!open) {
+          setNewProjectName('');
+          setNewProjectInstructions('');
+        }
+      }}>
+        <DialogContent
+          className="!w-[680px] !h-[560px] !max-w-none !p-0"
+          style={{
+            backgroundColor: 'rgb(248, 248, 247)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px',
+            color: 'rgb(52, 50, 45)',
+            fontSize: '16px',
+            lineHeight: '24px',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div className="flex flex-col h-full p-6">
+            <DialogHeader className="flex flex-col items-center text-center pb-4 flex-shrink-0">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-muted/50">
+                <Folder className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <DialogTitle className="text-xl" style={{ color: 'rgb(52, 50, 45)' }}>Create project</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex-1 space-y-4 py-2 overflow-y-auto">
+              {/* Project Name */}
+              <div className="space-y-2">
+                <Label htmlFor="projectName" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
+                  Project name
+                </Label>
+                <Input
+                  id="projectName"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="Enter the name"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateProject();
+                    }
+                  }}
+                  style={{
+                    fontSize: '16px',
+                    lineHeight: '24px',
+                    color: 'rgb(52, 50, 45)',
+                  }}
+                />
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-2">
+                <Label htmlFor="projectInstructions" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
+                  Instructions <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  id="projectInstructions"
+                  value={newProjectInstructions}
+                  onChange={(e) => setNewProjectInstructions(e.target.value)}
+                  placeholder='e.g. "Focus on Python best practices", "Maintain a professional tone", or "Always provide sources for important conclusions".'
+                  className="min-h-[120px] resize-none bg-muted/30"
+                  style={{
+                    fontSize: '16px',
+                    lineHeight: '24px',
+                    color: 'rgb(52, 50, 45)',
+                  }}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowCreateDialog(false)}
+                className="flex-1 sm:flex-none"
+                style={{
+                  fontSize: '16px',
+                  lineHeight: '24px',
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateProject}
+                disabled={!newProjectName.trim()}
+                className="flex-1 sm:flex-none"
+                style={{
+                  fontSize: '16px',
+                  lineHeight: '24px',
+                }}
+              >
+                Create
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>
-              Create
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -438,8 +674,8 @@ function NotesNavSection({ collapsed }: { collapsed: boolean }) {
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{projectToDelete?.name}&quot;? 
-              Notes in this project will be moved to &quot;All Notes&quot;.
+              Are you sure you want to delete &quot;{projectToDelete?.name}&quot;?
+              PRDs in this project will be permanently deleted.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4">
@@ -574,9 +810,21 @@ export function Sidebar() {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          'flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300',
-          isCollapsed ? 'w-[68px]' : 'w-[240px]'
+          'flex flex-col transition-all duration-300 relative h-full',
+          isCollapsed ? 'w-[68px]' : 'w-[300px]'
         )}
+        style={{
+          padding: '9px 9px 0px',
+          gap: '1px',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '16px',
+          fontWeight: 400,
+          lineHeight: '24px',
+          color: 'rgb(52, 50, 45)',
+          border: '0px solid rgb(229, 231, 235)',
+          textAlign: 'start',
+          backgroundColor: '#EBEBEB',
+        }}
       >
         {/* Logo and collapse button */}
         <div className="flex h-16 items-center justify-between px-4">
@@ -592,10 +840,10 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 px-3">
+        <ScrollArea className="flex-1 px-3 pb-20">
           <nav className="space-y-1 py-2">
             {/* Notes with Projects */}
-            {features.notes && <NotesNavSection collapsed={isCollapsed} />}
+            {features.notes && <PRDNavSection collapsed={isCollapsed} />}
 
             {/* Pipelines with Roadmaps */}
             {features.pipelines && <PipelineNavSection collapsed={isCollapsed} />}
@@ -646,8 +894,10 @@ export function Sidebar() {
           </nav>
         </ScrollArea>
 
-        {/* Workspace selector */}
-        <WorkspaceSwitcher collapsed={isCollapsed} />
+        {/* Workspace selector - fixed to bottom */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <WorkspaceSwitcher collapsed={isCollapsed} />
+        </div>
       </aside>
     </TooltipProvider>
   );

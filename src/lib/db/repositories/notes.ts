@@ -32,8 +32,13 @@ export const notesRepository = {
       notes = notes.filter(note => note.authorId === filter.authorId);
     }
 
+    // Filter by project: if projectId provided, show PRDs for that project
+    // If includeAllProjects is true, return all PRDs (for sidebar)
+    // If no projectId and not includeAllProjects, show only unassigned PRDs
     if (filter?.projectId) {
       notes = notes.filter(note => note.projectId === filter.projectId);
+    } else if (!filter?.includeAllProjects) {
+      notes = notes.filter(note => !note.projectId);
     }
 
     // Apply sorting

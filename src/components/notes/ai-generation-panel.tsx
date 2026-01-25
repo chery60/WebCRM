@@ -63,6 +63,8 @@ interface AIGenerationPanelProps {
   currentContent?: string;
   /** Previously generated/saved features (for task generation) */
   savedFeatures?: GeneratedFeature[];
+  /** Project-specific instructions for PRD generation */
+  projectInstructions?: string;
   /** Callback when PRD content is generated */
   onPRDGenerated?: (content: string) => void;
   /** Callback when features are generated */
@@ -95,6 +97,7 @@ export function AIGenerationPanel({
   mode,
   currentContent = '',
   savedFeatures = [],
+  projectInstructions,
   onPRDGenerated,
   onFeaturesGenerated,
   onTasksGenerated,
@@ -229,7 +232,8 @@ export function AIGenerationPanel({
       switch (mode) {
         case 'generate-prd': {
           console.log('[AIGenerationPanel] Calling prdGenerator.quickGenerate');
-          const result = await prdGenerator.quickGenerate(prompt, effectiveProvider);
+          console.log('[AIGenerationPanel] Project instructions:', projectInstructions ? 'provided' : 'none');
+          const result = await prdGenerator.quickGenerate(prompt, effectiveProvider, projectInstructions);
           console.log('[AIGenerationPanel] PRD generated, content length:', result.content?.length);
           setGeneratedContent(result.content);
           setStep('preview');
@@ -240,6 +244,7 @@ export function AIGenerationPanel({
             description: prompt,
             templateType: selectedTemplate,
             provider: effectiveProvider,
+            projectInstructions,
           });
           setGeneratedContent(result.content);
           setStep('preview');
@@ -325,6 +330,7 @@ export function AIGenerationPanel({
             currentContent,
             focusAreas: prompt ? prompt.split(',').map(s => s.trim()) : undefined,
             provider: effectiveProvider,
+            projectInstructions,
           });
           setGeneratedContent(result.content);
           setStep('preview');
@@ -336,6 +342,7 @@ export function AIGenerationPanel({
             description: currentContent || prompt,
             existingContent: currentContent,
             provider: effectiveProvider,
+            projectInstructions,
           });
           setGeneratedContent(`## ${section.title}\n\n${section.content}`);
           setStep('preview');

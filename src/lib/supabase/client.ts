@@ -6,7 +6,13 @@ export function createSupabaseClient(): SupabaseClient {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    return createClient(supabaseUrl, supabaseAnonKey);
+    return createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+        },
+    });
 }
 
 // Singleton client for client-side use

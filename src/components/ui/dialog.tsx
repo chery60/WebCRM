@@ -54,18 +54,18 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
-  // Check if custom width/max-width is provided to avoid default constraints
-  const hasCustomSize = className?.includes('w-[') || className?.includes('max-w-[') || className?.includes('!w-') || className?.includes('!max-w-');
-  
+  // Check if custom width/max-width is provided to avoid default width constraints
+  const hasCustomWidth = className?.includes('w-[') || className?.includes('max-w-[') || className?.includes('!w-') || className?.includes('!max-w-');
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border shadow-lg duration-200 outline-none",
-          // Only apply default width constraints if no custom size is provided
-          !hasCustomSize && "w-full max-w-[calc(100%-2rem)] p-6 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border shadow-lg duration-200 outline-none p-6",
+          // Only apply default width constraints if no custom width is provided
+          !hasCustomWidth && "w-full max-w-[calc(100%-2rem)] sm:max-w-lg",
           className
         )}
         {...props}

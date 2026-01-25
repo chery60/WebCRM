@@ -869,20 +869,27 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // We only want to update this when the component mounts or when we explicitly want to reset
   // Since 'initialData' from props changes on every edit (due to parent state update),
   // passing it directly to Excalidraw can cause issues.
-  // However, Excalidraw generally ignores initialData after mount. 
+  // However, Excalidraw generally ignores initialData after mount.
   // The critical part is preventing CanvasContent from being re-created unnecessarily.
   const excalidrawInitialData = useMemo(() => {
     if (!initialData) return undefined;
+
+    // Clean appState to remove properties that can't be serialized/deserialized properly
+    // Excalidraw expects collaborators to be a Map, but JSON serialization converts it to an array/object
+    const { collaborators, ...cleanAppState } = initialData.appState || {};
+
     return {
       elements: initialData.elements,
       appState: {
-        ...initialData.appState,
+        ...cleanAppState,
         viewBackgroundColor: '#ffffff',
+        // Ensure collaborators is a Map (required by Excalidraw)
+        collaborators: new Map(),
       },
       files: initialData.files,
     };
-    // We intentionally exclude initialData from dependencies to prevent re-creation 
-    // on every keystroke/edit echo from parent. 
+    // We intentionally exclude initialData from dependencies to prevent re-creation
+    // on every keystroke/edit echo from parent.
     // We only rely on it for the FIRST render when Excalidraw mounts.
     // Use a key on the component if you need to force reset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
