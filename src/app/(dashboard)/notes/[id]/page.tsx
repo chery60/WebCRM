@@ -38,7 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
 import { useProjects, useCreateProject } from '@/lib/hooks/use-projects';
 import {
@@ -73,6 +73,10 @@ import { AIGenerationPanel } from '@/components/notes/ai-generation-panel';
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps';
 import type { TaskFormData } from '@/types';
 import { createTask as createTaskInDb } from '@/lib/db/repositories/supabase/tasks';
+import { tipTapToMarkdown, markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
+
+// View mode type for toggle between markup (raw markdown) and preview (rendered)
+type NoteViewMode = 'preview' | 'markup';
 
 /**
  * Normalizes Excalidraw elements loaded from storage.
@@ -191,6 +195,11 @@ export default function NoteDetailPage() {
   const [showCreateFeatureDrawer, setShowCreateFeatureDrawer] = useState(false);
   const [showAIGenerationPanel, setShowAIGenerationPanel] = useState(false);
   const [aiGenerationMode, setAIGenerationMode] = useState<'tasks' | 'features'>('tasks');
+  
+  // View mode state: 'preview' shows rendered content, 'markup' shows raw markdown
+  const [viewMode, setViewMode] = useState<NoteViewMode>('preview');
+  // Store the markdown version when in markup mode for proper conversion back
+  const [markupContent, setMarkupContent] = useState<string>('');
   
   // Extract plain text from content for AI context
   const [prdPlainText, setPrdPlainText] = useState('');
@@ -735,6 +744,42 @@ export default function NoteDetailPage() {
     setShowAIGenerationPanel(true);
   }, []);
 
+  // Toggle to markup view: convert current TipTap content to markdown
+  const handleViewMarkup = useCallback(() => {
+    if (content) {
+      try {
+        const parsedContent = JSON.parse(content);
+        const markdown = tipTapToMarkdown(parsedContent);
+        setMarkupContent(markdown);
+        setViewMode('markup');
+      } catch (e) {
+        console.warn('Failed to convert content to markdown:', e);
+        toast.error('Failed to convert to markup view');
+      }
+    }
+  }, [content]);
+
+  // Toggle to preview view: convert markdown back to TipTap format
+  const handleViewPreview = useCallback(() => {
+    if (markupContent) {
+      try {
+        const tiptapDoc = markdownToTipTap(markupContent);
+        setContent(JSON.stringify(tiptapDoc));
+        setViewMode('preview');
+      } catch (e) {
+        console.warn('Failed to convert markdown to preview:', e);
+        toast.error('Failed to convert to preview');
+      }
+    } else {
+      setViewMode('preview');
+    }
+  }, [markupContent]);
+
+  // Handle markup content changes in markup mode
+  const handleMarkupChange = useCallback((newMarkup: string) => {
+    setMarkupContent(newMarkup);
+  }, []);
+
   // Bulk action handlers - open modals instead of direct action
   const handleOpenBulkTaskDialog = useCallback(() => {
     const selectedTasks = generatedTasks.filter(t => t.isSelected);
@@ -917,6 +962,19 @@ export default function NoteDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {/* View mode toggle - conditional based on current mode */}
+                  {viewMode === 'preview' ? (
+                    <DropdownMenuItem onClick={handleViewMarkup}>
+                      <Code className="h-4 w-4 mr-2" />
+                      View Markup
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={handleViewPreview}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Preview
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
                     <FolderInput className="h-4 w-4 mr-2" />
                     Move to
@@ -937,17 +995,45 @@ export default function NoteDetailPage() {
             </div>
           </div>
 
-          {/* Editor */}
+          {/* Editor - conditionally render based on view mode */}
           <div className="px-8 py-6">
-            <NoteEditor
-              content={content}
-              onChange={setContent}
-              placeholder="Start typing, or press '/' for commands..."
-              className="min-h-[500px]"
-              savedFeatures={generatedFeatures}
-              onFeaturesGenerated={handleFeaturesGenerated}
-              onTasksGenerated={handleTasksGenerated}
-            />
+            {viewMode === 'preview' ? (
+              <NoteEditor
+                content={content}
+                onChange={setContent}
+                placeholder="Start typing, or press '/' for commands..."
+                className="min-h-[500px]"
+                savedFeatures={generatedFeatures}
+                onFeaturesGenerated={handleFeaturesGenerated}
+                onTasksGenerated={handleTasksGenerated}
+              />
+            ) : (
+              /* Markup mode - show raw markdown in a textarea */
+              <div className="relative border rounded-lg bg-card min-h-[500px]">
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Code className="h-4 w-4" />
+                    <span>Markup View</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleViewPreview}
+                    className="h-7 text-xs"
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                    Switch to Preview
+                  </Button>
+                </div>
+                <textarea
+                  value={markupContent}
+                  onChange={(e) => handleMarkupChange(e.target.value)}
+                  placeholder="# Heading 1&#10;## Heading 2&#10;### Heading 3&#10;&#10;Regular paragraph text with **bold** and *italic*.&#10;&#10;* Bullet point 1&#10;* Bullet point 2&#10;&#10;1. Numbered item 1&#10;2. Numbered item 2"
+                  className="w-full h-[calc(100%-48px)] min-h-[452px] p-4 bg-transparent resize-none focus:outline-none font-mono text-sm leading-relaxed"
+                  spellCheck={false}
+                />
+              </div>
+            )}
           </div>
 
           {/* PRD Canvas - Whiteboard for visual planning */}

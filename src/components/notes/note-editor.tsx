@@ -26,6 +26,7 @@ import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
 import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/excalidraw-embed';
 import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
 import { toast } from 'sonner';
+import { markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
 
 interface NoteEditorProps {
   content: string;
@@ -175,12 +176,16 @@ export function NoteEditor({
             });
 
             if (result.content) {
-              if (selectedText) {
-                // Replace selection
-                editor.chain().focus().insertContent(result.content).run();
-              } else {
-                // Insert at cursor
-                editor.chain().focus().insertContent(result.content).run();
+              // Convert markdown to TipTap JSON format for proper rendering
+              const tiptapDoc = markdownToTipTap(result.content);
+              if (tiptapDoc.content && tiptapDoc.content.length > 0) {
+                if (selectedText) {
+                  // Replace selection with converted content
+                  editor.chain().focus().insertContent(tiptapDoc.content).run();
+                } else {
+                  // Insert at cursor
+                  editor.chain().focus().insertContent(tiptapDoc.content).run();
+                }
               }
             }
           } catch (error) {
@@ -444,9 +449,15 @@ export function NoteEditor({
   }, []);
 
   // Handle PRD content generated from AI panel
+  // Converts markdown to TipTap JSON format for proper rendering
   const handlePRDGenerated = useCallback((generatedContent: string) => {
     if (editor) {
-      editor.chain().focus().insertContent(generatedContent).run();
+      // Convert markdown to TipTap JSON format
+      const tiptapDoc = markdownToTipTap(generatedContent);
+      // Insert the converted content (TipTap nodes)
+      if (tiptapDoc.content && tiptapDoc.content.length > 0) {
+        editor.chain().focus().insertContent(tiptapDoc.content).run();
+      }
     }
   }, [editor]);
 

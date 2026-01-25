@@ -938,12 +938,15 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCollapsed, isFullscreen, allowCollapse, handleExportPNG, handleExportSVG, handleClearCanvas]);
 
-  // Memoize initial data for Excalidraw to prevent re-initialization on every render
-  // We only want to update this when the component mounts or when we explicitly want to reset
-  // Since 'initialData' from props changes on every edit (due to parent state update),
-  // passing it directly to Excalidraw can cause issues.
-  // However, Excalidraw generally ignores initialData after mount. 
-  // The critical part is preventing CanvasContent from being re-created unnecessarily.
+  // Track the initial data reference for comparison
+  // We use a ref to store the "committed" initial data to avoid re-processing on every render
+  const initialDataRef = useRef<CanvasData | undefined>(initialData);
+  
+  // Memoize initial data for Excalidraw
+  // IMPORTANT: We include initialData in dependencies because PRDCanvas only mounts AFTER
+  // the parent has loaded data (due to isNoteLoaded check). The parent uses a key prop
+  // to force remount when noteId changes, so this won't cause issues with stale closures.
+  // This fixes the bug where canvas data wasn't being loaded on page refresh.
   const excalidrawInitialData = useMemo(() => {
     // CRITICAL: Excalidraw requires collaborators to be a Map, not undefined or plain object
     // This prevents the "props.appState.collaborators.forEach is not a function" error
@@ -952,7 +955,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       collaborators: new Map(),
     };
     
-    if (!initialData) {
+    // Use the current initialData prop value
+    const dataToUse = initialData;
+    
+    if (!dataToUse) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PRDCanvas] excalidrawInitialData: No initial data provided');
+      }
       return {
         elements: [],
         appState: baseAppState,
@@ -960,7 +969,11 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     }
 
     // Safely extract elements, filtering out any invalid entries
-    const rawElements = Array.isArray(initialData.elements) ? initialData.elements : [];
+    const rawElements = Array.isArray(dataToUse.elements) ? dataToUse.elements : [];
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PRDCanvas] excalidrawInitialData: Processing', rawElements.length, 'elements');
+    }
     
     // Normalize linear elements (arrows, lines) to prevent "Linear element is not normalized" error
     // This ensures all required properties like lastCommittedPoint are present
@@ -997,9 +1010,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       });
     
     // Safely extract appState, ensuring it's an object
-    const rawAppState = initialData.appState && typeof initialData.appState === 'object' 
-      ? initialData.appState 
+    const rawAppState = dataToUse.appState && typeof dataToUse.appState === 'object' 
+      ? dataToUse.appState 
       : {};
+    
+    // Update the ref with the processed data
+    initialDataRef.current = dataToUse;
     
     return {
       elements: normalizedElements,
@@ -1010,14 +1026,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         // This is critical because JSON.parse converts Map to {} which breaks Excalidraw
         collaborators: new Map(),
       },
-      files: initialData.files || undefined,
+      files: dataToUse.files || undefined,
     };
-    // We intentionally exclude initialData from dependencies to prevent re-creation 
-    // on every keystroke/edit echo from parent. 
-    // We only rely on it for the FIRST render when Excalidraw mounts.
-    // Use a key on the component if you need to force reset.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Include initialData in dependencies - this is safe because:
+    // 1. PRDCanvas only mounts after parent has loaded data (isNoteLoaded check)
+    // 2. Parent uses key={noteId} to force remount on note change
+    // 3. Excalidraw ignores initialData changes after mount anyway
+  }, [initialData]);
 
   // Use refs for callbacks to prevent Excalidraw remounting
   const onChangeRef = useRef(handleChange);
