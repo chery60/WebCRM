@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/stores/ui-store';
+import { useFeatureSettingsStore } from '@/lib/stores/feature-settings-store';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -545,6 +546,7 @@ function NavItemComponent({
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { features } = useFeatureSettingsStore();
   const [mounted, setMounted] = useState(false);
 
   // Prevent hydration mismatch by only reading persisted state after mount
@@ -554,6 +556,19 @@ export function Sidebar() {
 
   // Use default value (false = expanded) during SSR to prevent hydration mismatch
   const isCollapsed = mounted ? sidebarCollapsed : false;
+
+  // Filter nav items based on enabled features
+  const filteredMainNavItems = mainNavItems.filter((item) => {
+    if (item.title === 'Tasks') return features.tasks;
+    if (item.title === 'Calendar') return features.calendar;
+    return true;
+  });
+
+  const filteredDatabaseNavItems = databaseNavItems.filter((item) => {
+    if (item.title === 'Analytics') return features.analytics;
+    if (item.title === 'Employees') return features.employees;
+    return true;
+  });
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -580,13 +595,13 @@ export function Sidebar() {
         <ScrollArea className="flex-1 px-3">
           <nav className="space-y-1 py-2">
             {/* Notes with Projects */}
-            <NotesNavSection collapsed={isCollapsed} />
+            {features.notes && <NotesNavSection collapsed={isCollapsed} />}
 
             {/* Pipelines with Roadmaps */}
-            <PipelineNavSection collapsed={isCollapsed} />
-            
+            {features.pipelines && <PipelineNavSection collapsed={isCollapsed} />}
+
             {/* Other nav items (Tasks, Calendar) */}
-            {mainNavItems.map((item) => (
+            {filteredMainNavItems.map((item) => (
               <NavItemComponent
                 key={item.href}
                 item={item}
@@ -595,25 +610,27 @@ export function Sidebar() {
             ))}
           </nav>
 
-          <Separator className="my-2" />
+          {filteredDatabaseNavItems.length > 0 && <Separator className="my-2" />}
 
           {/* Database section */}
-          <div className="py-2">
-            {!isCollapsed && (
-              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Database
-              </div>
-            )}
-            <nav className="space-y-1">
-              {databaseNavItems.map((item) => (
-                <NavItemComponent
-                  key={item.href}
-                  item={item}
-                  collapsed={isCollapsed}
-                />
-              ))}
-            </nav>
-          </div>
+          {filteredDatabaseNavItems.length > 0 && (
+            <div className="py-2">
+              {!isCollapsed && (
+                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Database
+                </div>
+              )}
+              <nav className="space-y-1">
+                {filteredDatabaseNavItems.map((item) => (
+                  <NavItemComponent
+                    key={item.href}
+                    item={item}
+                    collapsed={isCollapsed}
+                  />
+                ))}
+              </nav>
+            </div>
+          )}
 
           <Separator className="my-2" />
 

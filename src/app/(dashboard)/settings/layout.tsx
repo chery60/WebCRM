@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { User, Bell, Globe, Building2, CreditCard, Grid2X2 } from 'lucide-react';
+import { User, Bell, Globe, Building2, CreditCard, Grid2X2, ToggleLeft } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 interface SettingsNavItem {
@@ -15,6 +15,7 @@ interface SettingsNavItem {
 
 const settingsNavItems: SettingsNavItem[] = [
     { title: 'Apps', href: '/settings/apps', icon: Grid2X2, section: 'app' },
+    { title: 'Features', href: '/settings/features', icon: ToggleLeft, section: 'app' },
     { title: 'Account', href: '/settings/account', icon: User, section: 'app' },
     { title: 'Notifications', href: '/settings/notifications', icon: Bell, section: 'app' },
     { title: 'Language & Region', href: '/settings/language-region', icon: Globe, section: 'app' },
