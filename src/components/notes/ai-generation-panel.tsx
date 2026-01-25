@@ -390,13 +390,6 @@ export function AIGenerationPanel({
   const handleApply = useCallback(() => {
     if (generatedContent && onPRDGenerated) {
       onPRDGenerated(generatedContent);
-      // Insert an inline canvas after PRD content for visual planning
-      if (onInsertCanvas && (mode === 'generate-prd' || mode === 'prd-template')) {
-        // Small delay to ensure PRD content is inserted first
-        setTimeout(() => {
-          onInsertCanvas();
-        }, 100);
-      }
     }
     if (generatedFeatures.length > 0 && onFeaturesGenerated) {
       onFeaturesGenerated(generatedFeatures.filter(f => f.isSelected));
@@ -405,7 +398,8 @@ export function AIGenerationPanel({
       onTasksGenerated(generatedTasks.filter(t => t.isSelected));
     }
     handleClose();
-  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated, onInsertCanvas, mode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated]);
 
   // Handle close and reset
   const handleClose = useCallback(() => {

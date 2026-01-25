@@ -21,6 +21,8 @@ import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
+import { SelectionBubbleMenu } from './selection-bubble-menu';
+import { AIRewriteDrawer } from './ai-rewrite-drawer';
 import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
 import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
 import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/excalidraw-embed';
@@ -64,6 +66,10 @@ export function NoteEditor({
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  
+  // AI Rewrite Drawer state
+  const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
+  const [selectedTextForRewrite, setSelectedTextForRewrite] = useState('');
   
   // Canvas AI generation state
   const [isCanvasGenerating, setIsCanvasGenerating] = useState(false);
@@ -150,10 +156,6 @@ export function NoteEditor({
           break;
 
         // AI commands
-        case 'summarize':
-        case 'expand':
-        case 'rewrite':
-        case 'translate':
         case 'continue':
         case 'grammar':
         case 'professional':
@@ -172,7 +174,7 @@ export function NoteEditor({
             const result = await generateContent({
               prompt: selectedText || fullText.slice(-500),
               context: fullText,
-              type: command.command as 'summarize' | 'expand' | 'rewrite' | 'translate' | 'continue' | 'grammar' | 'professional',
+              type: command.command as 'continue' | 'grammar' | 'professional',
             });
 
             if (result.content) {
@@ -468,6 +470,20 @@ export function NoteEditor({
     setShowAIPanel(true);
   }, []);
 
+  // Handle AI rewrite from bubble menu
+  const handleAIRewrite = useCallback((selectedText: string) => {
+    setSelectedTextForRewrite(selectedText);
+    setShowRewriteDrawer(true);
+  }, []);
+
+  // Handle applying rewritten text
+  const handleApplyRewrite = useCallback((newText: string) => {
+    if (!editor) return;
+    
+    // Replace the current selection with the new text
+    editor.chain().focus().insertContent(newText).run();
+  }, [editor]);
+
   return (
     <div className={cn('relative border rounded-lg bg-card', className)}>
       <EditorToolbar editor={editor} />
@@ -526,6 +542,20 @@ export function NoteEditor({
         open={showTemplateSelector}
         onClose={() => setShowTemplateSelector(false)}
         onSelect={handleTemplateSelect}
+      />
+
+      {/* Selection Bubble Menu */}
+      <SelectionBubbleMenu 
+        editor={editor} 
+        onAIRewrite={handleAIRewrite} 
+      />
+
+      {/* AI Rewrite Drawer */}
+      <AIRewriteDrawer
+        open={showRewriteDrawer}
+        onClose={() => setShowRewriteDrawer(false)}
+        selectedText={selectedTextForRewrite}
+        onApply={handleApplyRewrite}
       />
     </div>
   );
