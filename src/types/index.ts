@@ -456,6 +456,47 @@ export interface PRDGenerationResult {
   suggestedTasks?: GeneratedTask[];
 }
 
+// ============================================
+// PRD Chat Types (Conversational PRD Generation)
+// ============================================
+
+export interface PRDChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  // For AI messages - the generated PRD content
+  generatedContent?: string;
+  // For version history - snapshot of note content at this point
+  noteSnapshot?: string;
+  // Template used for this generation (if any)
+  templateUsed?: PRDTemplateType | string;
+  // Provider used for generation
+  providerUsed?: string;
+  // Is the AI currently generating this message
+  isGenerating?: boolean;
+  // Error message if generation failed
+  error?: string;
+}
+
+export interface PRDChatSession {
+  id: string;
+  messages: PRDChatMessage[];
+  noteId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Custom PRD Template (user-created)
+export interface CustomPRDTemplate {
+  id: string;
+  name: string;
+  description: string;
+  sections: { id: string; title: string; order: number }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Task types
 export type TaskStatus = 'planned' | 'upcoming' | 'completed';
 export type TaskPriority = 'low' | 'medium' | 'high';

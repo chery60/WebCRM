@@ -20,6 +20,7 @@ import { useAIService } from '@/lib/ai/use-ai-service';
 import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
+import { PRDChatDrawer } from './prd-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
 import { SelectionBubbleMenu } from './selection-bubble-menu';
 import { AIRewriteDrawer } from './ai-rewrite-drawer';
@@ -66,6 +67,9 @@ export function NoteEditor({
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  
+  // PRD Chat Drawer state (conversational PRD generation)
+  const [showPRDChatDrawer, setShowPRDChatDrawer] = useState(false);
   
   // AI Rewrite Drawer state
   const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
@@ -130,13 +134,12 @@ export function NoteEditor({
           editor.chain().focus().insertExcalidraw().run();
           break;
 
-        // PRD-specific commands - open AI panel
+        // PRD-specific commands - open conversational PRD chat drawer
         case 'generate-prd':
-          setAIPanelMode('generate-prd');
-          setShowAIPanel(true);
+          setShowPRDChatDrawer(true);
           break;
         case 'prd-template':
-          setShowTemplateSelector(true);
+          setShowPRDChatDrawer(true); // Now uses chat drawer with template selection
           break;
         case 'generate-features':
           setAIPanelMode('generate-features');
@@ -450,15 +453,22 @@ export function NoteEditor({
     slashStartPosRef.current = null;
   }, []);
 
-  // Handle PRD content generated from AI panel
+  // Handle PRD content generated from AI panel or PRD chat drawer
   // Converts markdown to TipTap JSON format for proper rendering
-  const handlePRDGenerated = useCallback((generatedContent: string) => {
+  // Supports both overwrite and append modes
+  const handlePRDGenerated = useCallback((generatedContent: string, mode: 'overwrite' | 'append' = 'append') => {
     if (editor) {
       // Convert markdown to TipTap JSON format
       const tiptapDoc = markdownToTipTap(generatedContent);
-      // Insert the converted content (TipTap nodes)
+      
       if (tiptapDoc.content && tiptapDoc.content.length > 0) {
-        editor.chain().focus().insertContent(tiptapDoc.content).run();
+        if (mode === 'overwrite') {
+          // Clear existing content and set new content
+          editor.chain().focus().clearContent().insertContent(tiptapDoc.content).run();
+        } else {
+          // Append: Insert the converted content at the end
+          editor.chain().focus().insertContent(tiptapDoc.content).run();
+        }
       }
     }
   }, [editor]);
@@ -542,6 +552,26 @@ export function NoteEditor({
         open={showTemplateSelector}
         onClose={() => setShowTemplateSelector(false)}
         onSelect={handleTemplateSelect}
+      />
+
+      {/* PRD Chat Drawer (Conversational PRD Generation) */}
+      <PRDChatDrawer
+        open={showPRDChatDrawer}
+        onOpenChange={setShowPRDChatDrawer}
+        noteContent={editor?.state.doc.textContent || ''}
+        onApplyContent={handlePRDGenerated}
+        onGenerateFeatures={(content) => {
+          // Close chat drawer and open features panel
+          setShowPRDChatDrawer(false);
+          setAIPanelMode('generate-features');
+          setShowAIPanel(true);
+        }}
+        onGenerateTasks={(content) => {
+          // Close chat drawer and open tasks panel
+          setShowPRDChatDrawer(false);
+          setAIPanelMode('generate-tasks');
+          setShowAIPanel(true);
+        }}
       />
 
       {/* Selection Bubble Menu */}
