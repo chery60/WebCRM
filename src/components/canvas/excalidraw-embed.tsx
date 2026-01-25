@@ -514,8 +514,11 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
     const template = CANVAS_TEMPLATES.find(t => t.id === templateId);
     if (!template || !excalidrawAPIRef.current) return;
 
+    let newElements: any[];
+    
     if (templateId === 'blank') {
-      excalidrawAPIRef.current.updateScene({ elements: [] });
+      newElements = [];
+      excalidrawAPIRef.current.updateScene({ elements: [], commitToHistory: true });
     } else {
       const currentElements = excalidrawAPIRef.current.getSceneElements();
       const offsetX = currentElements.length > 0 ? 700 : 0;
@@ -524,12 +527,21 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
         id: `${el.id}-${Date.now()}`,
         x: (el.x || 0) + offsetX,
       }));
+      newElements = [...currentElements, ...offsetElements];
       excalidrawAPIRef.current.updateScene({
-        elements: [...currentElements, ...offsetElements],
+        elements: newElements,
+        commitToHistory: true,
       });
       excalidrawAPIRef.current.scrollToContent();
     }
-  }, []);
+    
+    // Trigger onChange to persist template changes
+    onChange?.({
+      elements: newElements,
+      appState: excalidrawAPIRef.current.getAppState(),
+      files: excalidrawAPIRef.current.getFiles(),
+    });
+  }, [onChange]);
 
   // Export handlers
   const handleExportPNG = useCallback(async () => {

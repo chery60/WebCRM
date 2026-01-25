@@ -74,6 +74,65 @@ import { useRoadmaps } from '@/lib/hooks/use-roadmaps';
 import type { TaskFormData } from '@/types';
 import { createTask as createTaskInDb } from '@/lib/db/repositories/supabase/tasks';
 
+/**
+ * Normalizes Excalidraw elements loaded from storage.
+ * Fixes issues with linear elements (arrows, lines) that may be missing required properties.
+ * This prevents the "Linear element is not normalized" error from Excalidraw.
+ */
+function normalizeCanvasElements(elements: any[]): any[] {
+  if (!Array.isArray(elements)) return [];
+  
+  // Filter out invalid elements first, then normalize
+  return elements
+    .filter(el => el && typeof el === 'object' && el.type && el.id)
+    .map(el => {
+      // Only process linear elements (arrow, line)
+      if (el.type === 'arrow' || el.type === 'line') {
+        // Ensure points is a valid array
+        let points = el.points;
+        if (!Array.isArray(points) || points.length < 2) {
+          points = [[0, 0], [100, 0]];
+        } else {
+          // Ensure each point is a valid [x, y] tuple with numbers
+          points = points.map((p: any) => {
+            if (Array.isArray(p) && p.length >= 2) {
+              return [Number(p[0]) || 0, Number(p[1]) || 0];
+            }
+            return [0, 0];
+          });
+        }
+        
+        // Ensure lastCommittedPoint exists (required for normalization)
+        const lastCommittedPoint = points[points.length - 1];
+        
+        // Calculate proper width/height from points
+        const minX = Math.min(...points.map((p: number[]) => p[0]));
+        const maxX = Math.max(...points.map((p: number[]) => p[0]));
+        const minY = Math.min(...points.map((p: number[]) => p[1]));
+        const maxY = Math.max(...points.map((p: number[]) => p[1]));
+        
+        return {
+          ...el,
+          points,
+          lastCommittedPoint,
+          width: Math.max(Math.abs(maxX - minX), 1),
+          height: Math.max(Math.abs(maxY - minY), 1),
+          x: Number(el.x) || 0,
+          y: Number(el.y) || 0,
+        };
+      }
+      
+      // For non-linear elements, ensure basic numeric properties
+      return {
+        ...el,
+        x: Number(el.x) || 0,
+        y: Number(el.y) || 0,
+        width: el.width ? Number(el.width) : undefined,
+        height: el.height ? Number(el.height) : undefined,
+      };
+    });
+}
+
 export default function NoteDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -106,7 +165,8 @@ export default function NoteDetailPage() {
   const [initialCanvasData, setInitialCanvasData] = useState<CanvasData | undefined>(undefined);
   const canvasDataRef = useRef<CanvasData | undefined>(undefined);
   const canvasRef = useRef<PRDCanvasRef>(null);
-  const [canvasDirty, setCanvasDirty] = useState(false);
+  // Use a counter instead of boolean to ensure each change triggers debounce
+  const [canvasChangeCount, setCanvasChangeCount] = useState(0);
 
   // Destination dialogs state
   const [showFeatureDialog, setShowFeatureDialog] = useState(false);
@@ -175,20 +235,39 @@ export default function NoteDetailPage() {
   // Handle canvas data changes - use ref to avoid re-render loops
   // The canvas manages its own state internally, we just track it for saving
   const handleCanvasChange = useCallback((data: CanvasData) => {
+    // Store the canvas data in the ref for persistence
     canvasDataRef.current = data;
-    // Trigger a debounced save by updating a simple flag
-    setCanvasDirty(true);
+    
+    // Also update currentValues ref immediately so unmount save has latest data
+    if (currentValues.current) {
+      currentValues.current.canvasData = data;
+    }
+    
+    // Trigger a debounced save by incrementing the counter
+    // Each increment ensures the debounced value changes and triggers a save
+    setCanvasChangeCount(prev => {
+      const newCount = prev + 1;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Note] handleCanvasChange called:', {
+          newCount,
+          hasElements: data?.elements?.length || 0,
+          elementTypes: data?.elements?.slice(0, 3).map((e: any) => e.type) || [],
+        });
+      }
+      return newCount;
+    });
   }, []);
 
   // Track if we've initialized and last saved values to prevent save loops
   const isInitialized = useRef(false);
+  const [isNoteLoaded, setIsNoteLoaded] = useState(false); // State to trigger re-render when note loads
   const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '', generatedFeatures: '[]', generatedTasks: '[]', canvasData: '' });
 
   // Keep refs for current state to access in unmount cleanup
   const currentValues = useRef({ title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current });
   useEffect(() => {
     currentValues.current = { title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current };
-  }, [title, content, tags, projectId, generatedFeatures, generatedTasks]);
+  }, [title, content, tags, projectId, generatedFeatures, generatedTasks, canvasChangeCount]); // Added canvasChangeCount to ensure canvasData ref is captured
 
   // Initialize state when note loads
   useEffect(() => {
@@ -208,6 +287,16 @@ export default function NoteDetailPage() {
       if (note.canvasData) {
         try {
           const parsedCanvasData = JSON.parse(note.canvasData);
+          // Normalize elements to fix any malformed linear elements (arrows, lines)
+          // This prevents "Linear element is not normalized" errors from Excalidraw
+          if (parsedCanvasData.elements) {
+            parsedCanvasData.elements = normalizeCanvasElements(parsedCanvasData.elements);
+          }
+          // CRITICAL: Ensure appState.collaborators is a Map, not a plain object
+          // JSON.stringify converts Map to {}, which breaks Excalidraw's forEach calls
+          if (parsedCanvasData.appState) {
+            parsedCanvasData.appState.collaborators = new Map();
+          }
           setInitialCanvasData(parsedCanvasData);
           canvasDataRef.current = parsedCanvasData;
         } catch (e) {
@@ -225,12 +314,14 @@ export default function NoteDetailPage() {
         canvasData: note.canvasData || '',
       };
       isInitialized.current = true;
+      setIsNoteLoaded(true); // Trigger re-render so PRDCanvas mounts with correct initialData
     }
   }, [note]);
 
   // Reset initialization when noteId changes
   useEffect(() => {
     isInitialized.current = false;
+    setIsNoteLoaded(false); // Reset so PRDCanvas remounts with new note's data
   }, [noteId]);
 
   // Debounce content changes for auto-save
@@ -240,7 +331,7 @@ export default function NoteDetailPage() {
   const debouncedProjectId = useDebounce(projectId, 500);
   const debouncedGeneratedFeatures = useDebounce(generatedFeatures, 500);
   const debouncedGeneratedTasks = useDebounce(generatedTasks, 500);
-  const debouncedCanvasDirty = useDebounce(canvasDirty, 1000); // Longer debounce for canvas
+  const debouncedCanvasChangeCount = useDebounce(canvasChangeCount, 1000); // Longer debounce for canvas
 
   // Auto-save
   useEffect(() => {
@@ -252,6 +343,8 @@ export default function NoteDetailPage() {
     const currentTasksStr = JSON.stringify(debouncedGeneratedTasks);
     // Get canvas data from ref (not state) to avoid re-render loops
     const currentCanvasStr = canvasDataRef.current ? JSON.stringify(canvasDataRef.current) : '';
+    
+    const canvasChanged = currentCanvasStr !== lastSaved.current.canvasData;
     const hasChanges =
       debouncedTitle !== lastSaved.current.title ||
       debouncedContent !== lastSaved.current.content ||
@@ -259,7 +352,18 @@ export default function NoteDetailPage() {
       currentProjectId !== lastSaved.current.projectId ||
       currentFeaturesStr !== lastSaved.current.generatedFeatures ||
       currentTasksStr !== lastSaved.current.generatedTasks ||
-      currentCanvasStr !== lastSaved.current.canvasData;
+      canvasChanged;
+
+    // Debug logging for canvas save
+    if (process.env.NODE_ENV === 'development' && debouncedCanvasChangeCount > 0) {
+      console.log('[Note Auto-Save] Canvas check:', {
+        canvasChangeCount: debouncedCanvasChangeCount,
+        canvasChanged,
+        currentCanvasLength: currentCanvasStr.length,
+        lastSavedCanvasLength: lastSaved.current.canvasData.length,
+        hasElements: canvasDataRef.current?.elements?.length || 0,
+      });
+    }
 
     if (hasChanges) {
       // Update last saved values immediately to prevent duplicate saves
@@ -273,6 +377,18 @@ export default function NoteDetailPage() {
         canvasData: currentCanvasStr,
       };
 
+      // Debug logging for canvas save
+      if (process.env.NODE_ENV === 'development' && canvasChanged) {
+        console.log('[Note Auto-Save] Saving canvas data:', {
+          canvasDataLength: currentCanvasStr.length,
+          hasElements: canvasDataRef.current?.elements?.length || 0,
+        });
+      }
+
+      // Ensure canvasData is passed correctly - use empty string check
+      // An empty canvas still has valid JSON structure, so we should save it
+      const canvasDataToSave = currentCanvasStr.length > 0 ? currentCanvasStr : undefined;
+
       updateNote(
         { 
           id: noteId, 
@@ -283,17 +399,27 @@ export default function NoteDetailPage() {
             projectId: debouncedProjectId,
             generatedFeatures: debouncedGeneratedFeatures,
             generatedTasks: debouncedGeneratedTasks,
-            canvasData: currentCanvasStr || undefined,
+            canvasData: canvasDataToSave,
           } 
         },
         {
           onSuccess: () => {
             setLastSavedAt(new Date());
+            if (process.env.NODE_ENV === 'development' && canvasChanged) {
+              console.log('[Note Auto-Save] Canvas saved successfully!', {
+                savedCanvasLength: canvasDataToSave?.length || 0,
+              });
+            }
+          },
+          onError: (error) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.error('[Note Auto-Save] Failed to save:', error);
+            }
           },
         }
       );
     }
-  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasDirty, noteId, isLoading, updateNote]);
+  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasChangeCount, noteId, isLoading, updateNote]);
 
   // Save on unmount / navigation
   useEffect(() => {
@@ -825,18 +951,35 @@ export default function NoteDetailPage() {
           </div>
 
           {/* PRD Canvas - Whiteboard for visual planning */}
+          {/* IMPORTANT: Only render PRDCanvas after note is loaded to ensure initialData is available
+              The PRDCanvas component memoizes initialData on first render, so we must wait for note data */}
           <div className="px-8 pb-6">
-            <PRDCanvas
-              ref={canvasRef}
-              initialData={initialCanvasData}
-              onChange={handleCanvasChange}
-              prdContent={prdPlainText}
-              productDescription={title}
-              defaultCollapsed={false}
-              onGenerateContent={handleGenerateCanvasContent}
-              isGenerating={isCanvasGenerating}
-              generatingType={canvasGeneratingType}
-            />
+            {isNoteLoaded ? (
+              <PRDCanvas
+                key={`canvas-${noteId}`} // Force remount if noteId changes
+                ref={canvasRef}
+                initialData={initialCanvasData}
+                onChange={handleCanvasChange}
+                prdContent={prdPlainText}
+                productDescription={title}
+                defaultCollapsed={false}
+                onGenerateContent={handleGenerateCanvasContent}
+                isGenerating={isCanvasGenerating}
+                generatingType={canvasGeneratingType}
+              />
+            ) : (
+              <div className="border rounded-lg bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+                <div className="h-[400px] flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Generated Items Section */}
