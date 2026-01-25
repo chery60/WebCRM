@@ -1233,17 +1233,40 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
     }
       
     case 'arrow': {
+      // Ensure points array is valid and properly formatted
+      let points: [number, number][] = [[0, 0], [100, 0]];
+      if (el.points && Array.isArray(el.points) && el.points.length >= 2) {
+        points = el.points.map((p: any) => {
+          if (Array.isArray(p) && p.length >= 2) {
+            return [Number(p[0]) || 0, Number(p[1]) || 0] as [number, number];
+          }
+          return [0, 0] as [number, number];
+        });
+      }
+      
+      // Calculate width and height from points
+      const minX = Math.min(...points.map(p => p[0]));
+      const maxX = Math.max(...points.map(p => p[0]));
+      const minY = Math.min(...points.map(p => p[1]));
+      const maxY = Math.max(...points.map(p => p[1]));
+      const width = Math.max(Math.abs(maxX - minX), 1);
+      const height = Math.max(Math.abs(maxY - minY), 1);
+      
+      // lastCommittedPoint is required for Excalidraw to consider the element "normalized"
+      const lastCommittedPoint = points[points.length - 1];
+      
       const arrow = {
         ...baseElement,
         type: 'arrow',
-        x: el.x || 100,
-        y: el.y || 100,
-        width: el.points ? Math.abs(el.points[el.points.length - 1][0] - el.points[0][0]) : 100,
-        height: el.points ? Math.abs(el.points[el.points.length - 1][1] - el.points[0][1]) : 0,
+        x: Number(el.x) || 100,
+        y: Number(el.y) || 100,
+        width,
+        height,
         angle: 0,
         strokeColor: el.strokeColor || '#1e1e1e',
         backgroundColor: 'transparent',
-        points: el.points || [[0, 0], [100, 0]],
+        points,
+        lastCommittedPoint,
         startBinding: null,
         endBinding: null,
         startArrowhead: null,

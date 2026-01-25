@@ -26,8 +26,8 @@ export interface UseCanvasGenerationReturn {
   isGenerating: boolean;
   /** Current generation type being processed */
   generatingType: CanvasGenerationType | null;
-  /** Generate a specific diagram type */
-  generateDiagram: (type: CanvasGenerationType) => Promise<GeneratedCanvasContent | null>;
+  /** Generate a specific diagram type - optionally pass existing elements for positioning */
+  generateDiagram: (type: CanvasGenerationType, existingElements?: any[]) => Promise<GeneratedCanvasContent | null>;
   /** Generate multiple diagram types */
   generateBatch: (types: CanvasGenerationType[]) => Promise<Map<CanvasGenerationType, GeneratedCanvasContent | null>>;
   /** Generate a quick product overview */
@@ -51,7 +51,7 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
   const [error, setError] = useState<string | null>(null);
 
   const generateDiagram = useCallback(
-    async (type: CanvasGenerationType): Promise<GeneratedCanvasContent | null> => {
+    async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
       if (!prdContent && !productDescription) {
         setError('Please provide PRD content or product description');
         toast.error('No content to generate from');
@@ -68,6 +68,7 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
           prdContent,
           productDescription,
           provider,
+          existingElements, // Pass existing elements for offset calculation
         });
 
         if (result.tokensUsed) {

@@ -1,5 +1,6 @@
 import type { AIGenerateRequest, AIGenerateResponse } from '@/types';
 import type { AIServiceProvider } from '../interface';
+import { getSystemPromptForType } from '../prompts';
 
 export interface AnthropicConfig {
   apiKey: string;
@@ -117,73 +118,8 @@ export class AnthropicProvider implements AIServiceProvider {
   }
 
   private getSystemPrompt(type: AIGenerateRequest['type']): string {
-    const prompts: Record<string, string> = {
-      'summarize': 'You are a helpful assistant that summarizes text concisely while preserving key information. Provide clear, well-structured summaries.',
-      'expand': 'You are a helpful assistant that expands on ideas with relevant details, examples, and explanations. Be thorough but stay focused on the topic.',
-      'rewrite': 'You are a helpful assistant that rewrites text to improve clarity, flow, and engagement while maintaining the original meaning.',
-      'translate': 'You are a professional translator. Translate the text accurately while preserving tone, context, and cultural nuances.',
-      'continue': 'You are a helpful writing assistant. Continue the text naturally, maintaining the same style, tone, and voice.',
-      'grammar': 'You are a grammar expert. Fix any grammatical errors while preserving the original meaning and tone.',
-      'professional': 'You are a professional editor. Rewrite the text to sound more professional, polished, and business-appropriate.',
-      'ask': 'You are Claude, a helpful AI assistant created by Anthropic. Answer questions accurately, helpfully, and thoughtfully.',
-      'generate-prd': `You are a world-class product manager with experience at top tech companies. Generate comprehensive, detailed Product Requirements Documents (PRDs) that include:
-- Executive Summary
-- Problem Statement & User Pain Points
-- Goals & Success Metrics
-- User Personas
-- User Stories & Use Cases
-- Functional Requirements
-- Non-Functional Requirements
-- Technical Considerations
-- UI/UX Considerations
-- Dependencies & Constraints
-- Timeline & Milestones
-- Risks & Mitigations
-- Open Questions
-
-Be thorough, specific, and actionable in your PRD.`,
-      'generate-prd-section': 'You are a product management expert. Generate detailed, actionable content for the specified PRD section. Be specific and include concrete examples.',
-      'improve-prd': 'You are a senior product manager reviewing a PRD. Identify gaps, suggest improvements, and enhance the document to be more comprehensive and actionable.',
-      'generate-features': `You are a product strategist. Extract and define features from the PRD. For each feature, provide:
-- Clear title and description
-- Priority (low/medium/high/urgent)
-- Phase assignment
-- Estimated effort
-- Acceptance criteria
-- User stories
-
-Return features in a structured format.`,
-      'generate-tasks': `You are a technical project manager. Break down features into actionable development tasks. For each task, provide:
-- Clear title and description
-- Priority
-- Estimated hours
-- Assigned role (Frontend, Backend, Design, QA, DevOps, etc.)
-- Dependencies
-- Definition of done
-
-Be specific and practical in task breakdown.`,
-      'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
-
-RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
-[
-  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
-  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
-  {"type":"arrow","x":190,"y":170,"points":[[0,0],[0,50]]}
-]
-
-ELEMENT TYPES:
-- rectangle: x, y, width, height, text, backgroundColor
-- ellipse: x, y, width, height, text, backgroundColor  
-- diamond: x, y, width, height, text, backgroundColor
-- arrow: x, y, points (array of [x,y] pairs)
-- text: x, y, text, fontSize, strokeColor
-
-COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple)
-
-CRITICAL: Output ONLY the JSON array. No other text before or after.`,
-    };
-
-    return prompts[type] || 'You are Claude, a helpful AI assistant created by Anthropic. Be helpful, harmless, and honest.';
+    // Use centralized prompts from src/lib/ai/prompts/system-prompts.ts
+    return getSystemPromptForType(type);
   }
 
   private getTemperature(type: AIGenerateRequest['type']): number {

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Sparkles,
   Type,
   Heading1,
   Heading2,
@@ -18,10 +17,7 @@ import {
   Minus,
   Image,
   Wand2,
-  FileText,
-  Languages,
   MessageSquare,
-  Pencil,
   CheckCircle,
   Briefcase,
   FileTextIcon,
@@ -37,7 +33,7 @@ export interface SlashCommand {
   id: string;
   name: string;
   description: string;
-  category: 'ai-prd' | 'ai-generate' | 'ai-action' | 'format' | 'widget';
+  category: 'ai-prd' | 'ai-action' | 'format' | 'widget';
   icon: React.ReactNode;
   command: string;
 }
@@ -91,39 +87,6 @@ const commands: SlashCommand[] = [
     category: 'ai-prd',
     icon: <Target className="h-4 w-4" />,
     command: 'generate-section',
-  },
-  // AI Generate
-  {
-    id: 'summarize',
-    name: 'Summarize',
-    description: 'Condense selected text',
-    category: 'ai-generate',
-    icon: <FileText className="h-4 w-4" />,
-    command: 'summarize',
-  },
-  {
-    id: 'expand',
-    name: 'Expand',
-    description: 'Elaborate on selected text',
-    category: 'ai-generate',
-    icon: <Sparkles className="h-4 w-4" />,
-    command: 'expand',
-  },
-  {
-    id: 'rewrite',
-    name: 'Rewrite',
-    description: 'Rephrase with different tone',
-    category: 'ai-generate',
-    icon: <Pencil className="h-4 w-4" />,
-    command: 'rewrite',
-  },
-  {
-    id: 'translate',
-    name: 'Translate',
-    description: 'Translate to another language',
-    category: 'ai-generate',
-    icon: <Languages className="h-4 w-4" />,
-    command: 'translate',
   },
   // AI Actions
   {
@@ -268,14 +231,13 @@ const commands: SlashCommand[] = [
 
 const categoryLabels: Record<string, string> = {
   'ai-prd': '✨ PRD & Product',
-  'ai-generate': 'AI Generate',
   'ai-action': 'AI Actions',
   format: 'Format',
   widget: 'Widgets',
 };
 
 // Order for category display
-const categoryOrder = ['ai-prd', 'ai-generate', 'ai-action', 'format', 'widget'];
+const categoryOrder = ['ai-prd', 'ai-action', 'format', 'widget'];
 
 interface SlashMenuProps {
   query: string;

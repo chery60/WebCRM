@@ -30,9 +30,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
-import { useProjects, useProject } from '@/lib/hooks/use-projects';
+import { useProjects, useProject, useCreateProject } from '@/lib/hooks/use-projects';
 import {
   Select,
   SelectContent,
@@ -59,6 +67,75 @@ import { TaskDestinationDialog } from '@/components/notes/task-destination-dialo
 import { FeatureDestinationDialog } from '@/components/notes/feature-destination-dialog';
 import { useTaskTabsManager } from '@/lib/hooks/use-task-tabs';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { CreateTaskDrawer } from '@/components/tasks/create-task-drawer';
+import { FeatureRequestDrawer } from '@/components/pipelines/feature-request-drawer';
+import { AIGenerationPanel } from '@/components/notes/ai-generation-panel';
+import { useRoadmaps } from '@/lib/hooks/use-roadmaps';
+import type { TaskFormData } from '@/types';
+import { createTask as createTaskInDb } from '@/lib/db/repositories/supabase/tasks';
+import { tipTapToMarkdown, markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
+
+// View mode type for toggle between markup (raw markdown) and preview (rendered)
+type NoteViewMode = 'preview' | 'markup';
+
+/**
+ * Normalizes Excalidraw elements loaded from storage.
+ * Fixes issues with linear elements (arrows, lines) that may be missing required properties.
+ * This prevents the "Linear element is not normalized" error from Excalidraw.
+ */
+function normalizeCanvasElements(elements: any[]): any[] {
+  if (!Array.isArray(elements)) return [];
+  
+  // Filter out invalid elements first, then normalize
+  return elements
+    .filter(el => el && typeof el === 'object' && el.type && el.id)
+    .map(el => {
+      // Only process linear elements (arrow, line)
+      if (el.type === 'arrow' || el.type === 'line') {
+        // Ensure points is a valid array
+        let points = el.points;
+        if (!Array.isArray(points) || points.length < 2) {
+          points = [[0, 0], [100, 0]];
+        } else {
+          // Ensure each point is a valid [x, y] tuple with numbers
+          points = points.map((p: any) => {
+            if (Array.isArray(p) && p.length >= 2) {
+              return [Number(p[0]) || 0, Number(p[1]) || 0];
+            }
+            return [0, 0];
+          });
+        }
+        
+        // Ensure lastCommittedPoint exists (required for normalization)
+        const lastCommittedPoint = points[points.length - 1];
+        
+        // Calculate proper width/height from points
+        const minX = Math.min(...points.map((p: number[]) => p[0]));
+        const maxX = Math.max(...points.map((p: number[]) => p[0]));
+        const minY = Math.min(...points.map((p: number[]) => p[1]));
+        const maxY = Math.max(...points.map((p: number[]) => p[1]));
+        
+        return {
+          ...el,
+          points,
+          lastCommittedPoint,
+          width: Math.max(Math.abs(maxX - minX), 1),
+          height: Math.max(Math.abs(maxY - minY), 1),
+          x: Number(el.x) || 0,
+          y: Number(el.y) || 0,
+        };
+      }
+      
+      // For non-linear elements, ensure basic numeric properties
+      return {
+        ...el,
+        x: Number(el.x) || 0,
+        y: Number(el.y) || 0,
+        width: el.width ? Number(el.width) : undefined,
+        height: el.height ? Number(el.height) : undefined,
+      };
+    });
+}
 
 export default function NoteDetailPage() {
   const params = useParams();
@@ -70,6 +147,7 @@ export default function NoteDetailPage() {
   const { data: projects = [] } = useProjects();
   const { mutate: updateNote, isPending: isSaving } = useUpdateNote();
   const deleteNote = useDeleteNote();
+  const createProject = useCreateProject();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -81,6 +159,8 @@ export default function NoteDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   // AI Generated items state
@@ -92,7 +172,8 @@ export default function NoteDetailPage() {
   const [initialCanvasData, setInitialCanvasData] = useState<CanvasData | undefined>(undefined);
   const canvasDataRef = useRef<CanvasData | undefined>(undefined);
   const canvasRef = useRef<PRDCanvasRef>(null);
-  const [canvasDirty, setCanvasDirty] = useState(false);
+  // Use a counter instead of boolean to ensure each change triggers debounce
+  const [canvasChangeCount, setCanvasChangeCount] = useState(0);
 
   // Destination dialogs state
   const [showFeatureDialog, setShowFeatureDialog] = useState(false);
@@ -104,10 +185,24 @@ export default function NoteDetailPage() {
   const [isCreating, setIsCreating] = useState(false);
 
   // Task tabs manager for creating new projects
-  const { addTab, setActiveTab } = useTaskTabsManager();
+  const { addTab, setActiveTab, tabs: taskTabs } = useTaskTabsManager();
   
   // Get current authenticated user
   const { currentUser } = useAuthStore();
+  
+  // Get roadmaps for feature creation
+  const { data: roadmaps = [] } = useRoadmaps();
+  
+  // New drawer states for Add dropdown
+  const [showCreateTaskDrawer, setShowCreateTaskDrawer] = useState(false);
+  const [showCreateFeatureDrawer, setShowCreateFeatureDrawer] = useState(false);
+  const [showAIGenerationPanel, setShowAIGenerationPanel] = useState(false);
+  const [aiGenerationMode, setAIGenerationMode] = useState<'tasks' | 'features'>('tasks');
+  
+  // View mode state: 'preview' shows rendered content, 'markup' shows raw markdown
+  const [viewMode, setViewMode] = useState<NoteViewMode>('preview');
+  // Store the markdown version when in markup mode for proper conversion back
+  const [markupContent, setMarkupContent] = useState<string>('');
   
   // Extract plain text from content for AI context
   const [prdPlainText, setPrdPlainText] = useState('');
@@ -140,10 +235,10 @@ export default function NoteDetailPage() {
     productDescription: title,
   });
 
-  // Handle canvas generation
+  // Handle canvas generation - receives existing elements for proper positioning
   const handleGenerateCanvasContent = useCallback(
-    async (type: CanvasGenerationType) => {
-      const result = await generateDiagram(type);
+    async (type: CanvasGenerationType, existingElements: any[]) => {
+      const result = await generateDiagram(type, existingElements);
       return result;
     },
     [generateDiagram]
@@ -152,20 +247,39 @@ export default function NoteDetailPage() {
   // Handle canvas data changes - use ref to avoid re-render loops
   // The canvas manages its own state internally, we just track it for saving
   const handleCanvasChange = useCallback((data: CanvasData) => {
+    // Store the canvas data in the ref for persistence
     canvasDataRef.current = data;
-    // Trigger a debounced save by updating a simple flag
-    setCanvasDirty(true);
+    
+    // Also update currentValues ref immediately so unmount save has latest data
+    if (currentValues.current) {
+      currentValues.current.canvasData = data;
+    }
+    
+    // Trigger a debounced save by incrementing the counter
+    // Each increment ensures the debounced value changes and triggers a save
+    setCanvasChangeCount(prev => {
+      const newCount = prev + 1;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Note] handleCanvasChange called:', {
+          newCount,
+          hasElements: data?.elements?.length || 0,
+          elementTypes: data?.elements?.slice(0, 3).map((e: any) => e.type) || [],
+        });
+      }
+      return newCount;
+    });
   }, []);
 
   // Track if we've initialized and last saved values to prevent save loops
   const isInitialized = useRef(false);
+  const [isNoteLoaded, setIsNoteLoaded] = useState(false); // State to trigger re-render when note loads
   const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '', generatedFeatures: '[]', generatedTasks: '[]', canvasData: '' });
 
   // Keep refs for current state to access in unmount cleanup
   const currentValues = useRef({ title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current });
   useEffect(() => {
     currentValues.current = { title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current };
-  }, [title, content, tags, projectId, generatedFeatures, generatedTasks]);
+  }, [title, content, tags, projectId, generatedFeatures, generatedTasks, canvasChangeCount]); // Added canvasChangeCount to ensure canvasData ref is captured
 
   // Initialize state when note loads
   useEffect(() => {
@@ -185,6 +299,16 @@ export default function NoteDetailPage() {
       if (note.canvasData) {
         try {
           const parsedCanvasData = JSON.parse(note.canvasData);
+          // Normalize elements to fix any malformed linear elements (arrows, lines)
+          // This prevents "Linear element is not normalized" errors from Excalidraw
+          if (parsedCanvasData.elements) {
+            parsedCanvasData.elements = normalizeCanvasElements(parsedCanvasData.elements);
+          }
+          // CRITICAL: Ensure appState.collaborators is a Map, not a plain object
+          // JSON.stringify converts Map to {}, which breaks Excalidraw's forEach calls
+          if (parsedCanvasData.appState) {
+            parsedCanvasData.appState.collaborators = new Map();
+          }
           setInitialCanvasData(parsedCanvasData);
           canvasDataRef.current = parsedCanvasData;
         } catch (e) {
@@ -202,12 +326,14 @@ export default function NoteDetailPage() {
         canvasData: note.canvasData || '',
       };
       isInitialized.current = true;
+      setIsNoteLoaded(true); // Trigger re-render so PRDCanvas mounts with correct initialData
     }
   }, [note]);
 
   // Reset initialization when noteId changes
   useEffect(() => {
     isInitialized.current = false;
+    setIsNoteLoaded(false); // Reset so PRDCanvas remounts with new note's data
   }, [noteId]);
 
   // Debounce content changes for auto-save
@@ -217,7 +343,7 @@ export default function NoteDetailPage() {
   const debouncedProjectId = useDebounce(projectId, 500);
   const debouncedGeneratedFeatures = useDebounce(generatedFeatures, 500);
   const debouncedGeneratedTasks = useDebounce(generatedTasks, 500);
-  const debouncedCanvasDirty = useDebounce(canvasDirty, 1000); // Longer debounce for canvas
+  const debouncedCanvasChangeCount = useDebounce(canvasChangeCount, 1000); // Longer debounce for canvas
 
   // Auto-save
   useEffect(() => {
@@ -229,6 +355,8 @@ export default function NoteDetailPage() {
     const currentTasksStr = JSON.stringify(debouncedGeneratedTasks);
     // Get canvas data from ref (not state) to avoid re-render loops
     const currentCanvasStr = canvasDataRef.current ? JSON.stringify(canvasDataRef.current) : '';
+    
+    const canvasChanged = currentCanvasStr !== lastSaved.current.canvasData;
     const hasChanges =
       debouncedTitle !== lastSaved.current.title ||
       debouncedContent !== lastSaved.current.content ||
@@ -236,7 +364,18 @@ export default function NoteDetailPage() {
       currentProjectId !== lastSaved.current.projectId ||
       currentFeaturesStr !== lastSaved.current.generatedFeatures ||
       currentTasksStr !== lastSaved.current.generatedTasks ||
-      currentCanvasStr !== lastSaved.current.canvasData;
+      canvasChanged;
+
+    // Debug logging for canvas save
+    if (process.env.NODE_ENV === 'development' && debouncedCanvasChangeCount > 0) {
+      console.log('[Note Auto-Save] Canvas check:', {
+        canvasChangeCount: debouncedCanvasChangeCount,
+        canvasChanged,
+        currentCanvasLength: currentCanvasStr.length,
+        lastSavedCanvasLength: lastSaved.current.canvasData.length,
+        hasElements: canvasDataRef.current?.elements?.length || 0,
+      });
+    }
 
     if (hasChanges) {
       // Update last saved values immediately to prevent duplicate saves
@@ -250,6 +389,18 @@ export default function NoteDetailPage() {
         canvasData: currentCanvasStr,
       };
 
+      // Debug logging for canvas save
+      if (process.env.NODE_ENV === 'development' && canvasChanged) {
+        console.log('[Note Auto-Save] Saving canvas data:', {
+          canvasDataLength: currentCanvasStr.length,
+          hasElements: canvasDataRef.current?.elements?.length || 0,
+        });
+      }
+
+      // Ensure canvasData is passed correctly - use empty string check
+      // An empty canvas still has valid JSON structure, so we should save it
+      const canvasDataToSave = currentCanvasStr.length > 0 ? currentCanvasStr : undefined;
+
       updateNote(
         { 
           id: noteId, 
@@ -260,17 +411,27 @@ export default function NoteDetailPage() {
             projectId: debouncedProjectId,
             generatedFeatures: debouncedGeneratedFeatures,
             generatedTasks: debouncedGeneratedTasks,
-            canvasData: currentCanvasStr || undefined,
+            canvasData: canvasDataToSave,
           } 
         },
         {
           onSuccess: () => {
             setLastSavedAt(new Date());
+            if (process.env.NODE_ENV === 'development' && canvasChanged) {
+              console.log('[Note Auto-Save] Canvas saved successfully!', {
+                savedCanvasLength: canvasDataToSave?.length || 0,
+              });
+            }
+          },
+          onError: (error) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.error('[Note Auto-Save] Failed to save:', error);
+            }
           },
         }
       );
     }
-  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasDirty, noteId, isLoading, updateNote]);
+  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasChangeCount, noteId, isLoading, updateNote]);
 
   // Save on unmount / navigation
   useEffect(() => {
@@ -320,15 +481,31 @@ export default function NoteDetailPage() {
     setShowTagPopover(false);
   }, [tags]);
 
-  // Handle features generated from AI
+  // Handle creating a new project from the dropdown
+  const handleCreateProject = useCallback(async () => {
+    if (!newProjectName.trim()) return;
+    try {
+      const newProject = await createProject.mutateAsync({ name: newProjectName.trim() });
+      setProjectId(newProject.id);
+      setNewProjectName('');
+      setShowCreateProjectDialog(false);
+      toast.success('Project created');
+    } catch (error) {
+      toast.error('Failed to create project');
+    }
+  }, [newProjectName, createProject]);
+
+  // Handle features generated from AI - ensure isSelected is false by default
   const handleFeaturesGenerated = useCallback((features: GeneratedFeature[]) => {
-    setGeneratedFeatures(prev => [...prev, ...features]);
+    const featuresWithSelection = features.map(f => ({ ...f, isSelected: false }));
+    setGeneratedFeatures(prev => [...prev, ...featuresWithSelection]);
     toast.success(`${features.length} features generated`);
   }, []);
 
-  // Handle tasks generated from AI
+  // Handle tasks generated from AI - ensure isSelected is false by default
   const handleTasksGenerated = useCallback((tasks: GeneratedTask[]) => {
-    setGeneratedTasks(prev => [...prev, ...tasks]);
+    const tasksWithSelection = tasks.map(t => ({ ...t, isSelected: false }));
+    setGeneratedTasks(prev => [...prev, ...tasksWithSelection]);
     toast.success(`${tasks.length} tasks generated`);
   }, []);
 
@@ -368,7 +545,8 @@ export default function NoteDetailPage() {
     setShowTaskDialog(true);
   }, [generatedTasks]);
 
-  // Confirm feature creation with selected roadmap
+  // Confirm feature/pipeline creation with selected roadmap
+  // This handles both features AND tasks being added to a roadmap/pipeline
   const handleConfirmFeatureCreation = useCallback(async (roadmapId: string) => {
     if (!currentUser) {
       toast.error('Please sign in to create features');
@@ -389,26 +567,62 @@ export default function NoteDetailPage() {
         toast.success(`Feature "${pendingFeature.title}" created in pipeline`);
         setGeneratedFeatures(prev => prev.filter(f => f.id !== pendingFeature.id));
       } else if (pendingFeatureAction === 'bulk') {
+        // Handle both selected features AND selected tasks
         const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
-        const result = await createFeaturesFromGenerated(selectedFeatures, featureOptions);
-        if (result.totalCreated > 0) {
-          toast.success(`${result.totalCreated} features created in pipeline`);
-          setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+        const selectedTasks = generatedTasks.filter(t => t.isSelected);
+        
+        let totalCreated = 0;
+        let totalFailed = 0;
+        
+        // Create features in pipeline
+        if (selectedFeatures.length > 0) {
+          const featureResult = await createFeaturesFromGenerated(selectedFeatures, featureOptions);
+          totalCreated += featureResult.totalCreated;
+          totalFailed += featureResult.totalFailed;
+          if (featureResult.totalCreated > 0) {
+            setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+          }
         }
-        if (result.totalFailed > 0) {
-          toast.error(`${result.totalFailed} features failed to create`);
+        
+        // Convert tasks to features and add to pipeline
+        if (selectedTasks.length > 0) {
+          const tasksAsFeatures: GeneratedFeature[] = selectedTasks.map(task => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            priority: task.priority === 'high' ? 'high' : task.priority === 'low' ? 'low' : 'medium',
+            phase: 'Phase 1',
+            estimatedEffort: `${task.estimatedHours}h`,
+            acceptanceCriteria: [],
+            userStories: [],
+            isSelected: true,
+          }));
+          const taskResult = await createFeaturesFromGenerated(tasksAsFeatures, featureOptions);
+          totalCreated += taskResult.totalCreated;
+          totalFailed += taskResult.totalFailed;
+          if (taskResult.totalCreated > 0) {
+            setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+          }
+        }
+        
+        if (totalCreated > 0) {
+          toast.success(`${totalCreated} items added to pipeline`);
+        }
+        if (totalFailed > 0) {
+          toast.error(`${totalFailed} items failed to create`);
         }
       }
     } catch (error) {
-      toast.error(`Failed to create features: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to create items: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsCreating(false);
       setShowFeatureDialog(false);
       setPendingFeature(null);
     }
-  }, [pendingFeatureAction, pendingFeature, generatedFeatures, currentUser]);
+  }, [pendingFeatureAction, pendingFeature, generatedFeatures, generatedTasks, currentUser]);
 
   // Confirm task creation with selected project
+  // This handles both tasks AND features being added as tasks
   const handleConfirmTaskCreation = useCallback(async (projectId: string | null, newProjectName?: string) => {
     setIsCreating(true);
     try {
@@ -433,27 +647,174 @@ export default function NoteDetailPage() {
         toast.success(`Task "${pendingTask.title}" created`);
         setGeneratedTasks(prev => prev.filter(t => t.id !== pendingTask.id));
       } else if (pendingTaskAction === 'bulk') {
+        // Handle both selected tasks AND selected features
         const selectedTasks = generatedTasks.filter(t => t.isSelected);
-        const result = await createTasksFromGenerated(selectedTasks, { 
-          defaultStatus: 'planned',
-          projectId: targetProjectId || undefined
-        });
-        if (result.totalCreated > 0) {
-          toast.success(`${result.totalCreated} tasks created`);
-          setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+        const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
+        
+        let totalCreated = 0;
+        let totalFailed = 0;
+        
+        // Create tasks
+        if (selectedTasks.length > 0) {
+          const taskResult = await createTasksFromGenerated(selectedTasks, { 
+            defaultStatus: 'planned',
+            projectId: targetProjectId || undefined
+          });
+          totalCreated += taskResult.totalCreated;
+          totalFailed += taskResult.totalFailed;
+          if (taskResult.totalCreated > 0) {
+            setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+          }
         }
-        if (result.totalFailed > 0) {
-          toast.error(`${result.totalFailed} tasks failed to create`);
+        
+        // Convert features to tasks and create
+        if (selectedFeatures.length > 0) {
+          const featuresAsTasks: GeneratedTask[] = selectedFeatures.map(feature => ({
+            id: feature.id,
+            title: feature.title,
+            description: feature.description,
+            priority: feature.priority === 'urgent' ? 'high' : feature.priority,
+            estimatedHours: feature.estimatedEffort ? parseInt(feature.estimatedEffort) || 8 : 8,
+            role: 'Product',
+            dependencies: [],
+            isSelected: true,
+          }));
+          const featureResult = await createTasksFromGenerated(featuresAsTasks, { 
+            defaultStatus: 'planned',
+            projectId: targetProjectId || undefined
+          });
+          totalCreated += featureResult.totalCreated;
+          totalFailed += featureResult.totalFailed;
+          if (featureResult.totalCreated > 0) {
+            setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+          }
+        }
+        
+        if (totalCreated > 0) {
+          toast.success(`${totalCreated} items added to Tasks`);
+        }
+        if (totalFailed > 0) {
+          toast.error(`${totalFailed} items failed to create`);
         }
       }
     } catch (error) {
-      toast.error(`Failed to create tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to create items: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsCreating(false);
       setShowTaskDialog(false);
       setPendingTask(null);
     }
-  }, [pendingTaskAction, pendingTask, generatedTasks, addTab, setActiveTab]);
+  }, [pendingTaskAction, pendingTask, generatedTasks, generatedFeatures, addTab, setActiveTab]);
+
+  // Handler for creating a manual task from the drawer
+  const handleCreateManualTask = useCallback(async (taskData: TaskFormData) => {
+    try {
+      await createTaskInDb(taskData);
+      toast.success(`Task "${taskData.title}" created`);
+      // Add to generated tasks list for display
+      const newTask: GeneratedTask = {
+        id: crypto.randomUUID(),
+        title: taskData.title,
+        description: taskData.description,
+        priority: 'medium',
+        estimatedHours: 4,
+        role: 'Product',
+        dependencies: [],
+        isSelected: false,
+      };
+      setGeneratedTasks(prev => [...prev, newTask]);
+    } catch (error) {
+      toast.error(`Failed to create task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, []);
+
+  // Handlers for Add dropdown
+  const handleOpenCreateTaskDrawer = useCallback(() => {
+    setShowCreateTaskDrawer(true);
+  }, []);
+
+  const handleOpenCreateFeatureDrawer = useCallback(() => {
+    setShowCreateFeatureDrawer(true);
+  }, []);
+
+  const handleOpenAITaskGeneration = useCallback(() => {
+    setAIGenerationMode('tasks');
+    setShowAIGenerationPanel(true);
+  }, []);
+
+  const handleOpenAIFeatureGeneration = useCallback(() => {
+    setAIGenerationMode('features');
+    setShowAIGenerationPanel(true);
+  }, []);
+
+  // Toggle to markup view: convert current TipTap content to markdown
+  const handleViewMarkup = useCallback(() => {
+    if (content) {
+      try {
+        const parsedContent = JSON.parse(content);
+        const markdown = tipTapToMarkdown(parsedContent);
+        setMarkupContent(markdown);
+        setViewMode('markup');
+      } catch (e) {
+        console.warn('Failed to convert content to markdown:', e);
+        toast.error('Failed to convert to markup view');
+      }
+    }
+  }, [content]);
+
+  // Toggle to preview view: convert markdown back to TipTap format
+  const handleViewPreview = useCallback(() => {
+    if (markupContent) {
+      try {
+        const tiptapDoc = markdownToTipTap(markupContent);
+        setContent(JSON.stringify(tiptapDoc));
+        setViewMode('preview');
+      } catch (e) {
+        console.warn('Failed to convert markdown to preview:', e);
+        toast.error('Failed to convert to preview');
+      }
+    } else {
+      setViewMode('preview');
+    }
+  }, [markupContent]);
+
+  // Handle markup content changes in markup mode
+  const handleMarkupChange = useCallback((newMarkup: string) => {
+    setMarkupContent(newMarkup);
+  }, []);
+
+  // Bulk action handlers - open modals instead of direct action
+  const handleOpenBulkTaskDialog = useCallback(() => {
+    const selectedTasks = generatedTasks.filter(t => t.isSelected);
+    const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
+    if (selectedTasks.length === 0 && selectedFeatures.length === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    setPendingTaskAction('bulk');
+    setShowTaskDialog(true);
+  }, [generatedTasks, generatedFeatures]);
+
+  const handleOpenBulkFeatureDialog = useCallback(() => {
+    const selectedTasks = generatedTasks.filter(t => t.isSelected);
+    const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
+    if (selectedTasks.length === 0 && selectedFeatures.length === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    setPendingFeatureAction('bulk');
+    setShowFeatureDialog(true);
+  }, [generatedTasks, generatedFeatures]);
+
+  const handleBulkDelete = useCallback(() => {
+    const remainingFeatures = generatedFeatures.filter(f => !f.isSelected);
+    const remainingTasks = generatedTasks.filter(t => !t.isSelected);
+    const deletedCount = (generatedFeatures.length - remainingFeatures.length) + (generatedTasks.length - remainingTasks.length);
+    
+    setGeneratedFeatures(remainingFeatures);
+    setGeneratedTasks(remainingTasks);
+    toast.success(`${deletedCount} items deleted`);
+  }, [generatedFeatures, generatedTasks]);
 
   if (isLoading) {
     return (
@@ -528,7 +889,13 @@ export default function NoteDetailPage() {
               {/* Project Selector */}
               <Select
                 value={projectId || 'none'}
-                onValueChange={(val) => setProjectId(val === 'none' ? undefined : val)}
+                onValueChange={(val) => {
+                  if (val === 'create-new') {
+                    setShowCreateProjectDialog(true);
+                  } else {
+                    setProjectId(val === 'none' ? undefined : val);
+                  }
+                }}
               >
                 <SelectTrigger className="w-[160px] h-8">
                   <FolderOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -541,6 +908,12 @@ export default function NoteDetailPage() {
                       {p.name}
                     </SelectItem>
                   ))}
+                  <SelectItem value="create-new" className="text-primary">
+                    <span className="flex items-center gap-2">
+                      <Plus className="h-3.5 w-3.5" />
+                      Create New Project
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
@@ -592,6 +965,19 @@ export default function NoteDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {/* View mode toggle - conditional based on current mode */}
+                  {viewMode === 'preview' ? (
+                    <DropdownMenuItem onClick={handleViewMarkup}>
+                      <Code className="h-4 w-4 mr-2" />
+                      View Markup
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={handleViewPreview}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Preview
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
                     <FolderInput className="h-4 w-4 mr-2" />
                     Move to
@@ -612,33 +998,78 @@ export default function NoteDetailPage() {
             </div>
           </div>
 
-          {/* Editor */}
+          {/* Editor - conditionally render based on view mode */}
           <div className="px-8 py-6">
-            <NoteEditor
-              content={content}
-              onChange={setContent}
-              placeholder="Start typing, or press '/' for commands..."
-              className="min-h-[500px]"
-              savedFeatures={generatedFeatures}
-              projectInstructions={currentProject?.instructions}
-              onFeaturesGenerated={handleFeaturesGenerated}
-              onTasksGenerated={handleTasksGenerated}
-            />
+            {viewMode === 'preview' ? (
+              <NoteEditor
+                content={content}
+                onChange={setContent}
+                placeholder="Start typing, or press '/' for commands..."
+                className="min-h-[500px]"
+                savedFeatures={generatedFeatures}
+                projectInstructions={currentProject?.instructions}
+                onFeaturesGenerated={handleFeaturesGenerated}
+                onTasksGenerated={handleTasksGenerated}
+              />
+            ) : (
+              /* Markup mode - show raw markdown in a textarea */
+              <div className="relative border rounded-lg bg-card min-h-[500px]">
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Code className="h-4 w-4" />
+                    <span>Markup View</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleViewPreview}
+                    className="h-7 text-xs"
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                    Switch to Preview
+                  </Button>
+                </div>
+                <textarea
+                  value={markupContent}
+                  onChange={(e) => handleMarkupChange(e.target.value)}
+                  placeholder="# Heading 1&#10;## Heading 2&#10;### Heading 3&#10;&#10;Regular paragraph text with **bold** and *italic*.&#10;&#10;* Bullet point 1&#10;* Bullet point 2&#10;&#10;1. Numbered item 1&#10;2. Numbered item 2"
+                  className="w-full h-[calc(100%-48px)] min-h-[452px] p-4 bg-transparent resize-none focus:outline-none font-mono text-sm leading-relaxed"
+                  spellCheck={false}
+                />
+              </div>
+            )}
           </div>
 
           {/* PRD Canvas - Whiteboard for visual planning */}
+          {/* IMPORTANT: Only render PRDCanvas after note is loaded to ensure initialData is available
+              The PRDCanvas component memoizes initialData on first render, so we must wait for note data */}
           <div className="px-8 pb-6">
-            <PRDCanvas
-              ref={canvasRef}
-              initialData={initialCanvasData}
-              onChange={handleCanvasChange}
-              prdContent={prdPlainText}
-              productDescription={title}
-              defaultCollapsed={true}
-              onGenerateContent={handleGenerateCanvasContent}
-              isGenerating={isCanvasGenerating}
-              generatingType={canvasGeneratingType}
-            />
+            {isNoteLoaded ? (
+              <PRDCanvas
+                key={`canvas-${noteId}`} // Force remount if noteId changes
+                ref={canvasRef}
+                initialData={initialCanvasData}
+                onChange={handleCanvasChange}
+                prdContent={prdPlainText}
+                productDescription={title}
+                defaultCollapsed={false}
+                onGenerateContent={handleGenerateCanvasContent}
+                isGenerating={isCanvasGenerating}
+                generatingType={canvasGeneratingType}
+              />
+            ) : (
+              <div className="border rounded-lg bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+                <div className="h-[400px] flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Generated Items Section */}
@@ -647,10 +1078,13 @@ export default function NoteDetailPage() {
             tasks={generatedTasks}
             onFeaturesChange={setGeneratedFeatures}
             onTasksChange={setGeneratedTasks}
-            onCreateFeature={handleCreateFeature}
-            onCreateTask={handleCreateTask}
-            onCreateAllFeatures={handleCreateAllFeatures}
-            onCreateAllTasks={handleCreateAllTasks}
+            onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
+            onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
+            onOpenAITaskGeneration={handleOpenAITaskGeneration}
+            onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
+            onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
+            onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
+            alwaysShow={true}
           />
         </div>
       </div>
@@ -685,6 +1119,52 @@ export default function NoteDetailPage() {
         currentProjectId={note.projectId}
       />
 
+      {/* Create Project Dialog */}
+      <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>
+        <DialogContent className="w-[400px] h-[320px] p-6 flex flex-col">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-lg">Create New Project</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="newProjectName" className="text-sm font-medium">Project Name</Label>
+              <Input
+                id="newProjectName"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Enter project name"
+                className="h-10"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateProject();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-6 gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)} className="px-4">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateProject} 
+              disabled={!newProjectName.trim() || createProject.isPending}
+              className="px-4"
+            >
+              {createProject.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Feature destination dialog */}
       <FeatureDestinationDialog
         open={showFeatureDialog}
@@ -707,6 +1187,53 @@ export default function NoteDetailPage() {
         mode={pendingTaskAction}
         onConfirm={handleConfirmTaskCreation}
         isCreating={isCreating}
+      />
+
+      {/* Create Task Drawer */}
+      <CreateTaskDrawer
+        open={showCreateTaskDrawer}
+        onClose={() => setShowCreateTaskDrawer(false)}
+        onCreate={handleCreateManualTask}
+        defaultStatus="planned"
+        users={[]}
+        availableLabels={['Design', 'Frontend', 'Backend', 'QA', 'Documentation']}
+        tabs={taskTabs}
+      />
+
+      {/* Create Feature Drawer */}
+      <FeatureRequestDrawer
+        open={showCreateFeatureDrawer}
+        feature={null}
+        onClose={() => setShowCreateFeatureDrawer(false)}
+        mode="create"
+        roadmapId={roadmaps[0]?.id}
+        defaultStatus="backlog"
+      />
+
+      {/* AI Generation Panel for Tasks */}
+      <AIGenerationPanel
+        open={showAIGenerationPanel && aiGenerationMode === 'tasks'}
+        onClose={() => setShowAIGenerationPanel(false)}
+        mode="generate-tasks"
+        currentContent={prdPlainText}
+        savedFeatures={generatedFeatures}
+        onTasksGenerated={(tasks) => {
+          handleTasksGenerated(tasks);
+          setShowAIGenerationPanel(false);
+        }}
+      />
+
+      {/* AI Generation Panel for Features */}
+      <AIGenerationPanel
+        open={showAIGenerationPanel && aiGenerationMode === 'features'}
+        onClose={() => setShowAIGenerationPanel(false)}
+        mode="generate-features"
+        currentContent={prdPlainText}
+        savedFeatures={generatedFeatures}
+        onFeaturesGenerated={(features) => {
+          handleFeaturesGenerated(features);
+          setShowAIGenerationPanel(false);
+        }}
       />
     </div>
   );

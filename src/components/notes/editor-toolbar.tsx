@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { type Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +18,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
   Bold,
   Italic,
   Underline,
@@ -30,6 +36,9 @@ import {
   ChevronDown,
   Indent,
   Outdent,
+  Heading1,
+  Heading2,
+  Heading3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -96,13 +105,114 @@ function ToolbarButton({
 }
 
 export function EditorToolbar({ editor }: EditorToolbarProps) {
+  const [showHeadingMenu, setShowHeadingMenu] = React.useState(false);
+
   if (!editor) {
     return null;
   }
 
+  // Get current heading level for display
+  const getCurrentHeadingLabel = () => {
+    if (editor.isActive('heading', { level: 1 })) return 'Heading 1';
+    if (editor.isActive('heading', { level: 2 })) return 'Heading 2';
+    if (editor.isActive('heading', { level: 3 })) return 'Heading 3';
+    return 'Paragraph';
+  };
+
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex items-center gap-1 p-2 border-b bg-background rounded-t-lg flex-wrap">
+        {/* Heading Dropdown */}
+        <Popover open={showHeadingMenu} onOpenChange={setShowHeadingMenu}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2 text-sm font-normal"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowHeadingMenu(!showHeadingMenu);
+              }}
+            >
+              <Type className="h-4 w-4" />
+              <span>{getCurrentHeadingLabel()}</span>
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent 
+            className="w-48 p-2" 
+            align="start" 
+            sideOffset={8}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <div className="space-y-1">
+              <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Text</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'w-full justify-start gap-2 h-8',
+                  !editor.isActive('heading') && 'bg-accent'
+                )}
+                onClick={() => {
+                  editor.chain().focus().setParagraph().run();
+                  setShowHeadingMenu(false);
+                }}
+              >
+                <Type className="h-4 w-4" />
+                Paragraph
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'w-full justify-start gap-2 h-8',
+                  editor.isActive('heading', { level: 1 }) && 'bg-accent'
+                )}
+                onClick={() => {
+                  editor.chain().focus().toggleHeading({ level: 1 }).run();
+                  setShowHeadingMenu(false);
+                }}
+              >
+                <Heading1 className="h-4 w-4" />
+                Heading 1
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'w-full justify-start gap-2 h-8',
+                  editor.isActive('heading', { level: 2 }) && 'bg-accent'
+                )}
+                onClick={() => {
+                  editor.chain().focus().toggleHeading({ level: 2 }).run();
+                  setShowHeadingMenu(false);
+                }}
+              >
+                <Heading2 className="h-4 w-4" />
+                Heading 2
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'w-full justify-start gap-2 h-8',
+                  editor.isActive('heading', { level: 3 }) && 'bg-accent'
+                )}
+                onClick={() => {
+                  editor.chain().focus().toggleHeading({ level: 3 }).run();
+                  setShowHeadingMenu(false);
+                }}
+              >
+                <Heading3 className="h-4 w-4" />
+                Heading 3
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
         {/* Font family */}
         <div className="flex items-center gap-1">
           <Type className="h-4 w-4 text-muted-foreground" />

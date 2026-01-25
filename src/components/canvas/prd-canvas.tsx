@@ -131,8 +131,8 @@ export interface PRDCanvasProps {
   readOnly?: boolean;
   /** Whether to show the mini view by default */
   defaultCollapsed?: boolean;
-  /** Callback for AI generation */
-  onGenerateContent?: (type: CanvasGenerationType) => Promise<GeneratedCanvasContent | null>;
+  /** Callback for AI generation - receives type and existing elements for positioning */
+  onGenerateContent?: (type: CanvasGenerationType, existingElements: any[]) => Promise<GeneratedCanvasContent | null>;
   /** Whether AI generation is in progress */
   isGenerating?: boolean;
   /** Current generation type */
@@ -532,6 +532,9 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     hasContentRef.current = hasContent;
   }, [hasContent]);
 
+  // Track if we're in the middle of a generation to prevent intermediate onChange calls from overwriting
+  const isGeneratingRef = useRef(false);
+  
   // Handle canvas changes - use refs to avoid infinite loops and unnecessary re-renders
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
@@ -541,6 +544,15 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         setHasContent(true);
       } else if (elements.length === 0 && currentHasContent) {
         setHasContent(false);
+      }
+
+      // Skip intermediate onChange calls during generation to prevent race conditions
+      // The generation handler will call onChange explicitly after elements are fully added
+      if (isGeneratingRef.current) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[PRDCanvas] Skipping onChange during generation, elements:', elements.length);
+        }
+        return;
       }
 
       onChange?.({
@@ -638,14 +650,23 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       return;
     }
 
+    // Set flag to prevent intermediate onChange calls from overwriting our data
+    isGeneratingRef.current = true;
+
     try {
-      const result = await onGenerateContent(type);
+      // Get existing elements to pass to generator for proper positioning
+      const existingElements = excalidrawAPIRef.current 
+        ? excalidrawAPIRef.current.getSceneElements() 
+        : (initialData?.elements || []);
+      
+      const result = await onGenerateContent(type, existingElements);
 
       // Validate result
       if (!result) {
         if (process.env.NODE_ENV === 'development') {
           console.warn('[PRDCanvas] Generation returned null result');
         }
+        isGeneratingRef.current = false;
         return;
       }
 
@@ -653,6 +674,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         if (process.env.NODE_ENV === 'development') {
           console.warn('[PRDCanvas] Generation returned invalid elements:', result);
         }
+        isGeneratingRef.current = false;
         return;
       }
 
@@ -660,6 +682,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         if (process.env.NODE_ENV === 'development') {
           console.warn('[PRDCanvas] Generation returned empty elements array');
         }
+        isGeneratingRef.current = false;
         return;
       }
 
@@ -672,6 +695,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         if (process.env.NODE_ENV === 'development') {
           console.warn('[PRDCanvas] No valid elements after filtering');
         }
+        isGeneratingRef.current = false;
         return;
       }
 
@@ -697,17 +721,28 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
         setIsCollapsed(false); // Expand to show generated content
 
-        // Explicitly trigger onChange to ensure persistence
-        onChange?.({
-          elements: newElements,
-          appState: excalidrawAPIRef.current.getAppState(),
-          files: excalidrawAPIRef.current.getFiles(),
-          annotations: annotationsRef.current,
-        });
+        // IMPORTANT: Use setTimeout to ensure Excalidraw has fully processed the updateScene
+        // before we call onChange. This prevents race conditions with Excalidraw's internal state.
+        setTimeout(() => {
+          // Re-fetch elements from Excalidraw to ensure we have the latest state
+          const finalElements = excalidrawAPIRef.current 
+            ? excalidrawAPIRef.current.getSceneElements() 
+            : newElements;
+          
+          // Clear the generation flag BEFORE calling onChange so the callback can process normally
+          isGeneratingRef.current = false;
+          
+          onChange?.({
+            elements: finalElements as any[],
+            appState: excalidrawAPIRef.current?.getAppState() || { viewBackgroundColor: '#ffffff' },
+            files: excalidrawAPIRef.current?.getFiles() || {},
+            annotations: annotationsRef.current,
+          });
 
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[PRDCanvas] Added ${validElements.length} elements to canvas`);
-        }
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[PRDCanvas] Added ${validElements.length} elements to canvas, triggered onChange for persistence`);
+          }
+        }, 150); // Increased timeout to ensure Excalidraw is fully settled
       } else {
         // Excalidraw not mounted (collapsed view) - store elements as pending
         pendingElementsRef.current = validElements;
@@ -715,11 +750,28 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         // Expand to mount Excalidraw - the handleExcalidrawAPI callback will apply the pending elements
         setIsCollapsed(false);
 
+        // Clear the generation flag
+        isGeneratingRef.current = false;
+
+        // IMPORTANT: Immediately notify parent about the new elements so they can be persisted
+        // This ensures data is saved even if the user navigates away before Excalidraw mounts
+        // We merge with any existing initialData elements since Excalidraw hasn't processed them yet
+        const existingElements = initialData?.elements || [];
+        onChange?.({
+          elements: [...existingElements, ...validElements],
+          appState: initialData?.appState || { viewBackgroundColor: '#ffffff' },
+          files: initialData?.files || {},
+          annotations: annotationsRef.current,
+        });
+
         if (process.env.NODE_ENV === 'development') {
-          console.log(`[PRDCanvas] Stored ${validElements.length} elements as pending (canvas collapsed)`);
+          console.log(`[PRDCanvas] Stored ${validElements.length} elements as pending (canvas collapsed), notified parent for persistence`);
         }
       }
     } catch (error) {
+      // Clear the generation flag on error
+      isGeneratingRef.current = false;
+      
       // Log error in development, but don't crash in production
       console.error('[PRDCanvas] Error during generation:', error instanceof Error ? error.message : error);
       
@@ -729,13 +781,16 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   };
 
   // Handle template selection
-  const handleLoadTemplate = (templateId: CanvasTemplateType) => {
+  const handleLoadTemplate = useCallback((templateId: CanvasTemplateType) => {
     const template = CANVAS_TEMPLATES.find(t => t.id === templateId);
     if (!template || !excalidrawAPIRef.current) return;
 
+    let newElements: any[];
+
     if (templateId === 'blank') {
       // Clear canvas for blank template
-      excalidrawAPIRef.current.updateScene({ elements: [] });
+      newElements = [];
+      excalidrawAPIRef.current.updateScene({ elements: [], commitToHistory: true });
       setHasContent(false);
     } else {
       // Load template elements
@@ -747,21 +802,39 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         id: `${el.id}-${Date.now()}`, // Unique IDs
         x: (el.x || 0) + offsetX,
       }));
+      newElements = [...currentElements, ...offsetElements];
       excalidrawAPIRef.current.updateScene({
-        elements: [...currentElements, ...offsetElements],
+        elements: newElements,
+        commitToHistory: true,
       });
       excalidrawAPIRef.current.scrollToContent();
       setHasContent(true);
     }
     setIsCollapsed(false);
-  };
+    
+    // Trigger onChange to persist template changes
+    onChange?.({
+      elements: newElements,
+      appState: excalidrawAPIRef.current.getAppState(),
+      files: excalidrawAPIRef.current.getFiles(),
+      annotations: annotationsRef.current,
+    });
+  }, [onChange]);
 
   // Clear canvas
   const handleClearCanvas = useCallback(() => {
     if (!excalidrawAPIRef.current) return;
-    excalidrawAPIRef.current.updateScene({ elements: [] });
+    excalidrawAPIRef.current.updateScene({ elements: [], commitToHistory: true });
     setHasContent(false);
-  }, []);
+    
+    // Trigger onChange to persist the cleared state
+    onChange?.({
+      elements: [],
+      appState: excalidrawAPIRef.current.getAppState(),
+      files: excalidrawAPIRef.current.getFiles(),
+      annotations: annotationsRef.current,
+    });
+  }, [onChange]);
 
   // Export handlers
   const handleExportPNG = useCallback(async () => {
@@ -865,35 +938,101 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCollapsed, isFullscreen, allowCollapse, handleExportPNG, handleExportSVG, handleClearCanvas]);
 
-  // Memoize initial data for Excalidraw to prevent re-initialization on every render
-  // We only want to update this when the component mounts or when we explicitly want to reset
-  // Since 'initialData' from props changes on every edit (due to parent state update),
-  // passing it directly to Excalidraw can cause issues.
-  // However, Excalidraw generally ignores initialData after mount.
-  // The critical part is preventing CanvasContent from being re-created unnecessarily.
+  // Track the initial data reference for comparison
+  // We use a ref to store the "committed" initial data to avoid re-processing on every render
+  const initialDataRef = useRef<CanvasData | undefined>(initialData);
+  
+  // Memoize initial data for Excalidraw
+  // IMPORTANT: We include initialData in dependencies because PRDCanvas only mounts AFTER
+  // the parent has loaded data (due to isNoteLoaded check). The parent uses a key prop
+  // to force remount when noteId changes, so this won't cause issues with stale closures.
+  // This fixes the bug where canvas data wasn't being loaded on page refresh.
   const excalidrawInitialData = useMemo(() => {
-    if (!initialData) return undefined;
+    // CRITICAL: Excalidraw requires collaborators to be a Map, not undefined or plain object
+    // This prevents the "props.appState.collaborators.forEach is not a function" error
+    const baseAppState = {
+      viewBackgroundColor: '#ffffff',
+      collaborators: new Map(),
+    };
+    
+    // Use the current initialData prop value
+    const dataToUse = initialData;
+    
+    if (!dataToUse) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PRDCanvas] excalidrawInitialData: No initial data provided');
+      }
+      return {
+        elements: [],
+        appState: baseAppState,
+      };
+    }
 
-    // Clean appState to remove properties that can't be serialized/deserialized properly
-    // Excalidraw expects collaborators to be a Map, but JSON serialization converts it to an array/object
-    const { collaborators, ...cleanAppState } = initialData.appState || {};
-
+    // Safely extract elements, filtering out any invalid entries
+    const rawElements = Array.isArray(dataToUse.elements) ? dataToUse.elements : [];
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PRDCanvas] excalidrawInitialData: Processing', rawElements.length, 'elements');
+    }
+    
+    // Normalize linear elements (arrows, lines) to prevent "Linear element is not normalized" error
+    // This ensures all required properties like lastCommittedPoint are present
+    // Also filter out any null/undefined elements that could cause issues
+    const normalizedElements = rawElements
+      .filter((el: any) => el && typeof el === 'object' && el.type && el.id)
+      .map((el: any) => {
+        if (el.type === 'arrow' || el.type === 'line') {
+          // Ensure points is valid
+          let points = el.points;
+          if (!Array.isArray(points) || points.length < 2) {
+            points = [[0, 0], [100, 0]];
+          } else {
+            points = points.map((p: any) => {
+              if (Array.isArray(p) && p.length >= 2) {
+                return [Number(p[0]) || 0, Number(p[1]) || 0];
+              }
+              return [0, 0];
+            });
+          }
+          
+          // Calculate lastCommittedPoint (required for normalization)
+          const lastCommittedPoint = points[points.length - 1];
+          
+          return {
+            ...el,
+            points,
+            lastCommittedPoint,
+            x: Number(el.x) || 0,
+            y: Number(el.y) || 0,
+          };
+        }
+        return el;
+      });
+    
+    // Safely extract appState, ensuring it's an object
+    const rawAppState = dataToUse.appState && typeof dataToUse.appState === 'object' 
+      ? dataToUse.appState 
+      : {};
+    
+    // Update the ref with the processed data
+    initialDataRef.current = dataToUse;
+    
     return {
-      elements: initialData.elements,
+      elements: normalizedElements,
       appState: {
-        ...cleanAppState,
-        viewBackgroundColor: '#ffffff',
-        // Ensure collaborators is a Map (required by Excalidraw)
+        ...baseAppState,
+        ...rawAppState,
+        // Ensure collaborators is always a Map even if initialData.appState has it as something else
+        // This is critical because JSON.parse converts Map to {} which breaks Excalidraw
         collaborators: new Map(),
       },
-      files: initialData.files,
+      files: dataToUse.files || undefined,
     };
-    // We intentionally exclude initialData from dependencies to prevent re-creation
-    // on every keystroke/edit echo from parent.
-    // We only rely on it for the FIRST render when Excalidraw mounts.
-    // Use a key on the component if you need to force reset.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Include initialData in dependencies - this is safe because:
+    // 1. PRDCanvas only mounts after parent has loaded data (isNoteLoaded check)
+    // 2. Parent uses key={noteId} to force remount on note change
+    // 3. Excalidraw ignores initialData changes after mount anyway
+  }, [initialData]);
 
   // Use refs for callbacks to prevent Excalidraw remounting
   const onChangeRef = useRef(handleChange);

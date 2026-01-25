@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,7 +103,7 @@ export function AIGenerationPanel({
   onTasksGenerated,
   onInsertCanvas,
 }: AIGenerationPanelProps) {
-  // State
+  // State - all initialized to input/empty state
   const [prompt, setPrompt] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<PRDTemplateType>('custom');
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType | undefined>();
@@ -113,6 +113,9 @@ export function AIGenerationPanel({
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'preview'>('input');
+  
+  // Key to force re-mount of content when panel opens
+  const [resetKey, setResetKey] = useState(0);
 
   // Hooks
   const { availableProviders, activeProvider, hasProvider } = useAIService();
@@ -121,22 +124,40 @@ export function AIGenerationPanel({
   // Get the provider to use
   const effectiveProvider = selectedProvider || activeProvider || undefined;
 
-  // Reset state when panel opens
+  // Track previous open state to detect when panel opens
+  const prevOpenRef = useRef(false);
+  
+  // Reset state when panel opens (only on transition from closed to open)
+  // IMPORTANT: Only depend on `open` to avoid false triggers from other state changes
   useEffect(() => {
-    if (open) {
-      console.log('[AIGenerationPanel] Panel opened, resetting state');
-      console.log('[AIGenerationPanel] Mode:', mode);
-      console.log('[AIGenerationPanel] Has provider:', hasProvider);
-      console.log('[AIGenerationPanel] Available providers:', availableProviders);
-      console.log('[AIGenerationPanel] Active provider:', activeProvider);
+    const wasOpened = open && !prevOpenRef.current;
+    const wasClosed = !open && prevOpenRef.current;
+    
+    console.log('[AIGenerationPanel] useEffect triggered - open:', open, 'prevOpen:', prevOpenRef.current, 'wasOpened:', wasOpened);
+    
+    if (wasOpened) {
+      console.log('[AIGenerationPanel] Panel opened, resetting state to input step');
+      // Reset all state to initial values
       setStep('input');
       setPrompt('');
       setGeneratedContent('');
       setGeneratedFeatures([]);
       setGeneratedTasks([]);
       setError(null);
+      setResetKey(prev => prev + 1);
     }
-  }, [open, mode, hasProvider, availableProviders, activeProvider]);
+    
+    // Update ref after checking (important: this must come after the check)
+    prevOpenRef.current = open;
+  }, [open]); // Only depend on `open` - other dependencies caused false triggers
+
+  // Safety check: if we're in preview step but have no content to show, go back to input
+  useEffect(() => {
+    if (step === 'preview' && !generatedContent && generatedFeatures.length === 0 && generatedTasks.length === 0) {
+      console.log('[AIGenerationPanel] In preview step with no content, reverting to input step');
+      setStep('input');
+    }
+  }, [step, generatedContent, generatedFeatures.length, generatedTasks.length]);
 
   // Mode configuration
   const modeConfig: Record<GenerationMode, {
@@ -376,13 +397,6 @@ export function AIGenerationPanel({
   const handleApply = useCallback(() => {
     if (generatedContent && onPRDGenerated) {
       onPRDGenerated(generatedContent);
-      // Insert an inline canvas after PRD content for visual planning
-      if (onInsertCanvas && (mode === 'generate-prd' || mode === 'prd-template')) {
-        // Small delay to ensure PRD content is inserted first
-        setTimeout(() => {
-          onInsertCanvas();
-        }, 100);
-      }
     }
     if (generatedFeatures.length > 0 && onFeaturesGenerated) {
       onFeaturesGenerated(generatedFeatures.filter(f => f.isSelected));
@@ -391,7 +405,8 @@ export function AIGenerationPanel({
       onTasksGenerated(generatedTasks.filter(t => t.isSelected));
     }
     handleClose();
-  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated, onInsertCanvas, mode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated]);
 
   // Handle close and reset
   const handleClose = useCallback(() => {
@@ -434,7 +449,7 @@ export function AIGenerationPanel({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="px-6 py-4 space-y-6">
+          <div key={resetKey} className="px-6 py-4 space-y-6">
             {step === 'input' ? (
               <>
                 {/* Provider Selector */}
@@ -573,7 +588,7 @@ export function AIGenerationPanel({
                             'border rounded-lg p-3 cursor-pointer transition-colors',
                             feature.isSelected
                               ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-muted-foreground/30'
+                              : 'border-input hover:border-muted-foreground/50'
                           )}
                           onClick={() => toggleFeatureSelection(feature.id)}
                         >
@@ -632,7 +647,7 @@ export function AIGenerationPanel({
                             'border rounded-lg p-3 cursor-pointer transition-colors',
                             task.isSelected
                               ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-muted-foreground/30'
+                              : 'border-input hover:border-muted-foreground/50'
                           )}
                           onClick={() => toggleTaskSelection(task.id)}
                         >

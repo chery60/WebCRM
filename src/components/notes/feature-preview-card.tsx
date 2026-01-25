@@ -12,13 +12,12 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Plus,
-  X,
   Flag,
-  Calendar,
   Clock,
   ListChecks,
   User,
+  Map,
+  Trash2,
 } from 'lucide-react';
 import type { GeneratedFeature } from '@/types';
 import { cn } from '@/lib/utils';
@@ -31,8 +30,8 @@ interface FeaturePreviewCardProps {
   feature: GeneratedFeature;
   isSelected: boolean;
   onToggleSelect: () => void;
-  onRemove: () => void;
-  onCreate: () => void;
+  onDelete: () => void;
+  roadmapName?: string;
 }
 
 // Priority colors
@@ -62,19 +61,22 @@ export function FeaturePreviewCard({
   feature,
   isSelected,
   onToggleSelect,
-  onRemove,
-  onCreate,
+  onDelete,
+  roadmapName,
 }: FeaturePreviewCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div
       className={cn(
-        'border rounded-lg transition-all',
+        'border rounded-lg transition-all group',
         isSelected
           ? 'border-primary bg-primary/5 shadow-sm'
-          : 'border-border hover:border-muted-foreground/30'
+          : 'border-input hover:border-muted-foreground/50'
       )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Header */}
       <div className="p-3">
@@ -114,33 +116,32 @@ export function FeaturePreviewCard({
                       {feature.estimatedEffort.split(' ')[0]}
                     </Badge>
                   )}
+
+                  {/* Roadmap Name */}
+                  {roadmapName && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground bg-muted/50">
+                      <Map className="h-3 w-3 mr-1" />
+                      {roadmapName}
+                    </Badge>
+                  )}
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-1 shrink-0">
+              {/* Delete Button - shown on hover */}
+              <div className={cn(
+                'shrink-0 transition-opacity duration-200',
+                isHovered ? 'opacity-100' : 'opacity-0'
+              )}>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemove();
+                    onDelete();
                   }}
                 >
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreate();
-                  }}
-                >
-                  <Plus className="h-3 w-3" />
-                  Create
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>

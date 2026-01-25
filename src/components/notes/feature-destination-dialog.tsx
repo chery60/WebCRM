@@ -190,14 +190,14 @@ export function FeatureDestinationDialog({
   const renderExistingRoadmapSelection = () => {
     if (pipelines.length === 0) {
       return (
-        <p className="text-sm text-muted-foreground italic mt-3">
+        <p className="text-sm text-muted-foreground italic mt-4">
           No pipelines yet. Create one below.
         </p>
       );
     }
 
     return (
-      <div className="mt-3 space-y-3">
+      <div className="mt-4 space-y-4">
         {/* Pipeline Filter */}
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">
@@ -288,27 +288,27 @@ export function FeatureDestinationDialog({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="py-4 space-y-4">
+          <div className="py-2">
             <RadioGroup
               value={selectedOption}
               onValueChange={(value) => {
                 setSelectedOption(value as 'existing' | 'new-roadmap' | 'new-pipeline');
                 setError('');
               }}
-              className="space-y-3"
+              className="space-y-2"
             >
               {/* Existing Roadmap Option */}
               <div
                 className={cn(
-                  'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                  'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                   selectedOption === 'existing'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-muted-foreground/30'
+                    ? 'border-primary'
+                    : 'border-input hover:border-muted-foreground/50'
                 )}
                 onClick={() => setSelectedOption('existing')}
               >
-                <RadioGroupItem value="existing" id="existing" className="mt-0.5" />
-                <div className="flex-1">
+                <RadioGroupItem value="existing" id="existing" className="mt-1" />
+                <div className="flex-1 min-w-0">
                   <Label
                     htmlFor="existing"
                     className="font-medium cursor-pointer flex items-center gap-2"
@@ -321,7 +321,7 @@ export function FeatureDestinationDialog({
                       </Badge>
                     )}
                   </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     Add to an existing roadmap in your pipelines
                   </p>
 
@@ -332,15 +332,15 @@ export function FeatureDestinationDialog({
               {/* New Roadmap Option */}
               <div
                 className={cn(
-                  'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                  'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                   selectedOption === 'new-roadmap'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-muted-foreground/30'
+                    ? 'border-primary'
+                    : 'border-input hover:border-muted-foreground/50'
                 )}
                 onClick={() => setSelectedOption('new-roadmap')}
               >
-                <RadioGroupItem value="new-roadmap" id="new-roadmap" className="mt-0.5" />
-                <div className="flex-1">
+                <RadioGroupItem value="new-roadmap" id="new-roadmap" className="mt-1" />
+                <div className="flex-1 min-w-0">
                   <Label
                     htmlFor="new-roadmap"
                     className="font-medium cursor-pointer flex items-center gap-2"
@@ -348,12 +348,12 @@ export function FeatureDestinationDialog({
                     <Plus className="h-4 w-4 text-muted-foreground" />
                     Create New Roadmap
                   </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     Create a new roadmap in an existing pipeline
                   </p>
 
                   {selectedOption === 'new-roadmap' && (
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-4 space-y-4">
                       <div>
                         <Label className="text-xs text-muted-foreground mb-1.5 block">
                           Pipeline
@@ -405,15 +405,15 @@ export function FeatureDestinationDialog({
               {/* New Pipeline Option */}
               <div
                 className={cn(
-                  'flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                  'flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer',
                   selectedOption === 'new-pipeline'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-muted-foreground/30'
+                    ? 'border-primary'
+                    : 'border-input hover:border-muted-foreground/50'
                 )}
                 onClick={() => setSelectedOption('new-pipeline')}
               >
-                <RadioGroupItem value="new-pipeline" id="new-pipeline" className="mt-0.5" />
-                <div className="flex-1">
+                <RadioGroupItem value="new-pipeline" id="new-pipeline" className="mt-1" />
+                <div className="flex-1 min-w-0">
                   <Label
                     htmlFor="new-pipeline"
                     className="font-medium cursor-pointer flex items-center gap-2"
@@ -421,12 +421,12 @@ export function FeatureDestinationDialog({
                     <FolderTree className="h-4 w-4 text-muted-foreground" />
                     Create New Pipeline
                   </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     Create a new pipeline with a roadmap
                   </p>
 
                   {selectedOption === 'new-pipeline' && (
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-4 space-y-4">
                       <div>
                         <Label className="text-xs text-muted-foreground mb-1.5 block">
                           Pipeline Name
@@ -465,7 +465,7 @@ export function FeatureDestinationDialog({
 
             {/* Error Message */}
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive mt-3">{error}</p>
             )}
           </div>
         )}

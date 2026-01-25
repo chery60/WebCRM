@@ -122,8 +122,9 @@ export function PRDEditorWithCanvas({
   }, [content]);
 
   // Handle canvas generation for the bottom PRD canvas
+  // Now receives existingElements from PRDCanvas for proper positioning
   const handleGenerateContent = useCallback(
-    async (type: CanvasGenerationType): Promise<GeneratedCanvasContent | null> => {
+    async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
       if (!prdPlainText.trim()) {
         toast.error('Please add some PRD content before generating diagrams');
         return null;
@@ -133,9 +134,10 @@ export function PRDEditorWithCanvas({
       setGeneratingType(type);
 
       try {
-        // Get existing elements from both inline canvases and the bottom canvas
+        // Get existing elements from both inline canvases and the passed elements
         const inlineElements = getInlineCanvasElements();
-        const bottomCanvasElements = canvasData?.elements || [];
+        // Use passed existingElements (from canvas) if available, otherwise fall back to canvasData
+        const bottomCanvasElements = existingElements.length > 0 ? existingElements : (canvasData?.elements || []);
         const allExistingElements = [...inlineElements, ...bottomCanvasElements];
 
         // Build enhanced context
@@ -153,7 +155,7 @@ export function PRDEditorWithCanvas({
           prdContent: enhancedPrdContent,
           productDescription: productDescription || prdPlainText.substring(0, 500),
           provider: activeProvider || undefined,
-          existingElements: bottomCanvasElements, // Only pass bottom canvas elements for offset
+          existingElements: bottomCanvasElements, // Pass actual canvas elements for offset calculation
         });
 
         if (result.tokensUsed) {

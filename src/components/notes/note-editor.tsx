@@ -20,12 +20,16 @@ import { useAIService } from '@/lib/ai/use-ai-service';
 import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
+import { PRDChatDrawer } from './prd-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
+import { SelectionBubbleMenu } from './selection-bubble-menu';
+import { AIRewriteDrawer } from './ai-rewrite-drawer';
 import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
 import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
 import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/excalidraw-embed';
 import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
 import { toast } from 'sonner';
+import { markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
 
 interface NoteEditorProps {
   content: string;
@@ -66,6 +70,13 @@ export function NoteEditor({
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  
+  // PRD Chat Drawer state (conversational PRD generation)
+  const [showPRDChatDrawer, setShowPRDChatDrawer] = useState(false);
+  
+  // AI Rewrite Drawer state
+  const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
+  const [selectedTextForRewrite, setSelectedTextForRewrite] = useState('');
   
   // Canvas AI generation state
   const [isCanvasGenerating, setIsCanvasGenerating] = useState(false);
@@ -126,13 +137,12 @@ export function NoteEditor({
           editor.chain().focus().insertExcalidraw().run();
           break;
 
-        // PRD-specific commands - open AI panel
+        // PRD-specific commands - open conversational PRD chat drawer
         case 'generate-prd':
-          setAIPanelMode('generate-prd');
-          setShowAIPanel(true);
+          setShowPRDChatDrawer(true);
           break;
         case 'prd-template':
-          setShowTemplateSelector(true);
+          setShowPRDChatDrawer(true); // Now uses chat drawer with template selection
           break;
         case 'generate-features':
           setAIPanelMode('generate-features');
@@ -152,10 +162,6 @@ export function NoteEditor({
           break;
 
         // AI commands
-        case 'summarize':
-        case 'expand':
-        case 'rewrite':
-        case 'translate':
         case 'continue':
         case 'grammar':
         case 'professional':
@@ -174,16 +180,20 @@ export function NoteEditor({
             const result = await generateContent({
               prompt: selectedText || fullText.slice(-500),
               context: fullText,
-              type: command.command as 'summarize' | 'expand' | 'rewrite' | 'translate' | 'continue' | 'grammar' | 'professional',
+              type: command.command as 'continue' | 'grammar' | 'professional',
             });
 
             if (result.content) {
-              if (selectedText) {
-                // Replace selection
-                editor.chain().focus().insertContent(result.content).run();
-              } else {
-                // Insert at cursor
-                editor.chain().focus().insertContent(result.content).run();
+              // Convert markdown to TipTap JSON format for proper rendering
+              const tiptapDoc = markdownToTipTap(result.content);
+              if (tiptapDoc.content && tiptapDoc.content.length > 0) {
+                if (selectedText) {
+                  // Replace selection with converted content
+                  editor.chain().focus().insertContent(tiptapDoc.content).run();
+                } else {
+                  // Insert at cursor
+                  editor.chain().focus().insertContent(tiptapDoc.content).run();
+                }
               }
             }
           } catch (error) {
@@ -314,9 +324,9 @@ export function NoteEditor({
     };
   }, []);
 
-  // Canvas AI generation handler
+  // Canvas AI generation handler - receives existingElements from inline canvas for positioning
   const handleCanvasGenerate = useCallback(
-    async (type: CanvasGenerationType, existingElements: any[]): Promise<GeneratedCanvasContent | null> => {
+    async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
       // Get current PRD content from editor
       const prdContent = editor?.state.doc.textContent || '';
       
@@ -344,7 +354,7 @@ export function NoteEditor({
           prdContent: enhancedPrdContent,
           productDescription: prdContent.substring(0, 500), // Use first 500 chars as description
           provider: activeProvider || undefined,
-          existingElements, // Pass for offset calculation
+          existingElements, // Pass for offset calculation to avoid overlapping
         });
 
         if (!result.success || !result.content) {
@@ -446,10 +456,23 @@ export function NoteEditor({
     slashStartPosRef.current = null;
   }, []);
 
-  // Handle PRD content generated from AI panel
-  const handlePRDGenerated = useCallback((generatedContent: string) => {
+  // Handle PRD content generated from AI panel or PRD chat drawer
+  // Converts markdown to TipTap JSON format for proper rendering
+  // Supports both overwrite and append modes
+  const handlePRDGenerated = useCallback((generatedContent: string, mode: 'overwrite' | 'append' = 'append') => {
     if (editor) {
-      editor.chain().focus().insertContent(generatedContent).run();
+      // Convert markdown to TipTap JSON format
+      const tiptapDoc = markdownToTipTap(generatedContent);
+      
+      if (tiptapDoc.content && tiptapDoc.content.length > 0) {
+        if (mode === 'overwrite') {
+          // Clear existing content and set new content
+          editor.chain().focus().clearContent().insertContent(tiptapDoc.content).run();
+        } else {
+          // Append: Insert the converted content at the end
+          editor.chain().focus().insertContent(tiptapDoc.content).run();
+        }
+      }
     }
   }, [editor]);
 
@@ -459,6 +482,20 @@ export function NoteEditor({
     setAIPanelMode('prd-template');
     setShowAIPanel(true);
   }, []);
+
+  // Handle AI rewrite from bubble menu
+  const handleAIRewrite = useCallback((selectedText: string) => {
+    setSelectedTextForRewrite(selectedText);
+    setShowRewriteDrawer(true);
+  }, []);
+
+  // Handle applying rewritten text
+  const handleApplyRewrite = useCallback((newText: string) => {
+    if (!editor) return;
+    
+    // Replace the current selection with the new text
+    editor.chain().focus().insertContent(newText).run();
+  }, [editor]);
 
   return (
     <div className={cn('relative border rounded-lg bg-card', className)}>
@@ -519,6 +556,40 @@ export function NoteEditor({
         open={showTemplateSelector}
         onClose={() => setShowTemplateSelector(false)}
         onSelect={handleTemplateSelect}
+      />
+
+      {/* PRD Chat Drawer (Conversational PRD Generation) */}
+      <PRDChatDrawer
+        open={showPRDChatDrawer}
+        onOpenChange={setShowPRDChatDrawer}
+        noteContent={editor?.state.doc.textContent || ''}
+        onApplyContent={handlePRDGenerated}
+        onGenerateFeatures={(content) => {
+          // Close chat drawer and open features panel
+          setShowPRDChatDrawer(false);
+          setAIPanelMode('generate-features');
+          setShowAIPanel(true);
+        }}
+        onGenerateTasks={(content) => {
+          // Close chat drawer and open tasks panel
+          setShowPRDChatDrawer(false);
+          setAIPanelMode('generate-tasks');
+          setShowAIPanel(true);
+        }}
+      />
+
+      {/* Selection Bubble Menu */}
+      <SelectionBubbleMenu 
+        editor={editor} 
+        onAIRewrite={handleAIRewrite} 
+      />
+
+      {/* AI Rewrite Drawer */}
+      <AIRewriteDrawer
+        open={showRewriteDrawer}
+        onClose={() => setShowRewriteDrawer(false)}
+        selectedText={selectedTextForRewrite}
+        onApply={handleApplyRewrite}
       />
     </div>
   );

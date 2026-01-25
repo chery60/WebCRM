@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,8 +15,10 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotesStore, useUIStore } from '@/lib/stores/ui-store';
 import { useTags } from '@/lib/hooks/use-tags';
-import { ArrowUpDown, Filter, Plus, Check, FolderOpen, LayoutGrid, List, Table as TableIcon } from 'lucide-react';
-import Link from 'next/link';
+import { useCreateNote } from '@/lib/hooks/use-notes';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { ArrowUpDown, Filter, Plus, Check, FolderOpen, LayoutGrid, List, Table as TableIcon, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type NotesViewType = 'grid' | 'list' | 'table';
 
@@ -24,9 +28,43 @@ interface NotesHeaderProps {
 }
 
 export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
+  const router = useRouter();
   const { filter, sort, setFilter, setSort, clearFilter } = useNotesStore();
   const { notesView, setNotesView } = useUIStore();
   const { data: tags = [] } = useTags();
+  const { currentUser } = useAuthStore();
+  const createNote = useCreateNote();
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Create a new note immediately and redirect to it
+  const handleCreateNote = async () => {
+    if (!currentUser) {
+      toast.error('Please sign in to create notes');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const newNote = await createNote.mutateAsync({
+        data: {
+          title: 'Untitled Note',
+          content: '',
+          tags: [],
+          projectId: projectId,
+        },
+        authorId: currentUser.id,
+        authorName: currentUser.name || currentUser.email,
+        authorAvatar: currentUser.avatar,
+      });
+
+      if (newNote) {
+        router.push(`/notes/${newNote.id}`);
+      }
+    } catch (error) {
+      toast.error('Failed to create note');
+      setIsCreating(false);
+    }
+  };
 
   const sortOptions = [
     { label: 'Last Updated', field: 'updatedAt' as const, direction: 'desc' as const },
@@ -145,12 +183,19 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Add PRD button */}
-        <Button asChild size="sm" className="gap-2">
-          <Link href={projectId ? `/notes/new?project=${projectId}` : '/notes/new'}>
+        {/* Add note button */}
+        <Button 
+          size="sm" 
+          className="gap-2" 
+          onClick={handleCreateNote}
+          disabled={isCreating}
+        >
+          {isCreating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
             <Plus className="h-4 w-4" />
-            Add PRD
-          </Link>
+          )}
+          {isCreating ? 'Creating...' : 'Add Notes'}
         </Button>
       </div>
     </div>
