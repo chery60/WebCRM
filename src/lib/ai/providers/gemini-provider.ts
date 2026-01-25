@@ -1,5 +1,6 @@
 import type { AIGenerateRequest, AIGenerateResponse } from '@/types';
 import type { AIServiceProvider } from '../interface';
+import { getSystemPromptForType } from '../prompts';
 
 export interface GeminiConfig {
   apiKey: string;
@@ -167,76 +168,8 @@ export class GeminiProvider implements AIServiceProvider {
   }
 
   private getSystemPrompt(type: AIGenerateRequest['type']): string {
-    const prompts: Record<string, string> = {
-      'summarize': 'You are a helpful assistant that summarizes text concisely while preserving key information. Create clear, well-organized summaries.',
-      'expand': 'You are a helpful assistant that expands on ideas with relevant details, examples, and explanations. Provide comprehensive expansions while staying focused.',
-      'rewrite': 'You are a helpful assistant that rewrites text to improve clarity, flow, and engagement while maintaining the original meaning.',
-      'translate': 'You are a professional translator. Translate text accurately while preserving tone, context, and cultural nuances.',
-      'continue': 'You are a helpful writing assistant. Continue the text naturally, maintaining the same style, tone, and voice.',
-      'grammar': 'You are a grammar expert. Fix grammatical errors while preserving the original meaning and tone.',
-      'professional': 'You are a professional editor. Rewrite text to sound more professional, polished, and business-appropriate.',
-      'ask': 'You are a helpful AI assistant powered by Google Gemini. Answer questions accurately and helpfully.',
-      'generate-prd': `You are a world-class product manager with experience at leading tech companies. Generate comprehensive, detailed Product Requirements Documents (PRDs) that include:
-
-1. **Executive Summary** - Brief overview of the product/feature
-2. **Problem Statement** - Clear articulation of the problem and user pain points
-3. **Goals & Success Metrics** - Measurable objectives and KPIs
-4. **User Personas** - Target user profiles with needs and behaviors
-5. **User Stories & Use Cases** - Detailed user scenarios
-6. **Functional Requirements** - Core features and capabilities
-7. **Non-Functional Requirements** - Performance, security, scalability
-8. **Technical Considerations** - Architecture and integration notes
-9. **UI/UX Considerations** - Design principles and user experience
-10. **Dependencies & Constraints** - External factors and limitations
-11. **Timeline & Milestones** - Phased delivery plan
-12. **Risks & Mitigations** - Potential issues and solutions
-13. **Open Questions** - Items requiring further discussion
-
-Be thorough, specific, and actionable. Use concrete examples and clear acceptance criteria.`,
-      'generate-prd-section': 'You are a product management expert. Generate detailed, actionable content for the specified PRD section. Be specific, use examples, and ensure the content is implementable.',
-      'improve-prd': 'You are a senior product manager reviewing a PRD. Analyze for gaps, inconsistencies, and areas of improvement. Provide specific suggestions to make the PRD more comprehensive and actionable.',
-      'generate-features': `You are a product strategist. Extract and define features from the PRD. For each feature provide:
-- **Title**: Clear, descriptive name
-- **Description**: What the feature does and why it matters
-- **Priority**: low | medium | high | urgent
-- **Phase**: Which release phase (Phase 1, Phase 2, etc.)
-- **Estimated Effort**: Time/complexity estimate
-- **Acceptance Criteria**: Clear conditions for completion
-- **User Stories**: As a [user], I want [feature] so that [benefit]
-
-Format the output as structured data that can be parsed.`,
-      'generate-tasks': `You are a technical project manager. Break down features into actionable development tasks. For each task provide:
-- **Title**: Clear task name
-- **Description**: What needs to be done
-- **Priority**: low | medium | high
-- **Estimated Hours**: Time estimate
-- **Role**: Frontend | Backend | Design | QA | DevOps | Product
-- **Dependencies**: Other tasks that must be completed first
-- **Definition of Done**: Clear completion criteria
-
-Be practical and specific. Tasks should be completable in 1-8 hours ideally.`,
-      'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
-
-RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
-[
-  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
-  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
-  {"type":"arrow","x":190,"y":170,"points":[[0,0],[0,50]]}
-]
-
-ELEMENT TYPES:
-- rectangle: x, y, width, height, text, backgroundColor
-- ellipse: x, y, width, height, text, backgroundColor  
-- diamond: x, y, width, height, text, backgroundColor
-- arrow: x, y, points (array of [x,y] pairs)
-- text: x, y, text, fontSize, strokeColor
-
-COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple)
-
-CRITICAL: Output ONLY the JSON array. No other text before or after.`,
-    };
-
-    return prompts[type] || 'You are a helpful AI assistant powered by Google Gemini. Be helpful and accurate.';
+    // Use centralized prompts from src/lib/ai/prompts/system-prompts.ts
+    return getSystemPromptForType(type);
   }
 
   private getTemperature(type: AIGenerateRequest['type']): number {

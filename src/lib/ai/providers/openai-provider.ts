@@ -1,5 +1,6 @@
 import type { AIGenerateRequest, AIGenerateResponse } from '@/types';
 import type { AIServiceProvider } from '../interface';
+import { getSystemPromptForType } from '../prompts';
 
 export interface OpenAIConfig {
   apiKey: string;
@@ -111,42 +112,8 @@ export class OpenAIProvider implements AIServiceProvider {
   }
 
   private getSystemPrompt(type: AIGenerateRequest['type']): string {
-    const prompts: Record<string, string> = {
-      'summarize': 'You are a helpful assistant that summarizes text concisely while preserving key information.',
-      'expand': 'You are a helpful assistant that expands on ideas with relevant details, examples, and explanations.',
-      'rewrite': 'You are a helpful assistant that rewrites text to improve clarity, flow, and engagement while maintaining the original meaning.',
-      'translate': 'You are a professional translator. Translate the text accurately while preserving tone and context.',
-      'continue': 'You are a helpful writing assistant. Continue the text naturally, maintaining the same style and tone.',
-      'grammar': 'You are a grammar expert. Fix any grammatical errors while preserving the original meaning.',
-      'professional': 'You are a professional editor. Rewrite the text to sound more professional and polished.',
-      'ask': 'You are a helpful AI assistant. Answer questions accurately and helpfully.',
-      'generate-prd': 'You are a world-class product manager and PRD expert. Generate comprehensive, detailed PRDs that cover all aspects of product development.',
-      'generate-prd-section': 'You are a product management expert. Generate detailed content for the specified PRD section.',
-      'improve-prd': 'You are a senior product manager. Review and improve the PRD to make it more comprehensive and actionable.',
-      'generate-features': 'You are a product strategist. Extract and define features from the PRD with clear acceptance criteria.',
-      'generate-tasks': 'You are a technical project manager. Break down features into actionable tasks with estimates.',
-      'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
-
-RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
-[
-  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
-  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
-  {"type":"arrow","x":190,"y":170,"points":[[0,0],[0,50]]}
-]
-
-ELEMENT TYPES:
-- rectangle: x, y, width, height, text, backgroundColor
-- ellipse: x, y, width, height, text, backgroundColor  
-- diamond: x, y, width, height, text, backgroundColor
-- arrow: x, y, points (array of [x,y] pairs)
-- text: x, y, text, fontSize, strokeColor
-
-COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple)
-
-CRITICAL: Output ONLY the JSON array. No other text before or after.`,
-    };
-
-    return prompts[type] || 'You are a helpful AI assistant.';
+    // Use centralized prompts from src/lib/ai/prompts/system-prompts.ts
+    return getSystemPromptForType(type);
   }
 
   private getTemperature(type: AIGenerateRequest['type']): number {
