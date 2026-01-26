@@ -21,10 +21,11 @@ import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
 import { PRDChatDrawer } from './prd-chat-drawer';
+import { SectionChatDrawer } from './section-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
 import { SelectionBubbleMenu } from './selection-bubble-menu';
 import { AIRewriteDrawer } from './ai-rewrite-drawer';
-import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
+import type { GeneratedFeature, GeneratedTask, CustomPRDTemplate } from '@/types';
 import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
 import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/excalidraw-embed';
 import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
@@ -73,6 +74,9 @@ export function NoteEditor({
   
   // PRD Chat Drawer state (conversational PRD generation)
   const [showPRDChatDrawer, setShowPRDChatDrawer] = useState(false);
+  
+  // Section Chat Drawer state (conversational section generation)
+  const [showSectionChatDrawer, setShowSectionChatDrawer] = useState(false);
   
   // AI Rewrite Drawer state
   const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
@@ -157,8 +161,7 @@ export function NoteEditor({
           setShowAIPanel(true);
           break;
         case 'generate-section':
-          setAIPanelMode('generate-section');
-          setShowAIPanel(true);
+          setShowSectionChatDrawer(true);
           break;
 
         // AI commands
@@ -467,17 +470,25 @@ export function NoteEditor({
       if (tiptapDoc.content && tiptapDoc.content.length > 0) {
         if (mode === 'overwrite') {
           // Clear existing content and set new content
-          editor.chain().focus().clearContent().insertContent(tiptapDoc.content).run();
+          // Use setContent for overwrite to ensure clean replacement
+          editor.commands.setContent(tiptapDoc);
         } else {
-          // Append: Insert the converted content at the end
-          editor.chain().focus().insertContent(tiptapDoc.content).run();
+          // Append: Move to end of document and insert content
+          // First, move cursor to the end of the document
+          const endPos = editor.state.doc.content.size;
+          editor
+            .chain()
+            .focus()
+            .setTextSelection(endPos)
+            .insertContent(tiptapDoc.content)
+            .run();
         }
       }
     }
   }, [editor]);
 
   // Handle template selection
-  const handleTemplateSelect = useCallback((_templateType: PRDTemplateType) => {
+  const handleTemplateSelect = useCallback((_templateId: string, _template: CustomPRDTemplate) => {
     setShowTemplateSelector(false);
     setAIPanelMode('prd-template');
     setShowAIPanel(true);
@@ -576,6 +587,14 @@ export function NoteEditor({
           setAIPanelMode('generate-tasks');
           setShowAIPanel(true);
         }}
+      />
+
+      {/* Section Chat Drawer (Conversational Section Generation) */}
+      <SectionChatDrawer
+        open={showSectionChatDrawer}
+        onOpenChange={setShowSectionChatDrawer}
+        noteContent={editor?.state.doc.textContent || ''}
+        onApplyContent={handlePRDGenerated}
       />
 
       {/* Selection Bubble Menu */}

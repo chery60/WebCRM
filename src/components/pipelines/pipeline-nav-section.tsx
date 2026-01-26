@@ -271,7 +271,8 @@ function PipelineItem({
           </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="pl-4 pt-1 space-y-0.5">
+        {/* pl-[22px] aligns level 3 text with level 2 text (pipeline name) */}
+        <CollapsibleContent className="pl-[22px] pt-1 space-y-0.5">
           {roadmaps.map((roadmap) => {
             const isRoadmapActive =
               pathname === `/pipelines/${pipeline.id}` && currentRoadmapId === roadmap.id;
@@ -515,7 +516,7 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
           <Link href="/pipelines">
             <div
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
+                'flex items-center justify-center rounded-lg py-2 text-sm transition-colors w-full',
                 isPipelinesActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                   : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -551,7 +552,8 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 pt-1 space-y-1">
+        {/* pl-8 = 32px aligns child text with parent text (12px padding + 20px icon = 32px) */}
+        <CollapsibleContent className="pl-8 pt-1 space-y-1">
           {pipelines.map((pipeline) => (
             <PipelineItem
               key={pipeline.id}

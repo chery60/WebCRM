@@ -21,10 +21,8 @@ import {
   CheckCircle,
   Briefcase,
   FileTextIcon,
-  LayoutTemplate,
   Lightbulb,
   ListTodo,
-  Zap,
   Target,
   PenTool,
 } from 'lucide-react';
@@ -49,14 +47,6 @@ const commands: SlashCommand[] = [
     command: 'generate-prd',
   },
   {
-    id: 'prd-template',
-    name: 'PRD from Template',
-    description: 'Start with a structured PRD template',
-    category: 'ai-prd',
-    icon: <LayoutTemplate className="h-4 w-4" />,
-    command: 'prd-template',
-  },
-  {
     id: 'generate-features',
     name: 'Generate Features',
     description: 'Extract features from this PRD',
@@ -71,14 +61,6 @@ const commands: SlashCommand[] = [
     category: 'ai-prd',
     icon: <ListTodo className="h-4 w-4" />,
     command: 'generate-tasks',
-  },
-  {
-    id: 'improve-prd',
-    name: 'Improve PRD',
-    description: 'Enhance and fill gaps in PRD',
-    category: 'ai-prd',
-    icon: <Zap className="h-4 w-4" />,
-    command: 'improve-prd',
   },
   {
     id: 'generate-section',

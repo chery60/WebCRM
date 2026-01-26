@@ -19,15 +19,17 @@ import {
   ChevronUp,
   FileText,
   Pencil,
+  LayoutList,
 } from 'lucide-react';
 import { useAISettingsStore, type AIProviderType } from '@/lib/stores/ai-settings-store';
 import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
+import type { TemplateSection } from '@/types';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-interface PRDChatInputProps {
+interface SectionChatInputProps {
   onSend: (message: string) => void;
   onOpenTemplateModal: () => void;
   onOpenEditTemplatesModal: () => void;
@@ -35,6 +37,8 @@ interface PRDChatInputProps {
   onProviderChange: (provider: AIProviderType | null) => void;
   selectedTemplate: string;
   onTemplateChange: (template: string) => void;
+  selectedSection: string;
+  onSectionChange: (section: string) => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -53,7 +57,7 @@ const AI_MODELS: { value: AIProviderType; label: string; description?: string }[
 // COMPONENT
 // ============================================================================
 
-export function PRDChatInput({
+export function SectionChatInput({
   onSend,
   onOpenTemplateModal,
   onOpenEditTemplatesModal,
@@ -61,14 +65,22 @@ export function PRDChatInput({
   onProviderChange,
   selectedTemplate,
   onTemplateChange,
+  selectedSection,
+  onSectionChange,
   disabled = false,
-  placeholder = 'Describe your product or feature...',
-}: PRDChatInputProps) {
+  placeholder = 'Describe what you want in this section...',
+}: SectionChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const { activeProvider } = useAISettingsStore();
   const { templates: customTemplates } = useCustomTemplatesStore();
+
+  // Get sections from the selected template (memoized to avoid dependency issues)
+  const templateSections: TemplateSection[] = React.useMemo(() => {
+    const selectedTemplateData = customTemplates.find(t => t.id === selectedTemplate);
+    return selectedTemplateData?.sections || [];
+  }, [customTemplates, selectedTemplate]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -85,6 +97,26 @@ export function PRDChatInput({
       onProviderChange(activeProvider);
     }
   }, [activeProvider, selectedProvider, onProviderChange]);
+
+  // Set default section when template changes
+  useEffect(() => {
+    if (templateSections.length > 0 && !selectedSection) {
+      const firstSection = templateSections.sort((a, b) => a.order - b.order)[0];
+      if (firstSection) {
+        onSectionChange(firstSection.id);
+      }
+    }
+  }, [templateSections, selectedSection, onSectionChange]);
+
+  // Reset section when template changes
+  useEffect(() => {
+    if (selectedTemplate && templateSections.length > 0) {
+      const firstSection = templateSections.sort((a, b) => a.order - b.order)[0];
+      if (firstSection && !templateSections.some(s => s.id === selectedSection)) {
+        onSectionChange(firstSection.id);
+      }
+    }
+  }, [selectedTemplate, templateSections, selectedSection, onSectionChange]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -122,9 +154,21 @@ export function PRDChatInput({
     return 'Select Template';
   };
 
+  // Get section display name
+  const getSectionDisplayName = (sectionId: string): string => {
+    const section = templateSections.find(s => s.id === sectionId);
+    if (section) {
+      return section.title;
+    }
+    return 'Select Section';
+  };
+
   // Separate starter templates from user-created templates for display
   const starterTemplates = customTemplates.filter(t => t.isStarterTemplate);
   const userTemplates = customTemplates.filter(t => !t.isStarterTemplate);
+
+  // Sort sections by order
+  const sortedSections = [...templateSections].sort((a, b) => a.order - b.order);
 
   return (
     <div className="border-t border-border bg-background p-4 space-y-3 sticky bottom-0 z-10">
@@ -259,9 +303,41 @@ export function PRDChatInput({
             </SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Section Selector */}
+        <Select
+          value={selectedSection}
+          onValueChange={onSectionChange}
+          disabled={sortedSections.length === 0}
+        >
+          <SelectTrigger className="w-auto h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5">
+            <LayoutList className="h-3 w-3 text-primary" />
+            <SelectValue placeholder="Select Section">
+              {getSectionDisplayName(selectedSection)}
+            </SelectValue>
+            <ChevronUp className="h-3 w-3 opacity-50" />
+          </SelectTrigger>
+          <SelectContent>
+            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+              Section to Generate
+            </div>
+            {sortedSections.map((section) => (
+              <SelectItem key={section.id} value={section.id} className="text-sm">
+                <div className="flex flex-col">
+                  <span>{section.title}</span>
+                  {section.description && (
+                    <span className="text-xs text-muted-foreground line-clamp-1">
+                      {section.description}
+                    </span>
+                  )}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
 }
 
-export default PRDChatInput;
+export default SectionChatInput;

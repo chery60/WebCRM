@@ -401,6 +401,7 @@ export interface AIGenerateRequest {
   options?: Record<string, unknown>;
   provider?: AIProviderType;
   model?: string;
+  useWebSearch?: boolean; // Enable web search/grounding for this request
 }
 
 export interface AIGenerateResponse {
@@ -490,14 +491,77 @@ export interface PRDChatSession {
   updatedAt: Date;
 }
 
-// Custom PRD Template (user-created)
+// Template Section with optional description for AI guidance
+export interface TemplateSection {
+  id: string;
+  title: string;
+  order: number;
+  description?: string; // Optional description explaining what this section should contain
+}
+
+// Template Category for organizing templates
+export type TemplateCategory = 
+  | 'saas'           // SaaS & B2B products
+  | 'consumer'       // Consumer apps
+  | 'platform'       // Platforms & marketplaces
+  | 'internal'       // Internal tools
+  | 'api'            // API & developer products
+  | 'custom';        // User-created custom category
+
+// Template category metadata
+export const TEMPLATE_CATEGORIES: { value: TemplateCategory; label: string; icon: string; color: string }[] = [
+  { value: 'saas', label: 'SaaS & B2B', icon: 'building2', color: 'bg-blue-500/10 text-blue-600 border-blue-200' },
+  { value: 'consumer', label: 'Consumer Apps', icon: 'smartphone', color: 'bg-purple-500/10 text-purple-600 border-purple-200' },
+  { value: 'platform', label: 'Platforms', icon: 'network', color: 'bg-green-500/10 text-green-600 border-green-200' },
+  { value: 'internal', label: 'Internal Tools', icon: 'wrench', color: 'bg-gray-500/10 text-gray-600 border-gray-200' },
+  { value: 'api', label: 'API & Dev Tools', icon: 'code', color: 'bg-orange-500/10 text-orange-600 border-orange-200' },
+  { value: 'custom', label: 'Custom', icon: 'file-text', color: 'bg-primary/10 text-primary border-primary/20' },
+];
+
+// Template version for tracking changes
+export interface TemplateVersion {
+  id: string;
+  version: number;
+  name: string;
+  description: string;
+  sections: TemplateSection[];
+  contextPrompt?: string;
+  category?: TemplateCategory; // Category of the template at this version
+  changeDescription?: string; // What changed in this version
+  createdAt: Date;
+}
+
+// Custom PRD Template (user-created or starter templates)
 export interface CustomPRDTemplate {
   id: string;
   name: string;
   description: string;
-  sections: { id: string; title: string; order: number }[];
+  sections: TemplateSection[];
+  isStarterTemplate?: boolean; // True if this is a starter template (can still be edited/deleted)
+  contextPrompt?: string; // AI context prompt for this template type
+  icon?: string; // Icon identifier for the template
+  color?: string; // Color class for the template
+  useCases?: string[]; // Example use cases for this template
+  category?: TemplateCategory; // Category for organizing templates
+  version?: number; // Current version number
+  versionHistory?: TemplateVersion[]; // History of previous versions
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Export format for sharing templates
+export interface TemplateExportFormat {
+  formatVersion: '1.0'; // For future compatibility
+  exportedAt: Date;
+  templates: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt' | 'versionHistory'>[];
+}
+
+// Import result
+export interface TemplateImportResult {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 // Task types

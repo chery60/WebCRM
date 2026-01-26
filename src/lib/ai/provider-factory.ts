@@ -13,21 +13,22 @@ export interface ProviderFactoryConfig {
   provider: AIProviderType;
   apiKey: string;
   model?: string;
+  webSearchEnabled?: boolean;
 }
 
 /**
  * Creates an AI provider instance based on the configuration
  */
 export function createProvider(config: ProviderFactoryConfig): AIServiceProvider {
-  const { provider, apiKey, model } = config;
+  const { provider, apiKey, model, webSearchEnabled } = config;
 
   switch (provider) {
     case 'openai':
-      return new OpenAIProvider({ apiKey, model });
+      return new OpenAIProvider({ apiKey, model, webSearchEnabled });
     case 'anthropic':
       return new AnthropicProvider({ apiKey, model });
     case 'gemini':
-      return new GeminiProvider({ apiKey, model });
+      return new GeminiProvider({ apiKey, model, webSearchEnabled });
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
@@ -48,6 +49,7 @@ export function createProviderFromSettings(providerType: AIProviderType): AIServ
     provider: providerType,
     apiKey: config.apiKey,
     model: config.defaultModel,
+    webSearchEnabled: config.webSearchEnabled,
   });
 }
 
@@ -113,6 +115,7 @@ export function getProvider(): AIServiceProvider {
       provider: first.type,
       apiKey: first.config.apiKey,
       model: first.config.defaultModel,
+      webSearchEnabled: first.config.webSearchEnabled,
     });
   }
 

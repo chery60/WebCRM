@@ -5,6 +5,7 @@ import { getSystemPromptForType } from '../prompts';
 export interface GeminiConfig {
   apiKey: string;
   model?: string;
+  webSearchEnabled?: boolean;
 }
 
 interface GeminiContent {
@@ -29,10 +30,19 @@ interface GeminiResponse {
   modelVersion?: string;
 }
 
+// Generation types that benefit from web search (market research, competitor analysis, etc.)
+const WEB_SEARCH_ENABLED_TYPES: AIGenerateRequest['type'][] = [
+  'generate-prd',
+  'generate-prd-section',
+  'improve-prd',
+  'generate-features',
+];
+
 export class GeminiProvider implements AIServiceProvider {
   name = 'Google Gemini';
   private apiKey: string;
   private model: string;
+  private webSearchEnabled: boolean;
   // Use v1beta API as confirmed working by availability check
   private baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -42,6 +52,7 @@ export class GeminiProvider implements AIServiceProvider {
     let model = config.model || 'gemini-1.5-flash';
 
     this.model = model;
+    this.webSearchEnabled = config.webSearchEnabled ?? true; // Default to enabled for Gemini
   }
 
   async isAvailable(): Promise<boolean> {
@@ -95,7 +106,34 @@ export class GeminiProvider implements AIServiceProvider {
       },
     ];
 
+    // Determine if web search should be used for this request
+    const shouldUseWebSearch = this.shouldEnableWebSearch(request);
+    
     const generate = async (model: string) => {
+      // Build the request body
+      const requestBody: Record<string, unknown> = {
+        contents: finalContents,
+        generationConfig: {
+          temperature: this.getTemperature(request.type),
+          maxOutputTokens: this.getMaxTokens(request.type),
+          topP: 0.95,
+          topK: 40,
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        ],
+      };
+
+      // Add Google Search Grounding tool when enabled for PRD-related generation
+      if (shouldUseWebSearch) {
+        requestBody.tools = [{
+          googleSearchRetrieval: {}
+        }];
+      }
+
       const response = await fetch(
         `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`,
         {
@@ -103,21 +141,7 @@ export class GeminiProvider implements AIServiceProvider {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            contents: finalContents,
-            generationConfig: {
-              temperature: this.getTemperature(request.type),
-              maxOutputTokens: this.getMaxTokens(request.type),
-              topP: 0.95,
-              topK: 40,
-            },
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-            ],
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
@@ -210,5 +234,32 @@ export class GeminiProvider implements AIServiceProvider {
       'generate-canvas': 8192,
     };
     return tokens[type] ?? 2000;
+  }
+
+  /**
+   * Determines if web search (Google Search Grounding) should be enabled for this request.
+   * Web search is enabled when:
+   * 1. The provider has web search enabled (this.webSearchEnabled)
+   * 2. The request type is one that benefits from web search (PRD generation, features, etc.)
+   * 3. The request doesn't explicitly disable web search (request.useWebSearch !== false)
+   */
+  private shouldEnableWebSearch(request: AIGenerateRequest): boolean {
+    // Check if web search is explicitly disabled in the request
+    if (request.useWebSearch === false) {
+      return false;
+    }
+
+    // Check if web search is enabled for this provider
+    if (!this.webSearchEnabled) {
+      return false;
+    }
+
+    // Check if web search is explicitly enabled in the request (overrides type check)
+    if (request.useWebSearch === true) {
+      return true;
+    }
+
+    // Enable web search for PRD-related generation types
+    return WEB_SEARCH_ENABLED_TYPES.includes(request.type);
   }
 }

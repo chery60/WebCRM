@@ -35,6 +35,7 @@ export interface AIProviderConfig {
   isEnabled: boolean;
   lastTested: string | null;
   testStatus: 'untested' | 'success' | 'failed';
+  webSearchEnabled: boolean; // Enable web search/grounding for this provider
 }
 
 // Full AI Settings State
@@ -51,9 +52,11 @@ export interface AISettingsState {
   setEnabled: (provider: AIProviderType, enabled: boolean) => void;
   setActiveProvider: (provider: AIProviderType | null) => void;
   setTestStatus: (provider: AIProviderType, status: 'untested' | 'success' | 'failed') => void;
+  setWebSearchEnabled: (provider: AIProviderType, enabled: boolean) => void;
   getActiveProviderConfig: () => AIProviderConfig | null;
   getAvailableProviders: () => AIProviderType[];
   hasConfiguredProvider: () => boolean;
+  isWebSearchEnabled: (provider?: AIProviderType) => boolean;
   clearApiKey: (provider: AIProviderType) => void;
   resetSettings: () => void;
 }
@@ -65,14 +68,15 @@ const defaultProviderConfig: AIProviderConfig = {
   isEnabled: false,
   lastTested: null,
   testStatus: 'untested',
+  webSearchEnabled: false,
 };
 
-// Initial state
+// Initial state - Gemini has web search enabled by default (Google Search Grounding)
 const initialState = {
   providers: {
-    openai: { ...defaultProviderConfig, defaultModel: 'gpt-4o' },
-    anthropic: { ...defaultProviderConfig, defaultModel: 'claude-sonnet-4-20250514' },
-    gemini: { ...defaultProviderConfig, defaultModel: 'gemini-1.5-flash' },
+    openai: { ...defaultProviderConfig, defaultModel: 'gpt-4o', webSearchEnabled: false },
+    anthropic: { ...defaultProviderConfig, defaultModel: 'claude-sonnet-4-20250514', webSearchEnabled: false },
+    gemini: { ...defaultProviderConfig, defaultModel: 'gemini-1.5-flash', webSearchEnabled: true }, // Gemini has native Google Search
   },
   activeProvider: null as AIProviderType | null,
 };
@@ -153,6 +157,18 @@ export const useAISettingsStore = create<AISettingsState>()(
         }));
       },
 
+      setWebSearchEnabled: (provider, enabled) => {
+        set((state) => ({
+          providers: {
+            ...state.providers,
+            [provider]: {
+              ...state.providers[provider],
+              webSearchEnabled: enabled,
+            },
+          },
+        }));
+      },
+
       getActiveProviderConfig: () => {
         const state = get();
         if (!state.activeProvider) return null;
@@ -174,6 +190,14 @@ export const useAISettingsStore = create<AISettingsState>()(
           const config = state.providers[provider];
           return config.isEnabled && config.apiKey.length > 0;
         });
+      },
+
+      isWebSearchEnabled: (provider) => {
+        const state = get();
+        // If no provider specified, check the active provider
+        const targetProvider = provider || state.activeProvider;
+        if (!targetProvider) return false;
+        return state.providers[targetProvider]?.webSearchEnabled ?? false;
       },
 
       clearApiKey: (provider) => {

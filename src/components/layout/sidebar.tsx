@@ -344,7 +344,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
         <TooltipTrigger asChild>
           <Link href="/projects">
             <div className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
+              'flex items-center justify-center rounded-lg py-2 text-sm transition-colors w-full',
               isPRDActive
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -377,7 +377,8 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-2 pt-1 space-y-0.5">
+        {/* pl-8 = 32px aligns child text with parent text (12px padding + 20px icon = 32px) */}
+        <CollapsibleContent className="pl-8 pt-1 space-y-0.5">
           {/* All PRDs link */}
           <Link
             href="/notes"
@@ -472,8 +473,9 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                 </ContextMenu>
 
                 {/* Expanded project content */}
+                {/* pl-[26px] aligns level 3 text with level 2 text (12px padding + 14px chevron + gap) */}
                 {isExpanded && (
-                  <div className="pl-5 space-y-0.5 mt-0.5">
+                  <div className="pl-[26px] space-y-0.5 mt-0.5">
                     {/* Project Settings */}
                     <Link
                       href={`/projects/${project.id}/settings`}
@@ -715,7 +717,8 @@ function NavItemComponent({
   const content = (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
+        'flex items-center rounded-lg py-2 text-sm transition-colors w-full',
+        collapsed ? 'justify-center' : 'gap-3 px-3',
         isActive && !item.children
           ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -814,7 +817,7 @@ export function Sidebar() {
           isCollapsed ? 'w-[68px]' : 'w-[300px]'
         )}
         style={{
-          padding: '9px 9px 0px',
+          padding: '0px',
           gap: '1px',
           fontFamily: 'var(--font-sans)',
           fontSize: '16px',
@@ -827,7 +830,10 @@ export function Sidebar() {
         }}
       >
         {/* Logo and collapse button */}
-        <div className="flex h-16 items-center justify-between px-4">
+        <div className={cn(
+          "flex h-16 items-center justify-between",
+          isCollapsed ? "px-0 justify-center" : "pl-4 pr-3"
+        )}>
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <span className="text-lg font-bold text-primary-foreground">V</span>
@@ -836,11 +842,10 @@ export function Sidebar() {
               <span className="text-lg font-semibold text-sidebar-foreground truncate">Venture</span>
             )}
           </Link>
-
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 px-3 pb-20">
+        <ScrollArea className="flex-1 pl-4 pr-3 pb-20">
           <nav className="space-y-1 py-2">
             {/* Notes with Projects */}
             {features.notes && <PRDNavSection collapsed={isCollapsed} />}

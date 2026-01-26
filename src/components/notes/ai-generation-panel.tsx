@@ -36,11 +36,11 @@ import {
 } from 'lucide-react';
 import { useAIService } from '@/lib/ai/use-ai-service';
 import { useAISettingsStore, getProviderDisplayName, type AIProviderType } from '@/lib/stores/ai-settings-store';
+import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
 import { prdGenerator } from '@/lib/ai/services/prd-generator';
 import { featureGenerator } from '@/lib/ai/services/feature-generator';
 import { taskGenerator } from '@/lib/ai/services/task-generator';
-import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
-import { PRD_TEMPLATES } from '@/lib/ai/prompts/prd-templates';
+import type { GeneratedFeature, GeneratedTask } from '@/types';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -105,7 +105,7 @@ export function AIGenerationPanel({
 }: AIGenerationPanelProps) {
   // State - all initialized to input/empty state
   const [prompt, setPrompt] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<PRDTemplateType>('custom');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('starter-custom');
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType | undefined>();
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<string>('');
@@ -120,6 +120,12 @@ export function AIGenerationPanel({
   // Hooks
   const { availableProviders, activeProvider, hasProvider } = useAIService();
   const { providers } = useAISettingsStore();
+  const { templates, seedStarterTemplates } = useCustomTemplatesStore();
+  
+  // Seed starter templates on first load
+  useEffect(() => {
+    seedStarterTemplates();
+  }, [seedStarterTemplates]);
 
   // Get the provider to use
   const effectiveProvider = selectedProvider || activeProvider || undefined;
@@ -261,9 +267,12 @@ export function AIGenerationPanel({
           break;
         }
         case 'prd-template': {
+          // Get template from custom templates store
+          const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
           const result = await prdGenerator.generateFullPRD({
             description: prompt,
-            templateType: selectedTemplate,
+            templateType: selectedTemplateId,
+            customTemplate: selectedTemplate, // Pass the full template for sections and context
             provider: effectiveProvider,
             projectInstructions,
           });
@@ -391,7 +400,7 @@ export function AIGenerationPanel({
     } finally {
       setIsGenerating(false);
     }
-  }, [mode, prompt, currentContent, selectedTemplate, effectiveProvider, hasProvider, config.requiresContent]);
+  }, [mode, prompt, currentContent, selectedTemplateId, templates, effectiveProvider, hasProvider, config.requiresContent]);
 
   // Handle applying generated content
   const handleApply = useCallback(() => {
@@ -495,15 +504,15 @@ export function AIGenerationPanel({
                   <div className="space-y-2">
                     <Label>Template Type</Label>
                     <Select
-                      value={selectedTemplate}
-                      onValueChange={(v) => setSelectedTemplate(v as PRDTemplateType)}
+                      value={selectedTemplateId}
+                      onValueChange={(v) => setSelectedTemplateId(v)}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select a template" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(PRD_TEMPLATES).map(([key, template]) => (
-                          <SelectItem key={key} value={key}>
+                        {templates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
                             <div>
                               <div className="font-medium">{template.name}</div>
                               <div className="text-xs text-muted-foreground">{template.description}</div>

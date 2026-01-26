@@ -31,6 +31,9 @@ function NotesContent() {
     tags: filter.tags.length > 0 ? filter.tags : undefined,
     search: filter.search || undefined,
     projectId,
+    // When no projectId is specified (All PRDs page), include all projects
+    // Otherwise, only show PRDs for the specific project
+    includeAllProjects: !projectId,
   };
   
   const { data: notes = [], isLoading } = useNotes(notesFilter, sort);
