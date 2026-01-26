@@ -818,24 +818,28 @@ export default function NoteDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Skeleton className="h-6 w-6" />
-          <Skeleton className="h-6 w-20" />
+      <div className="flex flex-col h-full bg-white">
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-[768px] mx-auto w-full px-6 py-6">
+            <Skeleton className="h-4 w-24 mb-6" />
+            <Skeleton className="h-7 w-2/3 mb-2" />
+            <Skeleton className="h-4 w-48 mb-4" />
+            <div className="rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-[350px] w-full" />
+            </div>
+          </div>
         </div>
-        <Skeleton className="h-8 w-1/2 mb-2" />
-        <Skeleton className="h-4 w-32 mb-6" />
-        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
 
   if (!note) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-xl font-semibold mb-2">Note not found</h2>
-        <p className="text-muted-foreground mb-4">This note may have been deleted.</p>
-        <Button asChild>
+      <div className="flex flex-col h-full bg-white items-center justify-center">
+        <h2 className="text-xl font-semibold mb-2 text-note-text">Note not found</h2>
+        <p className="text-note-text-muted mb-4">This note may have been deleted.</p>
+        <Button asChild className="bg-note-text text-white hover:bg-note-text/90">
           <Link href="/notes">Back to Notes</Link>
         </Button>
       </div>
@@ -843,169 +847,185 @@ export default function NoteDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Section Header */}
-      <div className="flex h-[69px] items-center justify-between px-8 border-b border-border bg-background flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" asChild>
-            <Link href="/notes">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-medium">Notes</h1>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {isSaving ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Saving...</span>
-            </div>
-          ) : lastSavedAt ? (
-            <div className="flex items-center gap-1.5 text-muted-foreground/80">
-              <Check className="h-3.5 w-3.5" />
-              <span>Saved</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full bg-white text-note-text">
       <div className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto w-full">
+        <div className="max-w-[768px] mx-auto w-full px-6 py-6">
+          {/* Floating Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <Link
+              href="/notes"
+              className="inline-flex items-center gap-1 text-sm font-medium text-note-text-muted hover:text-note-text transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>All notes</span>
+            </Link>
+            <div className="flex items-center gap-2 text-xs text-note-text-muted">
+              {isSaving ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              ) : lastSavedAt ? (
+                <div className="flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Saved</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
           {/* Title and Meta Block */}
-          <div className="flex items-start justify-between px-8 py-6 border-b border-border gap-6">
-            <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div className="flex-1 flex flex-col gap-0.5">
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Product Team Meeting"
-                className="text-xl md:text-xl font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent placeholder:text-muted-foreground/50"
+                placeholder="Untitled Note"
+                className="text-xl font-semibold border-0 p-0 h-auto focus-visible:ring-0 bg-transparent text-note-text placeholder:text-note-text-muted leading-7"
               />
-              <p className="text-[14px] leading-[150%] text-muted-foreground">
-                {format(new Date(note.createdAt), 'MMM d, yyyy HH:mm')}
-              </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Project Selector */}
-              <Select
-                value={projectId || 'none'}
-                onValueChange={(val) => {
-                  if (val === 'create-new') {
-                    setShowCreateProjectDialog(true);
-                  } else {
-                    setProjectId(val === 'none' ? undefined : val);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-[160px] h-8">
-                  <FolderOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="No Project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Project</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
+            {/* Close/More button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-note-text-muted hover:text-note-text hover:bg-note-border rounded-md">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {/* View mode toggle - conditional based on current mode */}
+                {viewMode === 'preview' ? (
+                  <DropdownMenuItem onClick={handleViewMarkup}>
+                    <Code className="h-4 w-4 mr-2" />
+                    View Markup
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={handleViewPreview}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Preview
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
+                  <FolderInput className="h-4 w-4 mr-2" />
+                  Move to
+                </DropdownMenuItem>
+                <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                <DropdownMenuItem>Export</DropdownMenuItem>
+                <DropdownMenuItem>Share</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Metadata row */}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-note-text-muted mb-3">
+            <span>{format(new Date(note.createdAt), 'MMM d, yyyy')}</span>
+            <span>•</span>
+            <span>{format(new Date(note.updatedAt), 'h:mm a')}</span>
+            {projectId && currentProject && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <FolderOpen className="h-3 w-3" />
+                  {currentProject.name}
+                </span>
+              </>
+            )}
+            {tags.length > 0 && (
+              <>
+                <span>•</span>
+                <div className="flex items-center gap-1.5">
+                  {tags.map((tag) => (
+                    <TagBadge
+                      key={tag}
+                      name={tag}
+                      color={getTagColor(tag)}
+                    />
                   ))}
-                  <SelectItem value="create-new" className="text-primary">
-                    <span className="flex items-center gap-2">
-                      <Plus className="h-3.5 w-3.5" />
-                      Create New Project
-                    </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Quick Actions Bar */}
+          <div className="flex items-center gap-2 mb-4">
+            {/* Project Selector */}
+            <Select
+              value={projectId || 'none'}
+              onValueChange={(val) => {
+                if (val === 'create-new') {
+                  setShowCreateProjectDialog(true);
+                } else {
+                  setProjectId(val === 'none' ? undefined : val);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-7 text-xs bg-note-card border-note-border text-note-text-secondary">
+                <FolderOpen className="h-3 w-3 mr-1.5 text-note-text-muted" />
+                <SelectValue placeholder="No Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Project</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
                   </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Tags */}
-              <div className="flex items-center gap-2">
-                {tags.map((tag) => (
-                  <TagBadge
-                    key={tag}
-                    name={tag}
-                    color={getTagColor(tag)}
-                  />
                 ))}
-              </div>
+                <SelectItem value="create-new" className="text-primary">
+                  <span className="flex items-center gap-2">
+                    <Plus className="h-3 w-3" />
+                    Create New
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
 
-              {/* Add Tag Button */}
-              <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full">
-                    <Tag className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-2" align="end">
-                  <div className="space-y-1">
-                    {allTags
-                      .filter((t) => !tags.includes(t.name))
-                      .map((tag) => (
-                        <button
-                          key={tag.id}
-                          onClick={() => handleAddTag(tag.name)}
-                          className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
-                        >
-                          <TagBadge name={tag.name} color={tag.color} />
-                        </button>
-                      ))}
-                    {allTags.filter((t) => !tags.includes(t.name)).length === 0 && (
-                      <p className="text-xs text-muted-foreground px-2 py-1">
-                        All tags added
-                      </p>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              {/* More options */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {/* View mode toggle - conditional based on current mode */}
-                  {viewMode === 'preview' ? (
-                    <DropdownMenuItem onClick={handleViewMarkup}>
-                      <Code className="h-4 w-4 mr-2" />
-                      View Markup
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={handleViewPreview}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Preview
-                    </DropdownMenuItem>
+            {/* Add Tag Button */}
+            <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs bg-note-card border-note-border text-note-text-secondary hover:text-note-text">
+                  <Tag className="h-3 w-3 mr-1.5" />
+                  Add Tag
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
+                  {allTags
+                    .filter((t) => !tags.includes(t.name))
+                    .map((tag) => (
+                      <button
+                        key={tag.id}
+                        onClick={() => handleAddTag(tag.name)}
+                        className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
+                      >
+                        <TagBadge name={tag.name} color={tag.color} />
+                      </button>
+                    ))}
+                  {allTags.filter((t) => !tags.includes(t.name)).length === 0 && (
+                    <p className="text-xs text-muted-foreground px-2 py-1">
+                      All tags added
+                    </p>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
-                    <FolderInput className="h-4 w-4 mr-2" />
-                    Move to
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                  <DropdownMenuItem>Export</DropdownMenuItem>
-                  <DropdownMenuItem>Share</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Editor - conditionally render based on view mode */}
-          <div className="px-8 py-6">
+          <div className="mb-4">
             {viewMode === 'preview' ? (
               <NoteEditor
                 content={content}
                 onChange={setContent}
                 placeholder="Start typing, or press '/' for commands..."
-                className="min-h-[500px]"
+                className="min-h-[400px] bg-note-card rounded-lg border-[0.5px] border-note-border shadow-[var(--note-shadow)]"
                 savedFeatures={generatedFeatures}
                 projectInstructions={currentProject?.instructions}
                 onFeaturesGenerated={handleFeaturesGenerated}
@@ -1013,27 +1033,27 @@ export default function NoteDetailPage() {
               />
             ) : (
               /* Markup mode - show raw markdown in a textarea */
-              <div className="relative border rounded-lg bg-card min-h-[500px]">
-                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Code className="h-4 w-4" />
+              <div className="relative rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] min-h-[400px] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-note-border bg-white/50">
+                  <div className="flex items-center gap-2 text-xs text-note-text-muted">
+                    <Code className="h-3.5 w-3.5" />
                     <span>Markup View</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleViewPreview}
-                    className="h-7 text-xs"
+                    className="h-6 text-xs px-2 text-note-text-muted hover:text-note-text"
                   >
-                    <Eye className="h-3.5 w-3.5 mr-1.5" />
-                    Switch to Preview
+                    <Eye className="h-3 w-3 mr-1" />
+                    Preview
                   </Button>
                 </div>
                 <textarea
                   value={markupContent}
                   onChange={(e) => handleMarkupChange(e.target.value)}
                   placeholder="# Heading 1&#10;## Heading 2&#10;### Heading 3&#10;&#10;Regular paragraph text with **bold** and *italic*.&#10;&#10;* Bullet point 1&#10;* Bullet point 2&#10;&#10;1. Numbered item 1&#10;2. Numbered item 2"
-                  className="w-full h-[calc(100%-48px)] min-h-[452px] p-4 bg-transparent resize-none focus:outline-none font-mono text-sm leading-relaxed"
+                  className="w-full min-h-[352px] p-4 bg-transparent resize-none focus:outline-none font-mono text-xs leading-relaxed text-note-text"
                   spellCheck={false}
                 />
               </div>
@@ -1043,7 +1063,7 @@ export default function NoteDetailPage() {
           {/* PRD Canvas - Whiteboard for visual planning */}
           {/* IMPORTANT: Only render PRDCanvas after note is loaded to ensure initialData is available
               The PRDCanvas component memoizes initialData on first render, so we must wait for note data */}
-          <div className="px-8 pb-6">
+          <div className="mb-4">
             {isNoteLoaded ? (
               <PRDCanvas
                 key={`canvas-${noteId}`} // Force remount if noteId changes
@@ -1058,34 +1078,36 @@ export default function NoteDetailPage() {
                 generatingType={canvasGeneratingType}
               />
             ) : (
-              <div className="border rounded-lg bg-card overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+              <div className="rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-note-border bg-white/50">
                   <div className="flex items-center gap-2">
                     <Skeleton className="h-4 w-4" />
-                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
                   </div>
                 </div>
-                <div className="h-[400px] flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="h-[300px] flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-note-text-muted" />
                 </div>
               </div>
             )}
           </div>
 
           {/* Generated Items Section */}
-          <GeneratedItemsSection
-            features={generatedFeatures}
-            tasks={generatedTasks}
-            onFeaturesChange={setGeneratedFeatures}
-            onTasksChange={setGeneratedTasks}
-            onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
-            onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
-            onOpenAITaskGeneration={handleOpenAITaskGeneration}
-            onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
-            onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
-            onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
-            alwaysShow={true}
-          />
+          <div className="mb-4">
+            <GeneratedItemsSection
+              features={generatedFeatures}
+              tasks={generatedTasks}
+              onFeaturesChange={setGeneratedFeatures}
+              onTasksChange={setGeneratedTasks}
+              onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
+              onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
+              onOpenAITaskGeneration={handleOpenAITaskGeneration}
+              onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
+              onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
+              onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
+              alwaysShow={true}
+            />
+          </div>
         </div>
       </div>
 

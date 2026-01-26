@@ -498,9 +498,9 @@ export function NoteEditor({
   }, [editor]);
 
   return (
-    <div className={cn('relative border rounded-lg bg-card', className)}>
+    <div className={cn('relative rounded-lg overflow-hidden', className)}>
       <EditorToolbar editor={editor} />
-      <div className="relative">
+      <div className="relative bg-note-card">
         <EditorContent editor={editor} />
 
         {/* AI Processing Overlay */}

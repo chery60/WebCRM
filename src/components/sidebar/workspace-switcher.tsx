@@ -92,7 +92,7 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
 
     if (collapsed) {
         return (
-            <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: '#EBEBEB' }}>
+            <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: 'rgb(250,249,245)' }}>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex w-full items-center justify-center rounded-lg p-2 hover:bg-sidebar-accent">
@@ -126,7 +126,7 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
     }
 
     return (
-        <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: '#EBEBEB' }}>
+        <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: 'rgb(250,249,245)' }}>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent">

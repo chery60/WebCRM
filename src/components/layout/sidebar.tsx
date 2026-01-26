@@ -488,16 +488,6 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                       <span>Settings</span>
                     </Link>
 
-                    {/* New PRD button */}
-                    <button
-                      onClick={() => handleCreatePRD(project.id)}
-                      disabled={creatingPRDForProject === project.id}
-                      className="flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors w-full text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:opacity-50"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>{creatingPRDForProject === project.id ? 'Creating...' : 'New PRD'}</span>
-                    </button>
-
                     {/* PRDs list */}
                     {projectPRDs.map((prd) => {
                       const isPRDActive = pathname === `/notes/${prd.id}`;
@@ -517,6 +507,16 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                         </Link>
                       );
                     })}
+
+                    {/* New PRD button - at bottom of list */}
+                    <button
+                      onClick={() => handleCreatePRD(project.id)}
+                      disabled={creatingPRDForProject === project.id}
+                      className="flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors w-full text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:opacity-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{creatingPRDForProject === project.id ? 'Creating...' : 'New PRD'}</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -823,20 +823,20 @@ export function Sidebar() {
           color: 'rgb(52, 50, 45)',
           border: '0px solid rgb(229, 231, 235)',
           textAlign: 'start',
-          backgroundColor: '#EBEBEB',
+          backgroundColor: 'rgb(250,249,245)',
         }}
       >
         {/* Logo and collapse button */}
         <div className="flex h-16 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">V</span>
-            </div>
-            {!isCollapsed && (
-              <span className="text-lg font-semibold text-sidebar-foreground truncate">Venture</span>
+            {isCollapsed ? (
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                <span className="text-lg font-bold text-primary-foreground">V</span>
+              </div>
+            ) : (
+              <img src="/ventureai.svg" alt="Venture AI" className="h-5" />
             )}
           </Link>
-
         </div>
 
         {/* Navigation */}

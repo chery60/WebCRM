@@ -59,6 +59,14 @@
   --color-tag-personal-foreground: var(--tag-personal-foreground);
   --color-tag-badge: var(--tag-badge);
   --color-tag-badge-foreground: var(--tag-badge-foreground);
+  
+  /* Note screen design tokens */
+  --color-note-bg: var(--note-bg);
+  --color-note-text: var(--note-text);
+  --color-note-text-secondary: var(--note-text-secondary);
+  --color-note-text-muted: var(--note-text-muted);
+  --color-note-card: var(--note-card);
+  --color-note-border: var(--note-border);
 }
 
 :root {
@@ -96,6 +104,16 @@
   --sidebar-accent-foreground: oklch(0.29 0.012 75);
   --sidebar-border: oklch(0.92 0.005 250);
   --sidebar-ring: oklch(0.17 0.002 80);
+  
+  /* Notes/Document warm design tokens */
+  --note-bg: oklch(0.983 0.008 85); /* rgb(250, 249, 245) - warm off-white */
+  --note-text: oklch(0.16 0.005 75); /* rgb(20, 20, 19) - deep charcoal */
+  --note-text-secondary: oklch(0.32 0.004 75); /* rgb(61, 61, 58) - medium gray */
+  --note-text-muted: oklch(0.5 0.003 85); /* rgb(115, 114, 108) - light gray */
+  --note-card: oklch(1 0 0); /* pure white */
+  --note-border: oklch(0.2 0.004 75 / 15%); /* rgba(31, 30, 29, 0.15) - subtle border */
+  --note-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); /* subtle shadow */
+  --note-shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   
   /* Tag colors - matching Figma design */
   --tag-weekly: oklch(0.95 0.06 85);
@@ -147,6 +165,16 @@
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.75 0.004 85);
   
+  /* Notes/Document warm design tokens - dark mode */
+  --note-bg: oklch(0.19 0.003 80); /* dark warm background */
+  --note-text: oklch(0.965 0.001 90); /* light text */
+  --note-text-secondary: oklch(0.75 0.004 85); /* secondary text */
+  --note-text-muted: oklch(0.6 0.004 85); /* muted text */
+  --note-card: oklch(0.24 0.004 80); /* dark card */
+  --note-border: oklch(1 0 0 / 12%); /* subtle border */
+  --note-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.1);
+  --note-shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.2);
+  
   /* Tag colors - dark mode */
   --tag-weekly: oklch(0.35 0.08 85);
   --tag-weekly-foreground: oklch(0.85 0.1 85);
@@ -175,12 +203,17 @@
 .tiptap {
   outline: none;
   min-height: 300px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--note-text);
+  padding: 16px;
 }
 
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: var(--muted-foreground);
+  color: var(--note-text-muted);
   pointer-events: none;
   height: 0;
 }

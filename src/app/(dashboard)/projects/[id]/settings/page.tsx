@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +20,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, FileText, Trash2, ExternalLink } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ArrowLeft, FileText, Trash2, MoreVertical, Star, Plus, Clock, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -40,6 +55,9 @@ export default function ProjectSettingsPage() {
   const [instructions, setInstructions] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   // Initialize form with project data
   useEffect(() => {
@@ -89,6 +107,26 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  const handleRename = async () => {
+    if (!renameValue.trim()) return;
+    try {
+      await updateProject.mutateAsync({
+        id: projectId,
+        data: { name: renameValue.trim() },
+      });
+      setName(renameValue.trim());
+      toast.success('Project renamed');
+      setShowRenameDialog(false);
+    } catch (error) {
+      toast.error('Failed to rename project');
+    }
+  };
+
+  const openRenameDialog = () => {
+    setRenameValue(name || project?.name || '');
+    setShowRenameDialog(true);
+  };
+
   const handleDeletePRD = async (prdId: string, prdTitle: string) => {
     try {
       await deleteNote.mutateAsync(prdId);
@@ -124,175 +162,218 @@ export default function ProjectSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/notes">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">Project Settings</h1>
-          <p className="text-muted-foreground text-sm">Manage your project configuration and PRDs</p>
-        </div>
-        {hasChanges && (
-          <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
-        )}
-      </div>
+    <div className="flex flex-col h-full bg-background">
+      {/* Main Content */}
+      <main className="flex-1 overflow-hidden">
+        <div className="max-w-[1280px] mx-auto px-8 py-6 grid grid-cols-12 gap-6 h-full">
+          {/* Left Content Area */}
+          <div className="col-span-7 flex flex-col gap-4 min-h-0">
+            {/* Back Navigation */}
+            <Link
+              href="/notes"
+              className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-fit"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>All projects</span>
+            </Link>
 
-      <div className="space-y-6">
-        {/* Project Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Details</CardTitle>
-            <CardDescription>Basic information about your project</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Project Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter project name"
-              />
+            {/* Project Header */}
+            <div className="space-y-3 mb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-2xl font-medium text-muted-foreground">{name || project.name}</h1>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {project.description || 'Help with technical documentation or PRD for a new architecture, platform we are trying to build.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={openRenameDialog}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setShowDeleteDialog(true)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Star className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="instructions">
-                Instructions <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Textarea
-                id="instructions"
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="Add instructions for AI when generating PRDs in this project..."
-                className="min-h-[120px] resize-none"
-              />
-              <p className="text-xs text-muted-foreground">
-                These instructions will be used by AI when generating or improving PRDs in this project.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* PRDs List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>PRDs</CardTitle>
-            <CardDescription>
-              {prds.length === 0
-                ? 'No PRDs in this project yet'
-                : `${prds.length} PRD${prds.length === 1 ? '' : 's'} in this project`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {prdsLoading ? (
-              <div className="animate-pulse space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-12 bg-muted rounded" />
-                ))}
+            {/* Reply Input Area */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Textarea
+                  placeholder="Reply..."
+                  className="h-[122px] pr-24 resize-none"
+                  disabled
+                />
+                <div className="absolute right-2 bottom-2 flex items-center gap-2">
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Clock className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            ) : prds.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No PRDs yet</p>
-                <p className="text-sm">Create your first PRD using the sidebar</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {prds.map((prd) => (
-                  <div
-                    key={prd.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="min-w-0">
+            </div>
+
+            {/* PRDs List */}
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="space-y-1 pr-4">
+                {prdsLoading ? (
+                  <div className="animate-pulse space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 bg-muted rounded" />
+                    ))}
+                  </div>
+                ) : prds.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No PRDs yet</p>
+                    <p className="text-sm">Create your first PRD using the sidebar</p>
+                  </div>
+                ) : (
+                  <ul className="space-y-0">
+                    {prds.map((prd) => (
+                      <li key={prd.id}>
                         <Link
                           href={`/notes/${prd.id}`}
-                          className="font-medium hover:underline truncate block"
+                          className="block px-0 py-3 rounded-lg hover:bg-muted/30 transition-colors group border-b border-border/50 last:border-b-0"
                         >
-                          {prd.title || 'Untitled'}
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-foreground mb-1">
+                                {prd.title || 'Untitled'}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Last message {format(new Date(prd.updatedAt), 'MMM d, yyyy')}
+                              </p>
+                            </div>
+                          </div>
                         </Link>
-                        <p className="text-xs text-muted-foreground">
-                          Updated {format(new Date(prd.updatedAt), 'MMM d, yyyy')}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/notes/${prd.id}`}>
-                          <ExternalLink className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete PRD</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{prd.title || 'Untitled'}"? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeletePRD(prd.id, prd.title || 'Untitled')}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                ))}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </ScrollArea>
+          </div>
 
-        {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>Irreversible actions for this project</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">Delete Project</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete "{project.name}"? All PRDs in this project will be permanently deleted. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteProject}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Delete Project
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Right Sidebar */}
+          <div className="col-span-5 pl-12">
+            <div className="space-y-6">
+              {/* Instructions Section */}
+              <div className="rounded-2xl border bg-white shadow-sm">
+                <div className="flex items-center justify-between px-6 pt-6 pb-4">
+                  <h2 className="text-sm font-medium">Instructions</h2>
+                </div>
+                <Separator className="opacity-15" />
+                <div className="px-6 py-6">
+                  <Textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="Add instructions to tailor Claude's responses."
+                    className="min-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 p-0 text-sm"
+                    onBlur={() => {
+                      if (hasChanges) {
+                        handleSave();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Files Section */}
+              <div className="rounded-2xl border bg-white shadow-sm">
+                <div className="flex items-center justify-between px-6 pt-6 pb-4">
+                  <h2 className="text-sm font-medium">Files</h2>
+                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Separator className="opacity-15" />
+                <div className="px-6 py-6">
+                  <div className="text-sm text-muted-foreground text-center py-8">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No files yet</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Rename Dialog */}
+      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="rename-input" className="sr-only">Project name</Label>
+            <Input
+              id="rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Project name"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleRename();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRenameDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRename} disabled={!renameValue.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{name || project.name}"? All PRDs in this project will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
