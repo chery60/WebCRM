@@ -1072,10 +1072,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     return (
       <div
         ref={containerRef}
-        className="rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden"
+        className="bg-transparent overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-note-border bg-note-bg/50">
+        <div className="flex items-center justify-between px-0 py-2.5 mb-4">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-note-text-muted" />
             <span className="font-medium text-sm text-note-text">PRD Canvas</span>
@@ -1126,7 +1126,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
         {/* Mini Preview - Static placeholder instead of rendering Excalidraw */}
         <div
-          className="h-24 bg-note-card cursor-pointer relative overflow-hidden"
+          className="h-24 bg-transparent cursor-pointer relative overflow-hidden"
           onClick={() => setIsCollapsed(false)}
         >
           <div className="h-full flex items-center justify-center text-note-text-muted">
@@ -1152,7 +1152,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
   // Header component - reused in both views
   const CanvasHeader = ({ inFullscreen = false }: { inFullscreen?: boolean }) => (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-note-border bg-note-bg/50 flex-shrink-0">
+    <div className="flex items-center justify-between px-0 py-2 mb-4 flex-shrink-0">
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-note-text-muted" />
         <span className="font-medium text-sm text-note-text">
@@ -1325,7 +1325,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 bg-note-bg flex flex-col'
-          : 'rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden isolate'
+          : 'bg-transparent overflow-hidden isolate'
       }
       style={isFullscreen ? undefined : { contain: 'layout paint' }}
       data-prd-canvas

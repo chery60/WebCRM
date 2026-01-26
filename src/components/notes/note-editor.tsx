@@ -22,6 +22,7 @@ import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
 import { PRDChatDrawer } from './prd-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
+import { MermaidExtension } from './extensions/mermaid-extension';
 import { SelectionBubbleMenu } from './selection-bubble-menu';
 import { AIRewriteDrawer } from './ai-rewrite-drawer';
 import type { GeneratedFeature, GeneratedTask, PRDTemplateType } from '@/types';
@@ -136,6 +137,19 @@ export function NoteEditor({
           // Insert an Excalidraw canvas
           editor.chain().focus().insertExcalidraw().run();
           break;
+        case 'mermaid':
+          // Insert a Mermaid diagram with default flowchart
+          editor.chain().focus().insertMermaid({
+            code: `flowchart TD
+    A[Start] --> B[Process]
+    B --> C{Decision}
+    C -->|Yes| D[Action 1]
+    C -->|No| E[Action 2]
+    D --> F[End]
+    E --> F`,
+            title: 'Flow Diagram',
+          }).run();
+          break;
 
         // PRD-specific commands - open conversational PRD chat drawer
         case 'generate-prd':
@@ -236,6 +250,7 @@ export function NoteEditor({
       ExcalidrawExtension.configure({
         defaultMinHeight: 400,
       }),
+      MermaidExtension,
     ],
     content: content ? JSON.parse(content) : undefined,
     autofocus: autoFocus ? 'end' : false,
@@ -460,10 +475,15 @@ export function NoteEditor({
   // Converts markdown to TipTap JSON format for proper rendering
   // Supports both overwrite and append modes
   const handlePRDGenerated = useCallback((generatedContent: string, mode: 'overwrite' | 'append' = 'append') => {
-    if (editor) {
+    if (!editor || !generatedContent) {
+      console.warn('Cannot apply PRD content: editor or content is missing');
+      return;
+    }
+
+    try {
       // Convert markdown to TipTap JSON format
       const tiptapDoc = markdownToTipTap(generatedContent);
-      
+
       if (tiptapDoc.content && tiptapDoc.content.length > 0) {
         if (mode === 'overwrite') {
           // Clear existing content and set new content
@@ -473,6 +493,9 @@ export function NoteEditor({
           editor.chain().focus().insertContent(tiptapDoc.content).run();
         }
       }
+    } catch (error) {
+      console.error('Failed to apply PRD content:', error);
+      toast.error('Failed to add content to note');
     }
   }, [editor]);
 
@@ -498,9 +521,8 @@ export function NoteEditor({
   }, [editor]);
 
   return (
-    <div className={cn('relative rounded-lg overflow-hidden', className)}>
-      <EditorToolbar editor={editor} />
-      <div className="relative bg-note-card">
+    <div className={cn('relative', className)}>
+      <div className="relative bg-white">
         <EditorContent editor={editor} />
 
         {/* AI Processing Overlay */}

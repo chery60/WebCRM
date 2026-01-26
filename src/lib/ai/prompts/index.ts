@@ -59,3 +59,16 @@ export {
   extractPRDContextForCanvas,
   parseCanvasResponse,
 } from './canvas-prompts';
+
+// ============================================================================
+// STRUCTURED PRD PROMPTS - Linear-style simplified PRD generation with Mermaid
+// ============================================================================
+export {
+  STRUCTURED_PRD_SYSTEM_PROMPT,
+  STRUCTURED_PRD_SECTIONS,
+  STRUCTURED_PRD_GENERATION_PROMPT,
+  MERMAID_SYNTAX_EXAMPLES,
+  getSectionSpecificPrompt,
+  QUICK_PRD_PROMPT,
+  type StructuredPRDSection,
+} from './prd-structured-prompts';

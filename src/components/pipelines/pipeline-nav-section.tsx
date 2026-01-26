@@ -201,13 +201,19 @@ function PipelineItem({
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full pr-8',
-                    isPipelineActive && !isOpen
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                    'flex items-center transition-colors w-full pr-8',
+                    isPipelineActive && !isOpen ? 'font-medium' : ''
                   )}
+                  style={{
+                    height: '24px',
+                    fontSize: '14px',
+                    color: isPipelineActive && !isOpen
+                      ? 'var(--sidebar-text-primary)'
+                      : 'var(--sidebar-text-secondary)',
+                    gap: '8px',
+                  }}
                 >
-                  <FolderKanban className="h-4 w-4 shrink-0" />
+                  <FolderKanban className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px' }} />
                   <span className="truncate flex-1 text-left">{pipeline.name}</span>
                   <ChevronDown
                     className={cn(
@@ -271,7 +277,7 @@ function PipelineItem({
           </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="pl-4 pt-1 space-y-0.5">
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '20px', marginTop: '8px' }}>
           {roadmaps.map((roadmap) => {
             const isRoadmapActive =
               pathname === `/pipelines/${pipeline.id}` && currentRoadmapId === roadmap.id;
@@ -289,14 +295,20 @@ function PipelineItem({
                     <Link
                       href={`/pipelines/${pipeline.id}?roadmap=${roadmap.id}`}
                       className={cn(
-                        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors pr-8',
-                        isRoadmapActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                        'flex items-center transition-colors pr-8',
+                        isRoadmapActive ? 'font-medium' : '',
                         isDragOver && 'ring-2 ring-primary bg-primary/10'
                       )}
+                      style={{
+                        height: '24px',
+                        fontSize: '14px',
+                        color: isRoadmapActive
+                          ? 'var(--sidebar-text-primary)'
+                          : 'var(--sidebar-text-secondary)',
+                        gap: '8px',
+                      }}
                     >
-                      <Map className="h-3.5 w-3.5 shrink-0" />
+                      <Map className="h-3.5 w-3.5 shrink-0" style={{ width: '14px', height: '14px' }} />
                       <span className="truncate">{roadmap.name}</span>
                     </Link>
 
@@ -347,9 +359,15 @@ function PipelineItem({
           {/* Add Roadmap button */}
           <button
             onClick={() => setShowCreateRoadmapDialog(true)}
-            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            className="flex items-center transition-colors w-full"
+            style={{
+              height: '24px',
+              fontSize: '14px',
+              color: 'var(--sidebar-text-secondary)',
+              gap: '8px',
+            }}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" style={{ width: '14px', height: '14px' }} />
             <span>Add Roadmap</span>
           </button>
         </CollapsibleContent>
@@ -515,13 +533,19 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
           <Link href="/pipelines">
             <div
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-                isPipelinesActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                'flex items-center transition-colors w-full',
+                isPipelinesActive ? 'font-medium' : ''
               )}
+              style={{
+                height: '24px',
+                fontSize: '16px',
+                color: isPipelinesActive
+                  ? 'var(--sidebar-text-primary)'
+                  : 'var(--sidebar-text-secondary)',
+                gap: '8px',
+              }}
             >
-              <GitBranch className="h-5 w-5 shrink-0" />
+              <GitBranch className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
             </div>
           </Link>
         </TooltipTrigger>
@@ -539,19 +563,25 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
           <button className="w-full text-left">
             <div
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-                isPipelinesActive && !isOpen
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                'flex items-center transition-colors w-full',
+                isPipelinesActive && !isOpen ? 'font-medium' : ''
               )}
+              style={{
+                height: '24px',
+                fontSize: '16px',
+                color: isPipelinesActive && !isOpen
+                  ? 'var(--sidebar-text-primary)'
+                  : 'var(--sidebar-text-secondary)',
+                gap: '8px',
+              }}
             >
-              <GitBranch className="h-5 w-5 shrink-0" />
+              <GitBranch className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
               <span className="flex-1">Pipelines</span>
-              <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+              <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isOpen && 'rotate-180')} />
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 pt-1 space-y-1">
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '8px', paddingTop: '8px' }}>
           {pipelines.map((pipeline) => (
             <PipelineItem
               key={pipeline.id}
@@ -565,9 +595,15 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
           {/* Add Pipeline button */}
           <button
             onClick={() => setShowCreateDialog(true)}
-            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            className="flex items-center transition-colors w-full"
+            style={{
+              height: '24px',
+              fontSize: '14px',
+              color: 'var(--sidebar-text-secondary)',
+              gap: '8px',
+            }}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4" style={{ width: '16px', height: '16px' }} />
             <span>Add Pipeline</span>
           </button>
         </CollapsibleContent>

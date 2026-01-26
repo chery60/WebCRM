@@ -27,6 +27,7 @@ import {
   Zap,
   Target,
   PenTool,
+  GitBranch,
 } from 'lucide-react';
 
 export interface SlashCommand {
@@ -226,6 +227,14 @@ const commands: SlashCommand[] = [
     category: 'widget',
     icon: <PenTool className="h-4 w-4" />,
     command: 'canvas',
+  },
+  {
+    id: 'mermaid',
+    name: 'Mermaid Diagram',
+    description: 'Insert a Mermaid chart (flowchart, sequence, etc.)',
+    category: 'widget',
+    icon: <GitBranch className="h-4 w-4" />,
+    command: 'mermaid',
   },
 ];
 

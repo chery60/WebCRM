@@ -3,6 +3,8 @@
  * 
  * Generates comprehensive Product Requirements Documents using AI.
  * Supports multiple templates, section-by-section generation, and iterative improvement.
+ * 
+ * Now includes Linear-style structured PRD generation with Mermaid diagram support.
  */
 
 import type { 
@@ -13,14 +15,19 @@ import type {
   PRDGenerationResult 
 } from '@/types';
 import { generateAIContent } from '../use-ai-service';
-import { 
-  MASTER_PRD_SYSTEM_PROMPT,
+import {
   PRD_SECTIONS,
   getTemplate,
   getTemplateContextPrompt,
   PRD_GENERATION_PROMPT,
   PRD_IMPROVEMENT_PROMPT,
   getSectionPrompt,
+  // Linear-style structured prompts (used for all PRD generation)
+  STRUCTURED_PRD_SYSTEM_PROMPT,
+  STRUCTURED_PRD_SECTIONS,
+  STRUCTURED_PRD_GENERATION_PROMPT,
+  getSectionSpecificPrompt,
+  QUICK_PRD_PROMPT,
 } from '../prompts';
 import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 
@@ -45,6 +52,8 @@ export interface PRDGenerationOptions {
   provider?: AIProviderType;
   /** Project-specific instructions for PRD formatting and structure */
   projectInstructions?: string;
+  /** Use the new structured (Linear-style) format */
+  useStructuredFormat?: boolean;
 }
 
 export interface SectionGenerationOptions {
@@ -92,7 +101,18 @@ export class PRDGeneratorService {
       detailLevel = 'standard',
       provider,
       projectInstructions,
+      useStructuredFormat = true, // Default to new structured format
     } = options;
+
+    // Use new structured format by default
+    if (useStructuredFormat) {
+      return this.generateStructuredPRD({
+        description,
+        context,
+        provider,
+        projectInstructions,
+      });
+    }
 
     const template = getTemplate(templateType);
     const templateContext = getTemplateContextPrompt(templateType);
@@ -120,6 +140,57 @@ export class PRDGeneratorService {
       };
     } catch (error) {
       console.error('PRD generation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a PRD using the new structured (Linear-style) format
+   * with Mermaid diagrams included where relevant
+   */
+  async generateStructuredPRD(options: {
+    description: string;
+    context?: string;
+    provider?: AIProviderType;
+    projectInstructions?: string;
+  }): Promise<PRDGenerationResult> {
+    const { description, context, provider, projectInstructions } = options;
+
+    // Build system prompt
+    let systemPrompt = STRUCTURED_PRD_SYSTEM_PROMPT;
+    if (projectInstructions) {
+      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\n${projectInstructions}`;
+    }
+
+    // Build user prompt
+    let userPrompt = STRUCTURED_PRD_GENERATION_PROMPT + '\n\n';
+    userPrompt += `## Product Description\n${description}\n\n`;
+    
+    if (context) {
+      userPrompt += `## Additional Context\n${context}\n\n`;
+    }
+
+    userPrompt += `Generate the complete structured PRD now, including Mermaid diagrams where appropriate:`;
+
+    const request: AIGenerateRequest = {
+      type: 'generate-prd',
+      prompt: userPrompt,
+      context: systemPrompt,
+      provider,
+    };
+
+    try {
+      const response = await generateAIContent(request, provider);
+      
+      // Parse into structured sections
+      const sections = this.parseStructuredSections(response.content);
+
+      return {
+        content: response.content,
+        sections,
+      };
+    } catch (error) {
+      console.error('Structured PRD generation failed:', error);
       throw error;
     }
   }
@@ -160,7 +231,8 @@ export class PRDGeneratorService {
     prompt += `Generate the ${sectionDef.title} section now:`;
 
     // Build system prompt with project instructions if provided
-    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
+    // Use the Linear-style structured prompt for consistency
+    let systemPrompt = STRUCTURED_PRD_SYSTEM_PROMPT;
     if (projectInstructions) {
       systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when generating the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting.`;
     }
@@ -218,7 +290,8 @@ export class PRDGeneratorService {
     prompt += `Please provide an improved version of this PRD:`;
 
     // Build system prompt with project instructions if provided
-    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
+    // Use the Linear-style structured prompt for consistency
+    let systemPrompt = STRUCTURED_PRD_SYSTEM_PROMPT;
     if (projectInstructions) {
       systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when improving the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting.`;
     }
@@ -252,25 +325,21 @@ export class PRDGeneratorService {
 
   /**
    * Generate PRD from a brief one-liner (quick start)
+   * Now uses the new structured format with Mermaid diagrams
    */
   async quickGenerate(oneLiner: string, provider?: AIProviderType, projectInstructions?: string): Promise<PRDGenerationResult> {
-    const prompt = `Generate a comprehensive PRD for the following product idea:
+    // Build system prompt with structured format
+    let systemPrompt = STRUCTURED_PRD_SYSTEM_PROMPT;
+    if (projectInstructions) {
+      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\n${projectInstructions}`;
+    }
 
+    const prompt = `${QUICK_PRD_PROMPT}
+
+## Product Idea
 "${oneLiner}"
 
-Expand this into a full product vision and create a detailed PRD that covers:
-1. What problem this solves and for whom
-2. The core solution and key features
-3. How success will be measured
-4. What needs to be built and in what order
-
-Be creative but practical. Make assumptions where needed and document them.`;
-
-    // Build system prompt with project instructions if provided
-    let systemPrompt = MASTER_PRD_SYSTEM_PROMPT;
-    if (projectInstructions) {
-      systemPrompt += `\n\n## PROJECT-SPECIFIC INSTRUCTIONS (MUST FOLLOW)\nThe user has specified the following instructions for this project. You MUST follow these instructions exactly when generating the PRD:\n\n${projectInstructions}\n\nThese project instructions take precedence over default formatting. Structure your PRD according to the user's specifications above.`;
-    }
+Generate a complete, structured PRD with Mermaid diagrams:`;
 
     const request: AIGenerateRequest = {
       type: 'generate-prd',
@@ -282,11 +351,7 @@ Be creative but practical. Make assumptions where needed and document them.`;
     try {
       const response = await generateAIContent(request, provider);
       
-      const sections = this.parseIntoSections(response.content, PRD_SECTIONS.map(s => ({
-        id: s.id,
-        title: s.title,
-        order: s.order,
-      })));
+      const sections = this.parseStructuredSections(response.content);
 
       return {
         content: response.content,
@@ -294,6 +359,44 @@ Be creative but practical. Make assumptions where needed and document them.`;
       };
     } catch (error) {
       console.error('Quick PRD generation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a specific section of the structured PRD
+   */
+  async generateStructuredSection(
+    sectionId: string,
+    productContext: string,
+    provider?: AIProviderType
+  ): Promise<PRDSection> {
+    const section = STRUCTURED_PRD_SECTIONS.find(s => s.id === sectionId);
+    if (!section) {
+      throw new Error(`Unknown structured section: ${sectionId}`);
+    }
+
+    const prompt = getSectionSpecificPrompt(sectionId, productContext);
+
+    const request: AIGenerateRequest = {
+      type: 'generate-prd-section',
+      prompt,
+      context: STRUCTURED_PRD_SYSTEM_PROMPT,
+      provider,
+    };
+
+    try {
+      const response = await generateAIContent(request, provider);
+
+      return {
+        id: sectionId,
+        title: `${section.emoji} ${section.title}`,
+        content: response.content,
+        order: STRUCTURED_PRD_SECTIONS.findIndex(s => s.id === sectionId) + 1,
+        isGenerated: true,
+      };
+    } catch (error) {
+      console.error(`Structured section generation failed for ${sectionId}:`, error);
       throw error;
     }
   }
@@ -308,7 +411,8 @@ Be creative but practical. Make assumptions where needed and document them.`;
     detailLevel: 'concise' | 'standard' | 'comprehensive',
     projectInstructions?: string
   ): string {
-    let prompt = MASTER_PRD_SYSTEM_PROMPT + '\n\n';
+    // Use the Linear-style structured prompt for consistency
+    let prompt = STRUCTURED_PRD_SYSTEM_PROMPT + '\n\n';
     prompt += templateContext + '\n\n';
 
     // Audience-specific guidance
@@ -399,6 +503,66 @@ Be creative but practical. Make assumptions where needed and document them.`;
 
   private escapeRegex(string: string): string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Parse structured PRD content into sections
+   * Handles the new emoji-prefixed section format
+   */
+  private parseStructuredSections(content: string): PRDSection[] {
+    const sections: PRDSection[] = [];
+    
+    // Match sections with emoji headers (e.g., "## 📋 Overview")
+    const sectionRegex = /##\s*([\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}])\s*([^\n]+)\n([\s\S]*?)(?=##\s*[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]|$)/gu;
+    
+    let match;
+    let order = 1;
+    
+    while ((match = sectionRegex.exec(content)) !== null) {
+      const emoji = match[1];
+      const title = match[2].trim();
+      const sectionContent = match[3].trim();
+      
+      // Map to structured section ID
+      const sectionId = this.mapTitleToSectionId(title);
+      
+      sections.push({
+        id: sectionId,
+        title: `${emoji} ${title}`,
+        content: sectionContent,
+        order: order++,
+        isGenerated: true,
+      });
+    }
+
+    // If regex didn't find sections, try simpler parsing
+    if (sections.length === 0) {
+      return this.parseIntoSections(content, STRUCTURED_PRD_SECTIONS.map((s, i) => ({
+        id: s.id,
+        title: s.title,
+        order: i + 1,
+      })));
+    }
+
+    return sections;
+  }
+
+  /**
+   * Map section title to structured section ID
+   */
+  private mapTitleToSectionId(title: string): string {
+    const lowerTitle = title.toLowerCase();
+    
+    if (lowerTitle.includes('overview')) return 'overview';
+    if (lowerTitle.includes('problem')) return 'problem';
+    if (lowerTitle.includes('current') || lowerTitle.includes('scenario')) return 'current-scenario';
+    if (lowerTitle.includes('consideration')) return 'considerations';
+    if (lowerTitle.includes('assumption')) return 'assumptions';
+    if (lowerTitle.includes('diagram') || lowerTitle.includes('chart')) return 'diagrams';
+    if (lowerTitle.includes('solution')) return 'solution';
+    
+    // Generate a slug from the title
+    return title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   }
 }
 

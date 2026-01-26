@@ -121,7 +121,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex items-center gap-1 p-2 border-b border-note-border bg-note-bg/50 rounded-t-lg flex-wrap">
+      <div className="flex items-center gap-1 p-2 mb-4 flex-wrap">
         {/* Heading Dropdown */}
         <Popover open={showHeadingMenu} onOpenChange={setShowHeadingMenu}>
           <PopoverTrigger asChild>

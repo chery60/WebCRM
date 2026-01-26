@@ -500,6 +500,19 @@ export interface CustomPRDTemplate {
   updatedAt: Date;
 }
 
+// Canvas Item for multiple canvases per note
+export interface CanvasItem {
+  id: string;
+  name: string;
+  data: {
+    elements: unknown[];
+    appState?: Record<string, unknown>;
+    files?: Record<string, unknown>;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Task types
 export type TaskStatus = 'planned' | 'upcoming' | 'completed';
 export type TaskPriority = 'low' | 'medium' | 'high';

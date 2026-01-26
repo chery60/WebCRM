@@ -42,7 +42,7 @@ import { useState, useEffect, useRef } from 'react';
 import { WorkspaceSwitcher } from '@/components/sidebar/workspace-switcher';
 import { PipelineNavSection } from '@/components/pipelines/pipeline-nav-section';
 import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } from '@/lib/hooks/use-projects';
-import { useMoveNoteToProject, useAllPRDs, useCreateNote } from '@/lib/hooks/use-notes';
+import { useMoveNoteToProject, useAllPRDs, useCreateNote, useDeleteNote } from '@/lib/hooks/use-notes';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { FileText } from 'lucide-react';
@@ -123,6 +123,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
   const deleteProject = useDeleteProject();
   const createNote = useCreateNote();
   const moveNote = useMoveNoteToProject();
+  const deleteNote = useDeleteNote();
 
   const [isOpen, setIsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -343,13 +344,21 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <Link href="/projects">
-            <div className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-              isPRDActive
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-            )}>
-              <FileText className="h-5 w-5 shrink-0" />
+            <div 
+              className={cn(
+                'flex items-center transition-colors w-full',
+                isPRDActive ? 'font-medium' : ''
+              )}
+              style={{
+                height: '24px',
+                fontSize: '16px',
+                color: isPRDActive
+                  ? 'var(--sidebar-text-primary)'
+                  : 'var(--sidebar-text-secondary)',
+                gap: '8px',
+              }}
+            >
+              <FileText className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
             </div>
           </Link>
         </TooltipTrigger>
@@ -365,34 +374,48 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <button className="w-full text-left">
-            <div className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
-              isPRDActive && !isOpen
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-            )}>
-              <FileText className="h-5 w-5 shrink-0" />
+            <div 
+              className={cn(
+                'flex items-center transition-colors w-full',
+                isPRDActive && !isOpen ? 'font-medium' : ''
+              )}
+              style={{
+                height: '24px',
+                fontSize: '16px',
+                color: isPRDActive && !isOpen
+                  ? 'var(--sidebar-text-primary)'
+                  : 'var(--sidebar-text-secondary)',
+                gap: '8px',
+              }}
+            >
+              <FileText className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
               <span className="flex-1">PRD</span>
-              <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+              <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isOpen && 'rotate-180')} />
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-2 pt-1 space-y-0.5">
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '8px', paddingTop: '8px' }}>
           {/* All PRDs link */}
           <Link
             href="/notes"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
-              pathname === '/notes'
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+              'flex items-center transition-colors',
+              pathname === '/notes' ? 'font-medium' : '',
               dragOverTarget === 'all-prds' && 'ring-2 ring-primary bg-primary/10'
             )}
+            style={{
+              height: '24px',
+              fontSize: '14px',
+              color: pathname === '/notes'
+                ? 'var(--sidebar-text-primary)'
+                : 'var(--sidebar-text-secondary)',
+              gap: '8px',
+            }}
             onDragOver={(e) => handleDragOver(e, 'all-prds')}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, undefined)}
           >
-            <FileText className="h-4 w-4" />
+            <FileText className="h-4 w-4" style={{ width: '16px', height: '16px' }} />
             <span>All PRDs</span>
           </Link>
 
@@ -413,20 +436,36 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, project.id)}
                     >
-                      <button
-                        onClick={() => toggleProject(project.id)}
+                      <Link
+                        href={`/projects/${project.id}/settings`}
+                        onClick={() => {
+                          // Ensure project is expanded when navigating to settings
+                          if (!isExpanded) {
+                            setExpandedProjects(prev => {
+                              const next = new Set(prev);
+                              next.add(project.id);
+                              return next;
+                            });
+                          }
+                        }}
                         className={cn(
-                          'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full pr-8',
-                          (isExpanded && (isProjectSettingsActive || isAnyPRDActive))
-                            ? 'text-sidebar-foreground font-medium'
-                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                          'flex items-center transition-colors w-full pr-8',
+                          (isExpanded && (isProjectSettingsActive || isAnyPRDActive)) ? 'font-medium' : '',
                           dragOverTarget === project.id && 'ring-2 ring-primary bg-primary/10'
                         )}
+                        style={{
+                          height: '24px',
+                          fontSize: '14px',
+                          color: (isExpanded && (isProjectSettingsActive || isAnyPRDActive))
+                            ? 'var(--sidebar-text-primary)'
+                            : 'var(--sidebar-text-secondary)',
+                          gap: '8px',
+                        }}
                       >
                         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform shrink-0', !isExpanded && '-rotate-90')} />
-                        <FolderOpen className="h-4 w-4 shrink-0" />
+                        <FolderOpen className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px' }} />
                         <span className="truncate">{project.name}</span>
-                      </button>
+                      </Link>
 
                       {/* More options button (visible on hover) */}
                       <DropdownMenu>
@@ -473,38 +512,57 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
 
                 {/* Expanded project content */}
                 {isExpanded && (
-                  <div className="pl-5 space-y-0.5 mt-0.5">
-                    {/* Project Settings */}
-                    <Link
-                      href={`/projects/${project.id}/settings`}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors',
-                        isProjectSettingsActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                          : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                      )}
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                      <span>Settings</span>
-                    </Link>
-
+                  <div className="flex flex-col" style={{ gap: '8px', paddingLeft: '20px', marginTop: '8px' }}>
                     {/* PRDs list */}
                     {projectPRDs.map((prd) => {
                       const isPRDActive = pathname === `/notes/${prd.id}`;
                       return (
-                        <Link
-                          key={prd.id}
-                          href={`/notes/${prd.id}`}
-                          className={cn(
-                            'flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors',
-                            isPRDActive
-                              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                              : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                          )}
-                        >
-                          <StickyNote className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{prd.title || 'Untitled'}</span>
-                        </Link>
+                        <div key={prd.id} className="group relative">
+                          <Link
+                            href={`/notes/${prd.id}`}
+                            className={cn(
+                              'flex items-center transition-colors pr-6',
+                              isPRDActive ? 'font-medium' : ''
+                            )}
+                            style={{
+                              height: '24px',
+                              fontSize: '14px',
+                              color: isPRDActive
+                                ? 'var(--sidebar-text-primary)'
+                                : 'var(--sidebar-text-secondary)',
+                              gap: '8px',
+                            }}
+                          >
+                            <StickyNote className="h-3.5 w-3.5 shrink-0" style={{ width: '14px', height: '14px' }} />
+                            <span className="truncate">{prd.title || 'Untitled'}</span>
+                          </Link>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-32">
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    await deleteNote.mutateAsync(prd.id);
+                                    toast.success(`"${prd.title || 'Untitled'}" deleted`);
+                                  } catch (error) {
+                                    toast.error('Failed to delete note');
+                                  }
+                                }}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       );
                     })}
 
@@ -512,9 +570,15 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                     <button
                       onClick={() => handleCreatePRD(project.id)}
                       disabled={creatingPRDForProject === project.id}
-                      className="flex items-center gap-2 rounded-lg px-3 py-1 text-sm transition-colors w-full text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:opacity-50"
+                      className="flex items-center transition-colors w-full disabled:opacity-50"
+                      style={{
+                        height: '24px',
+                        fontSize: '14px',
+                        color: 'var(--sidebar-text-secondary)',
+                        gap: '8px',
+                      }}
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-3.5 w-3.5" style={{ width: '14px', height: '14px' }} />
                       <span>{creatingPRDForProject === project.id ? 'Creating...' : 'New PRD'}</span>
                     </button>
                   </div>
@@ -526,9 +590,15 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
           {/* Add Project button */}
           <button
             onClick={() => setShowCreateDialog(true)}
-            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors w-full text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            className="flex items-center transition-colors w-full"
+            style={{
+              height: '24px',
+              fontSize: '14px',
+              color: 'var(--sidebar-text-secondary)',
+              gap: '8px',
+            }}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4" style={{ width: '16px', height: '16px' }} />
             <span>Add Project</span>
           </button>
         </CollapsibleContent>
@@ -715,20 +785,28 @@ function NavItemComponent({
   const content = (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full',
+        'flex items-center transition-colors w-full',
         isActive && !item.children
-          ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+          ? 'font-medium'
+          : ''
       )}
+      style={{
+        height: '24px',
+        fontSize: '16px',
+        color: isActive && !item.children 
+          ? 'var(--sidebar-text-primary)' 
+          : 'var(--sidebar-text-secondary)',
+        gap: '8px',
+      }}
     >
-      <Icon className="h-5 w-5 shrink-0" />
+      <Icon className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
       {!collapsed && (
         <>
           <span className="flex-1">{item.title}</span>
           {item.children && (
             <ChevronDown
               className={cn(
-                'h-4 w-4 transition-transform',
+                'h-4 w-4 transition-transform shrink-0',
                 isOpen && 'rotate-180'
               )}
             />
@@ -757,17 +835,22 @@ function NavItemComponent({
         <CollapsibleTrigger asChild>
           <button className="w-full text-left">{content}</button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-8 pt-1 space-y-1">
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '32px', paddingTop: '8px' }}>
           {item.children.map((child) => (
             <Link
               key={child.href}
               href={child.href}
               className={cn(
-                'block rounded-lg px-3 py-1.5 text-sm transition-colors',
-                pathname === child.href
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                'flex items-center transition-colors',
+                pathname === child.href ? 'font-medium' : ''
               )}
+              style={{
+                height: '24px',
+                fontSize: '14px',
+                color: pathname === child.href
+                  ? 'var(--sidebar-text-primary)'
+                  : 'var(--sidebar-text-secondary)',
+              }}
             >
               {child.title}
             </Link>
@@ -811,23 +894,23 @@ export function Sidebar() {
       <aside
         className={cn(
           'flex flex-col transition-all duration-300 relative h-full',
-          isCollapsed ? 'w-[68px]' : 'w-[300px]'
+          isCollapsed ? 'w-[68px]' : 'w-[239px]'
         )}
         style={{
-          padding: '9px 9px 0px',
-          gap: '1px',
+          padding: '0px 0px 20px',
+          gap: '2px',
           fontFamily: 'var(--font-sans)',
           fontSize: '16px',
           fontWeight: 400,
           lineHeight: '24px',
-          color: 'rgb(52, 50, 45)',
-          border: '0px solid rgb(229, 231, 235)',
+          color: 'var(--sidebar-text-primary)',
           textAlign: 'start',
-          backgroundColor: 'rgb(250,249,245)',
+          backgroundColor: 'white',
+          borderRight: '1px solid var(--sidebar-separator)',
         }}
       >
         {/* Logo and collapse button */}
-        <div className="flex h-16 items-center justify-between px-4">
+        <div className="flex items-center justify-between border-b h-16" style={{ paddingLeft: '24px', paddingRight: '24px', borderColor: 'var(--sidebar-separator)' }}>
           <Link href="/" className="flex items-center gap-2">
             {isCollapsed ? (
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
@@ -840,58 +923,88 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 px-3 pb-20">
-          <nav className="space-y-1 py-2">
-            {/* Notes with Projects */}
-            {features.notes && <PRDNavSection collapsed={isCollapsed} />}
+        <ScrollArea className="flex-1">
+          <div className="flex flex-col" style={{ gap: '20px', paddingLeft: '24px', paddingRight: '24px', paddingTop: '24px' }}>
+            {/* Main navigation section */}
+            <nav className="flex flex-col" style={{ gap: '20px' }}>
+              {/* Notes with Projects */}
+              {features.notes && <PRDNavSection collapsed={isCollapsed} />}
 
-            {/* Pipelines with Roadmaps */}
-            {features.pipelines && <PipelineNavSection collapsed={isCollapsed} />}
+              {/* Pipelines with Roadmaps */}
+              {features.pipelines && <PipelineNavSection collapsed={isCollapsed} />}
 
-            {/* Other nav items (Tasks, Calendar) */}
-            {filteredMainNavItems.map((item) => (
-              <NavItemComponent
-                key={item.href}
-                item={item}
-                collapsed={isCollapsed}
+              {/* Other nav items (Tasks, Calendar) */}
+              {filteredMainNavItems.map((item) => (
+                <NavItemComponent
+                  key={item.href}
+                  item={item}
+                  collapsed={isCollapsed}
+                />
+              ))}
+            </nav>
+
+            {/* Separator */}
+            {filteredDatabaseNavItems.length > 0 && (
+              <div 
+                className="shrink-0" 
+                style={{ 
+                  height: '1px', 
+                  margin: '0px 0px',
+                  backgroundColor: 'var(--sidebar-separator)'
+                }} 
               />
-            ))}
-          </nav>
+            )}
 
-          {filteredDatabaseNavItems.length > 0 && <Separator className="my-2" />}
+            {/* Database section */}
+            {filteredDatabaseNavItems.length > 0 && (
+              <div className="flex flex-col" style={{ gap: '8px' }}>
+                {!isCollapsed && (
+                  <div 
+                    className="shrink-0" 
+                    style={{ 
+                      height: '24px',
+                      fontSize: '16px',
+                      color: 'var(--sidebar-text-primary)',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    Database
+                  </div>
+                )}
+                <nav className="flex flex-col" style={{ gap: '8px' }}>
+                  {filteredDatabaseNavItems.map((item) => (
+                    <NavItemComponent
+                      key={item.href}
+                      item={item}
+                      collapsed={isCollapsed}
+                    />
+                  ))}
+                </nav>
+              </div>
+            )}
 
-          {/* Database section */}
-          {filteredDatabaseNavItems.length > 0 && (
-            <div className="py-2">
-              {!isCollapsed && (
-                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Database
-                </div>
-              )}
-              <nav className="space-y-1">
-                {filteredDatabaseNavItems.map((item) => (
-                  <NavItemComponent
-                    key={item.href}
-                    item={item}
-                    collapsed={isCollapsed}
-                  />
-                ))}
-              </nav>
-            </div>
-          )}
+            {/* Separator before bottom items */}
+            <div 
+              className="shrink-0" 
+              style={{ 
+                height: '1px', 
+                margin: '0px 0px',
+                backgroundColor: 'var(--sidebar-separator)'
+              }} 
+            />
 
-          <Separator className="my-2" />
-
-          {/* Bottom items */}
-          <nav className="space-y-1 py-2">
-            {bottomNavItems.map((item) => (
-              <NavItemComponent
-                key={item.href}
-                item={item}
-                collapsed={isCollapsed}
-              />
-            ))}
-          </nav>
+            {/* Bottom items */}
+            <nav className="flex flex-col" style={{ gap: '8px' }}>
+              {bottomNavItems.map((item) => (
+                <NavItemComponent
+                  key={item.href}
+                  item={item}
+                  collapsed={isCollapsed}
+                />
+              ))}
+            </nav>
+          </div>
         </ScrollArea>
 
         {/* Workspace selector - fixed to bottom */}

@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, FileText, Trash2, MoreVertical, Star, Plus, Clock, Pencil } from 'lucide-react';
+import { FileText, Trash2, MoreVertical, Star, Pencil, MoreHorizontal, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -168,15 +168,6 @@ export default function ProjectSettingsPage() {
         <div className="max-w-[1280px] mx-auto px-8 py-6 grid grid-cols-12 gap-6 h-full">
           {/* Left Content Area */}
           <div className="col-span-7 flex flex-col gap-4 min-h-0">
-            {/* Back Navigation */}
-            <Link
-              href="/notes"
-              className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-fit"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>All projects</span>
-            </Link>
-
             {/* Project Header */}
             <div className="space-y-3 mb-3">
               <div className="flex items-start justify-between gap-4">
@@ -217,25 +208,6 @@ export default function ProjectSettingsPage() {
               </div>
             </div>
 
-            {/* Reply Input Area */}
-            <div className="space-y-2">
-              <div className="relative">
-                <Textarea
-                  placeholder="Reply..."
-                  className="h-[122px] pr-24 resize-none"
-                  disabled
-                />
-                <div className="absolute right-2 bottom-2 flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Clock className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
             {/* PRDs List */}
             <ScrollArea className="flex-1 min-h-0">
               <div className="space-y-1 pr-4">
@@ -253,23 +225,47 @@ export default function ProjectSettingsPage() {
                   </div>
                 ) : (
                   <ul className="space-y-0">
-                    {prds.map((prd) => (
+                    {prds.map((prd, index) => (
                       <li key={prd.id}>
-                        <Link
-                          href={`/notes/${prd.id}`}
-                          className="block px-0 py-3 rounded-lg hover:bg-muted/30 transition-colors group border-b border-border/50 last:border-b-0"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-medium text-foreground mb-1">
-                                {prd.title || 'Untitled'}
-                              </h3>
-                              <p className="text-xs text-muted-foreground">
-                                Last message {format(new Date(prd.updatedAt), 'MMM d, yyyy')}
-                              </p>
+                        <div className="group flex items-center gap-2">
+                          <Link
+                            href={`/notes/${prd.id}`}
+                            className="flex-1 block px-0 py-3 hover:bg-muted/30 transition-colors"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium text-foreground mb-1">
+                                  {prd.title || 'Untitled'}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  Last message {format(new Date(prd.updatedAt), 'MMM d, yyyy')}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </Link>
+                          </Link>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleDeletePRD(prd.id, prd.title || 'Untitled')}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        {index < prds.length - 1 && <Separator />}
                       </li>
                     ))}
                   </ul>

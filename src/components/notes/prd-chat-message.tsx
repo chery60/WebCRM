@@ -197,12 +197,16 @@ function AssistantMessage({
                 )}
               </Button>
               
-              {onAddToNote && (
+              {onAddToNote && generatedContent && (
                 <Button
                   variant="default"
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => onAddToNote(generatedContent)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onAddToNote(generatedContent);
+                  }}
                 >
                   <Plus className="w-3 h-3 mr-1.5" />
                   Add to Note
