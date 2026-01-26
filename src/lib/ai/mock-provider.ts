@@ -168,8 +168,56 @@ const mockResponses: Record<string, (prompt: string, context?: string) => string
       // Return as JSON array string
       return JSON.stringify(elements, null, 2);
     }
-    // Regular PRD generation
-    return `# Product Requirements Document\n\n## Overview\n${prompt}\n\n## Goals\n- Define clear objectives\n- Establish success metrics\n- Outline key features\n\n## Requirements\n1. User authentication\n2. Dashboard functionality\n3. Data management\n\n## Timeline\n- Phase 1: Discovery (2 weeks)\n- Phase 2: Development (4 weeks)\n- Phase 3: Testing (2 weeks)`;
+    // Regular PRD generation (Linear-style)
+    return `# Product Requirements Document
+
+## 📋 Overview
+${prompt}
+
+Building this feature to improve user experience and productivity.
+
+## 🎯 Problem
+Users currently face challenges with the existing workflow. This causes friction and reduces efficiency.
+
+## 📍 Current Scenario
+Today, users must manually perform these tasks which is time-consuming and error-prone.
+
+## ⚖️ Considerations
+- Technical: Integration with existing systems required
+- Timeline: Target completion within current quarter
+- Resources: Requires frontend and backend work
+
+## 💭 Assumptions
+- Users have basic technical proficiency (High confidence)
+- Existing API infrastructure can support new features (Medium confidence)
+
+## 📊 Diagrams
+\`\`\`mermaid
+flowchart TD
+    A[User Request] --> B[Process]
+    B --> C[Result]
+\`\`\`
+
+## ✨ Solution
+### Approach
+Implement a streamlined solution that addresses the core user needs.
+
+### Requirements
+#### Must Have
+- Core functionality implementation
+- Basic error handling
+
+#### Should Have
+- Enhanced user feedback
+- Performance optimization
+
+#### Won't Have (this version)
+- Advanced analytics
+- Third-party integrations
+
+### Success Metrics
+- User task completion rate > 90%
+- Response time < 200ms`;
   },
 
   summarize: (prompt) => {

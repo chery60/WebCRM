@@ -1072,13 +1072,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     return (
       <div
         ref={containerRef}
-        className="border rounded-lg bg-card overflow-hidden"
+        className="bg-transparent overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+        <div className="flex items-center justify-between px-0 py-2.5 mb-4">
           <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-sm">PRD Canvas</span>
+            <Layers className="h-4 w-4 text-note-text-muted" />
+            <span className="font-medium text-sm text-note-text">PRD Canvas</span>
             {hasContent && (
               <Badge variant="secondary" className="text-xs">
                 Has content
@@ -1126,21 +1126,21 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
         {/* Mini Preview - Static placeholder instead of rendering Excalidraw */}
         <div
-          className="h-32 bg-muted/10 cursor-pointer relative overflow-hidden"
+          className="h-24 bg-transparent cursor-pointer relative overflow-hidden"
           onClick={() => setIsCollapsed(false)}
         >
-          <div className="h-full flex items-center justify-center text-muted-foreground">
+          <div className="h-full flex items-center justify-center text-note-text-muted">
             <div className="text-center">
-              <Layers className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <Layers className="h-6 w-6 mx-auto mb-1.5 opacity-50" />
               {hasContent ? (
                 <>
-                  <p className="text-sm">Canvas has content</p>
-                  <p className="text-xs">Click to expand and view</p>
+                  <p className="text-xs font-medium">Canvas has content</p>
+                  <p className="text-[10px] opacity-70">Click to expand and view</p>
                 </>
               ) : (
                 <>
-                  <p className="text-sm">Click to expand canvas</p>
-                  <p className="text-xs">Use AI to generate diagrams</p>
+                  <p className="text-xs font-medium">Click to expand canvas</p>
+                  <p className="text-[10px] opacity-70">Use AI to generate diagrams</p>
                 </>
               )}
             </div>
@@ -1152,10 +1152,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
   // Header component - reused in both views
   const CanvasHeader = ({ inFullscreen = false }: { inFullscreen?: boolean }) => (
-    <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30 flex-shrink-0">
+    <div className="flex items-center justify-between px-0 py-2 mb-4 flex-shrink-0">
       <div className="flex items-center gap-2">
-        <Layers className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium text-sm">
+        <Layers className="h-4 w-4 text-note-text-muted" />
+        <span className="font-medium text-sm text-note-text">
           PRD Canvas{inFullscreen ? ' - Fullscreen' : ''}
         </span>
       </div>
@@ -1324,8 +1324,8 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       ref={containerRef}
       className={
         isFullscreen
-          ? 'fixed inset-0 z-50 bg-background flex flex-col'
-          : 'border rounded-lg bg-card overflow-hidden isolate'
+          ? 'fixed inset-0 z-50 bg-note-bg flex flex-col'
+          : 'bg-transparent overflow-hidden isolate'
       }
       style={isFullscreen ? undefined : { contain: 'layout paint' }}
       data-prd-canvas
@@ -1335,7 +1335,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
       {/* Canvas container - height changes based on fullscreen */}
       <div 
-        className={isFullscreen ? 'flex-1 relative' : 'h-[400px] relative'}
+        className={isFullscreen ? 'flex-1 relative' : 'h-[350px] relative'}
         style={{ isolation: 'isolate' }}
       >
         {CanvasContent}

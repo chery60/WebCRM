@@ -9,30 +9,35 @@
 // PRD GENERATION PROMPT
 // ============================================================================
 
-export const PRD_GENERATION_PROMPT = `Generate a comprehensive Product Requirements Document (PRD) based on the user's input.
+export const PRD_GENERATION_PROMPT = `Generate a comprehensive Product Requirements Document (PRD) using the Linear-style format.
+
+## Required Sections (USE ONLY THESE):
+1. ## 📋 Overview - Executive summary: what we're building and why
+2. ## 🎯 Problem - Clear problem statement from user perspective
+3. ## 📍 Current Scenario - How things work today, pain points
+4. ## ⚖️ Considerations - Trade-offs, constraints, dependencies
+5. ## 💭 Assumptions - Explicit assumptions with confidence levels
+6. ## 📊 Diagrams - 2-4 Mermaid diagrams illustrating the solution
+7. ## ✨ Solution - Approach, Requirements (MoSCoW), Success Metrics
 
 ## Instructions:
-1. Analyze the user's product idea/description thoroughly
-2. Ask clarifying questions mentally and make reasonable assumptions
-3. Generate a complete PRD with all relevant sections
+1. Analyze the user's product idea thoroughly
+2. Make reasonable assumptions and document them
+3. Include 2-4 Mermaid diagrams (flowchart, sequence, ER, etc.)
 4. Be specific and actionable - avoid vague statements
-5. Include concrete examples and metrics where possible
-6. Consider edge cases and potential issues
-7. Make the PRD immediately useful for engineering and design teams
+5. Use MoSCoW prioritization for requirements (Must/Should/Could/Won't Have)
+6. **IMPORTANT for Mermaid syntax**: If node labels contain parentheses or special characters, wrap the label text in double quotes:
+   - WRONG: A[User Login (OAuth)] 
+   - CORRECT: A["User Login (OAuth)"]
+
+## Important:
+- Do NOT include sections like "User Personas", "Jobs to be Done", "Goals & Success Metrics" as separate sections
+- User context goes in the Problem section
+- Success metrics go in the Solution section
+- Use the exact section headers with emojis as shown above
 
 ## Output Format:
-Use clear Markdown formatting with:
-- H2 (##) for main sections
-- H3 (###) for subsections
-- Bullet points for lists
-- Tables for structured data
-- Code blocks for technical specifications
-- Bold for emphasis on key points
-
-## Required Sections:
-Generate content for each section that is relevant to the product. Skip sections that don't apply.
-
-Remember: A great PRD answers every question an engineer or designer might have before they start working.`;
+Use clear Markdown with the 7 section headers above. Include valid Mermaid code blocks.`;
 
 // ============================================================================
 // FEATURE GENERATION PROMPT
@@ -193,174 +198,98 @@ IMPORTANT: Return ONLY the JSON array, no additional text or markdown code fence
 // PRD IMPROVEMENT PROMPT
 // ============================================================================
 
-export const PRD_IMPROVEMENT_PROMPT = `You are a senior product manager reviewing a PRD for completeness and quality. Your goal is to identify gaps and suggest improvements.
+export const PRD_IMPROVEMENT_PROMPT = `You are a senior product manager reviewing and improving a PRD using the Linear-style format.
+
+## Required Sections (USE ONLY THESE):
+1. 📋 Overview - Executive summary
+2. 🎯 Problem - Clear problem statement
+3. 📍 Current Scenario - How things work today
+4. ⚖️ Considerations - Trade-offs, constraints
+5. 💭 Assumptions - Explicit assumptions
+6. 📊 Diagrams - Mermaid diagrams
+7. ✨ Solution - Approach, Requirements (MoSCoW), Metrics
 
 ## Review Criteria:
 1. **Clarity**: Is every statement unambiguous?
-2. **Completeness**: Are all necessary sections covered?
+2. **Completeness**: Are all 7 sections covered adequately?
 3. **Specificity**: Are requirements specific and measurable?
-4. **Consistency**: Do all parts align with each other?
-5. **Feasibility**: Are requirements realistic?
-6. **User Focus**: Is the user's perspective central?
-7. **Testability**: Can requirements be verified?
-8. **Priority**: Is scope appropriately prioritized?
+4. **Diagrams**: Are there helpful Mermaid diagrams?
+5. **User Focus**: Is the user's perspective central?
 
 ## Instructions:
 1. Read the PRD thoroughly
-2. Identify gaps, inconsistencies, and areas needing clarification
-3. Provide specific, actionable suggestions
-4. Rewrite weak sections to show what "good" looks like
-5. Add missing information where you can reasonably infer it
-6. Flag genuine open questions that need stakeholder input
+2. Restructure to match the 7-section Linear format if needed
+3. Add or improve Mermaid diagrams
+4. Remove sections like "User Personas", "Jobs to be Done", "Goals & Success Metrics" as separate sections
+5. Consolidate user context into Problem section
+6. Consolidate success metrics into Solution section
 
 ## Output Format:
-Return the improved PRD with:
-- Clear section headings
-- [ADDED] markers for new content
-- [IMPROVED] markers for enhanced content
-- [QUESTION] markers for items needing clarification
-- Specific metrics and acceptance criteria throughout`;
+Return the improved PRD using ONLY the 7 Linear-style sections with emoji headers.`;
 
 // ============================================================================
-// SECTION-SPECIFIC GENERATION PROMPTS
+// SECTION-SPECIFIC GENERATION PROMPTS (Linear-style)
 // ============================================================================
 
 export const SECTION_GENERATION_PROMPTS: Record<string, string> = {
-  'executive-summary': `Generate an executive summary that:
-- Opens with a compelling hook about the problem's impact
-- Summarizes problem, solution, and expected outcome in 3-5 sentences
-- Includes 2-3 key success metrics
-- Makes clear why this is the right time to build this
-- Can stand alone for executives who only read this section
+  'overview': `Generate an overview section that:
+- Summarizes what we're building in 2-3 sentences
+- Explains why it matters and the expected impact
+- Can stand alone - someone reading only this section understands the essence
 
-Format: 1-2 paragraphs, approximately 150-250 words.`,
+Format: 1-2 paragraphs, approximately 100-200 words.`,
 
-  'problem-statement': `Generate a problem statement that:
+  'problem': `Generate a problem section that:
 - States the problem from the USER's perspective
-- Quantifies the pain (frequency, severity, number affected)
-- Includes a synthesized user quote that captures the frustration
-- Explains current workarounds and why they're inadequate
-- Connects to business impact (revenue, retention, acquisition)
-- Gets to root causes, not just symptoms
+- Quantifies the pain: How often? How severe? How many affected?
+- Includes who is affected and their context
+- Connects to business impact where relevant
 
-Format: 2-3 paragraphs with supporting bullet points.`,
+Format: 2-3 paragraphs with clear problem articulation.`,
 
-  'goals-success-metrics': `Generate goals and success metrics that:
-- Define ONE primary goal that determines success
-- List 2-3 secondary goals
-- For each goal, provide SMART metrics:
-  * Baseline (current state)
-  * Target (future state)
-  * Timeline for achievement
-  * How it will be measured
-- Include guardrail metrics (things that shouldn't get worse)
-- Define short-term (launch), medium-term (30-60 days), and long-term (6 months) targets
+  'current-scenario': `Generate a current scenario section that:
+- Describes how users currently accomplish this task
+- Identifies workarounds that exist and why they're inadequate
+- Includes a flowchart if it helps visualize the current process
+- Highlights key pain points in the current flow
 
-Format: Structured with clear metric tables.`,
+Format: Description with optional Mermaid flowchart.`,
 
-  'user-personas': `Generate user personas that:
-- Create 2-3 distinct personas (primary and secondary)
-- For each persona include:
-  * Memorable name and title
-  * Context and demographics
-  * Goals and what success looks like
-  * Specific pain points and frustrations
-  * Current behavior and workarounds
-  * A quote capturing their mindset
-- Define anti-personas (who this is NOT for)
-- Include the Job-to-be-Done for each persona
+  'considerations': `Generate a considerations section that:
+- Lists technical constraints or dependencies
+- Notes business constraints (timeline, budget, resources)
+- Documents trade-offs being made and why
+- Identifies external dependencies (APIs, vendors, other teams)
 
-Format: Structured persona profiles.`,
+Format: Organized bullet points by category.`,
 
-  'user-stories': `Generate user stories that:
-- Follow format: "As a [persona], I want [capability] so that [benefit]"
-- Cover the complete user journey
-- Include happy path AND edge cases
-- Prioritize using MoSCoW (Must, Should, Could, Won't)
-- Add acceptance criteria for each story
-- Group by epic or theme
+  'assumptions': `Generate an assumptions section that:
+- Lists what we're assuming to be true
+- Assigns confidence level (High/Medium/Low) to each
+- Notes what would change if assumption is wrong
+- Includes both technical and business assumptions
 
-Format: Organized list with clear prioritization.`,
+Format: Table or list with confidence levels.`,
 
-  'functional-requirements': `Generate functional requirements that:
-- Use unique IDs (FR-001, FR-002, etc.)
-- Include description, rationale, and acceptance criteria
-- Assign priority (P0, P1, P2)
-- Note dependencies
-- Cover all user actions and system behaviors
-- Include validation rules and error handling
+  'diagrams': `Generate 2-4 Mermaid diagrams that:
+- Include a user flow or journey diagram
+- Show system architecture or data flow
+- Add a state diagram if applicable
+- Use appropriate diagram types (flowchart, sequence, ER, etc.)
 
-Format: Structured requirements with IDs and clear acceptance criteria.`,
+Format: Valid Mermaid code blocks with brief descriptions.`,
 
-  'non-functional-requirements': `Generate non-functional requirements covering:
-- Performance: Response times, throughput targets
-- Scalability: Load expectations, growth projections
-- Reliability: Uptime, failover requirements
-- Security: Authentication, authorization, data protection
-- Privacy: Data handling, compliance requirements
-- Accessibility: WCAG compliance level
-- Compatibility: Supported browsers/devices/platforms
+  'solution': `Generate a solution section that:
+- Describes the high-level approach
+- Lists requirements using MoSCoW prioritization:
+  * Must Have - Critical for launch
+  * Should Have - Important but not blocking
+  * Could Have - Nice to have
+  * Won't Have - Explicitly out of scope
+- Defines success metrics that are specific and measurable
+- Explains how we'll know if this is successful
 
-Format: Organized by category with specific, measurable requirements.`,
-
-  'technical-considerations': `Generate technical considerations including:
-- Recommended architecture approach
-- Integration points with existing systems
-- Data model considerations
-- API requirements
-- Third-party dependencies
-- Performance optimization opportunities
-- Migration strategy if applicable
-
-Format: Technical guidance that informs but doesn't constrain implementation.`,
-
-  'ux-considerations': `Generate UX considerations including:
-- Design principles for this feature
-- Information architecture
-- Key screens/views needed
-- Interaction patterns to use
-- Responsive/mobile requirements
-- Loading, empty, and error states
-- Accessibility requirements
-- Descriptions of key user flows
-
-Format: UX guidelines with flow descriptions.`,
-
-  'timeline-milestones': `Generate a timeline with:
-- Phase breakdown (MVP/Alpha/Beta/GA or custom phases)
-- For each phase: scope, duration, deliverables, success criteria
-- Major milestones with target dates
-- Go/no-go decision points
-- Buffer for unknowns
-- Critical dependencies
-
-Format: Phase-based timeline with milestone table.`,
-
-  'risks-mitigations': `Generate a risk analysis with:
-- 5-10 significant risks across categories (technical, business, user, operational)
-- For each risk:
-  * Clear description
-  * Likelihood (High/Medium/Low)
-  * Impact (High/Medium/Low)
-  * Mitigation strategy
-  * Contingency plan
-  * Owner
-- Prioritize by risk score (likelihood × impact)
-
-Format: Risk register table with mitigation strategies.`,
-
-  'open-questions': `Generate open questions that:
-- Capture unresolved decisions
-- For each question:
-  * The question itself
-  * Why it matters (impact of different answers)
-  * Who should answer it
-  * Default assumption if not resolved
-  * Deadline for resolution
-- Categorize: Design, Technical, Business, Legal
-- Prioritize: Blocking vs. non-blocking
-
-Format: Organized question list with context.`,
+Format: Structured with clear subsections for approach, requirements, and metrics.`,
 };
 
 // ============================================================================

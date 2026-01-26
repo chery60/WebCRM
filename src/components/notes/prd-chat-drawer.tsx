@@ -322,9 +322,14 @@ export function PRDChatDrawer({
   }, [revertToVersion, onApplyContent]);
 
   const handleAddToNote = useCallback((content: string) => {
+    if (!content) {
+      console.warn('No content to add to note');
+      return;
+    }
+
     // Check if there's existing content in the note (more than just whitespace)
     const hasExistingContent = noteContent && noteContent.trim().length > 0;
-    
+
     if (hasExistingContent) {
       // Show dialog to ask user whether to overwrite or append
       setPendingContent(content);
@@ -336,10 +341,10 @@ export function PRDChatDrawer({
   }, [noteContent, onApplyContent]);
 
   const handleApplyModeSelect = useCallback((mode: 'overwrite' | 'append') => {
-    if (pendingContent) {
+    if (pendingContent && onApplyContent) {
       onApplyContent(pendingContent, mode);
-      setPendingContent(null);
     }
+    setPendingContent(null);
     setShowApplyModeDialog(false);
   }, [pendingContent, onApplyContent]);
 

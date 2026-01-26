@@ -38,7 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, MoreVertical, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye } from 'lucide-react';
+import { ArrowLeft, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye } from 'lucide-react';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
 import { useProjects, useProject, useCreateProject } from '@/lib/hooks/use-projects';
 import {
@@ -54,9 +54,9 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { GeneratedItemsSection } from '@/components/notes/generated-items-section';
-import { PRDCanvas, type PRDCanvasRef, type CanvasGenerationType, type CanvasData } from '@/components/canvas/prd-canvas';
+import { type CanvasGenerationType } from '@/components/canvas/prd-canvas';
 import { useCanvasGeneration } from '@/lib/hooks/use-canvas-generation';
-import type { GeneratedFeature, GeneratedTask } from '@/types';
+import type { GeneratedFeature, GeneratedTask, CanvasItem } from '@/types';
 import {
   createFeatureFromGenerated,
   createFeaturesFromGenerated,
@@ -74,6 +74,8 @@ import { useRoadmaps } from '@/lib/hooks/use-roadmaps';
 import type { TaskFormData } from '@/types';
 import { createTask as createTaskInDb } from '@/lib/db/repositories/supabase/tasks';
 import { tipTapToMarkdown, markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
+import { CanvasCard } from '@/components/notes/cards/canvas-card';
+import { ResourcesCard } from '@/components/notes/cards/resources-card';
 
 // View mode type for toggle between markup (raw markdown) and preview (rendered)
 type NoteViewMode = 'preview' | 'markup';
@@ -85,7 +87,7 @@ type NoteViewMode = 'preview' | 'markup';
  */
 function normalizeCanvasElements(elements: any[]): any[] {
   if (!Array.isArray(elements)) return [];
-  
+
   // Filter out invalid elements first, then normalize
   return elements
     .filter(el => el && typeof el === 'object' && el.type && el.id)
@@ -105,16 +107,16 @@ function normalizeCanvasElements(elements: any[]): any[] {
             return [0, 0];
           });
         }
-        
+
         // Ensure lastCommittedPoint exists (required for normalization)
         const lastCommittedPoint = points[points.length - 1];
-        
+
         // Calculate proper width/height from points
         const minX = Math.min(...points.map((p: number[]) => p[0]));
         const maxX = Math.max(...points.map((p: number[]) => p[0]));
         const minY = Math.min(...points.map((p: number[]) => p[1]));
         const maxY = Math.max(...points.map((p: number[]) => p[1]));
-        
+
         return {
           ...el,
           points,
@@ -125,7 +127,7 @@ function normalizeCanvasElements(elements: any[]): any[] {
           y: Number(el.y) || 0,
         };
       }
-      
+
       // For non-linear elements, ensure basic numeric properties
       return {
         ...el,
@@ -135,6 +137,80 @@ function normalizeCanvasElements(elements: any[]): any[] {
         height: el.height ? Number(el.height) : undefined,
       };
     });
+}
+
+/**
+ * Serialize canvases for storage - strips runtime-only properties like Map
+ */
+function serializeCanvasesForStorage(canvases: CanvasItem[]): string {
+  if (canvases.length === 0) return '';
+
+  // Deep clone and remove non-serializable properties
+  const serializable = canvases.map(canvas => ({
+    ...canvas,
+    data: {
+      ...canvas.data,
+      appState: canvas.data.appState ? {
+        ...canvas.data.appState,
+        collaborators: undefined, // Remove Map - can't be serialized
+      } : undefined,
+    },
+  }));
+
+  return JSON.stringify(serializable);
+}
+
+/**
+ * Migrate legacy single canvas to array format
+ */
+function migrateCanvasData(canvasDataStr: string | undefined): CanvasItem[] {
+  if (!canvasDataStr) return [];
+
+  try {
+    const parsed = JSON.parse(canvasDataStr);
+
+    // Check if it's already an array of CanvasItems
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id && parsed[0].name && parsed[0].data) {
+      // Already in new format - normalize elements in each canvas
+      return parsed.map((item: CanvasItem) => ({
+        ...item,
+        data: {
+          ...item.data,
+          elements: normalizeCanvasElements(item.data.elements as any[]),
+          appState: item.data.appState ? {
+            ...item.data.appState,
+            collaborators: new Map(),
+          } : { viewBackgroundColor: '#ffffff', collaborators: new Map() },
+        },
+      }));
+    }
+
+    // Legacy format - single canvas data object with elements, appState, files
+    if (parsed.elements || parsed.appState) {
+      const normalizedElements = normalizeCanvasElements(parsed.elements || []);
+      const appState = parsed.appState ? {
+        ...parsed.appState,
+        collaborators: new Map(),
+      } : { viewBackgroundColor: '#ffffff', collaborators: new Map() };
+
+      return [{
+        id: 'canvas-legacy',
+        name: 'Canvas 1',
+        data: {
+          elements: normalizedElements,
+          appState,
+          files: parsed.files || {},
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }];
+    }
+
+    return [];
+  } catch (e) {
+    console.warn('Failed to parse canvas data:', e);
+    return [];
+  }
 }
 
 export default function NoteDetailPage() {
@@ -166,12 +242,11 @@ export default function NoteDetailPage() {
   // AI Generated items state
   const [generatedFeatures, setGeneratedFeatures] = useState<GeneratedFeature[]>([]);
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
-  
-  // Canvas state - use ref for the actual data to avoid re-render loops
-  // Only the initial load data goes to state, updates go to ref
-  const [initialCanvasData, setInitialCanvasData] = useState<CanvasData | undefined>(undefined);
-  const canvasDataRef = useRef<CanvasData | undefined>(undefined);
-  const canvasRef = useRef<PRDCanvasRef>(null);
+
+  // Canvas state - array of canvases
+  const [canvases, setCanvases] = useState<CanvasItem[]>([]);
+  // Use ref for canvases to avoid re-render loops in auto-save
+  const canvasesRef = useRef<CanvasItem[]>([]);
   // Use a counter instead of boolean to ensure each change triggers debounce
   const [canvasChangeCount, setCanvasChangeCount] = useState(0);
 
@@ -186,24 +261,24 @@ export default function NoteDetailPage() {
 
   // Task tabs manager for creating new projects
   const { addTab, setActiveTab, tabs: taskTabs } = useTaskTabsManager();
-  
+
   // Get current authenticated user
   const { currentUser } = useAuthStore();
-  
+
   // Get roadmaps for feature creation
   const { data: roadmaps = [] } = useRoadmaps();
-  
+
   // New drawer states for Add dropdown
   const [showCreateTaskDrawer, setShowCreateTaskDrawer] = useState(false);
   const [showCreateFeatureDrawer, setShowCreateFeatureDrawer] = useState(false);
   const [showAIGenerationPanel, setShowAIGenerationPanel] = useState(false);
   const [aiGenerationMode, setAIGenerationMode] = useState<'tasks' | 'features'>('tasks');
-  
+
   // View mode state: 'preview' shows rendered content, 'markup' shows raw markdown
   const [viewMode, setViewMode] = useState<NoteViewMode>('preview');
   // Store the markdown version when in markup mode for proper conversion back
   const [markupContent, setMarkupContent] = useState<string>('');
-  
+
   // Extract plain text from content for AI context
   const [prdPlainText, setPrdPlainText] = useState('');
   useEffect(() => {
@@ -244,30 +319,17 @@ export default function NoteDetailPage() {
     [generateDiagram]
   );
 
-  // Handle canvas data changes - use ref to avoid re-render loops
-  // The canvas manages its own state internally, we just track it for saving
-  const handleCanvasChange = useCallback((data: CanvasData) => {
-    // Store the canvas data in the ref for persistence
-    canvasDataRef.current = data;
-    
+  // Handle canvas array changes
+  const handleCanvasesChange = useCallback((newCanvases: CanvasItem[]) => {
+    setCanvases(newCanvases);
+    // Update ref immediately for auto-save to access
+    canvasesRef.current = newCanvases;
     // Also update currentValues ref immediately so unmount save has latest data
     if (currentValues.current) {
-      currentValues.current.canvasData = data;
+      currentValues.current.canvases = newCanvases;
     }
-    
     // Trigger a debounced save by incrementing the counter
-    // Each increment ensures the debounced value changes and triggers a save
-    setCanvasChangeCount(prev => {
-      const newCount = prev + 1;
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Note] handleCanvasChange called:', {
-          newCount,
-          hasElements: data?.elements?.length || 0,
-          elementTypes: data?.elements?.slice(0, 3).map((e: any) => e.type) || [],
-        });
-      }
-      return newCount;
-    });
+    setCanvasChangeCount(prev => prev + 1);
   }, []);
 
   // Track if we've initialized and last saved values to prevent save loops
@@ -276,10 +338,10 @@ export default function NoteDetailPage() {
   const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '', generatedFeatures: '[]', generatedTasks: '[]', canvasData: '' });
 
   // Keep refs for current state to access in unmount cleanup
-  const currentValues = useRef({ title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current });
+  const currentValues = useRef({ title, content, tags, projectId, generatedFeatures, generatedTasks, canvases });
   useEffect(() => {
-    currentValues.current = { title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: canvasDataRef.current };
-  }, [title, content, tags, projectId, generatedFeatures, generatedTasks, canvasChangeCount]); // Added canvasChangeCount to ensure canvasData ref is captured
+    currentValues.current = { title, content, tags, projectId, generatedFeatures, generatedTasks, canvases };
+  }, [title, content, tags, projectId, generatedFeatures, generatedTasks, canvases]);
 
   // Initialize state when note loads
   useEffect(() => {
@@ -295,26 +357,11 @@ export default function NoteDetailPage() {
       if (note.generatedTasks && note.generatedTasks.length > 0) {
         setGeneratedTasks(note.generatedTasks);
       }
-      // Load saved canvas data
-      if (note.canvasData) {
-        try {
-          const parsedCanvasData = JSON.parse(note.canvasData);
-          // Normalize elements to fix any malformed linear elements (arrows, lines)
-          // This prevents "Linear element is not normalized" errors from Excalidraw
-          if (parsedCanvasData.elements) {
-            parsedCanvasData.elements = normalizeCanvasElements(parsedCanvasData.elements);
-          }
-          // CRITICAL: Ensure appState.collaborators is a Map, not a plain object
-          // JSON.stringify converts Map to {}, which breaks Excalidraw's forEach calls
-          if (parsedCanvasData.appState) {
-            parsedCanvasData.appState.collaborators = new Map();
-          }
-          setInitialCanvasData(parsedCanvasData);
-          canvasDataRef.current = parsedCanvasData;
-        } catch (e) {
-          console.warn('Failed to parse canvas data:', e);
-        }
-      }
+      // Load and migrate canvas data
+      const migratedCanvases = migrateCanvasData(note.canvasData);
+      setCanvases(migratedCanvases);
+      canvasesRef.current = migratedCanvases;
+
       // Store initial values as last saved
       lastSaved.current = {
         title: note.title,
@@ -326,14 +373,14 @@ export default function NoteDetailPage() {
         canvasData: note.canvasData || '',
       };
       isInitialized.current = true;
-      setIsNoteLoaded(true); // Trigger re-render so PRDCanvas mounts with correct initialData
+      setIsNoteLoaded(true);
     }
   }, [note]);
 
   // Reset initialization when noteId changes
   useEffect(() => {
     isInitialized.current = false;
-    setIsNoteLoaded(false); // Reset so PRDCanvas remounts with new note's data
+    setIsNoteLoaded(false);
   }, [noteId]);
 
   // Debounce content changes for auto-save
@@ -353,9 +400,9 @@ export default function NoteDetailPage() {
     const currentProjectId = debouncedProjectId || '';
     const currentFeaturesStr = JSON.stringify(debouncedGeneratedFeatures);
     const currentTasksStr = JSON.stringify(debouncedGeneratedTasks);
-    // Get canvas data from ref (not state) to avoid re-render loops
-    const currentCanvasStr = canvasDataRef.current ? JSON.stringify(canvasDataRef.current) : '';
-    
+    // Serialize canvases for storage - use ref to avoid dependency on canvases state
+    const currentCanvasStr = serializeCanvasesForStorage(canvasesRef.current);
+
     const canvasChanged = currentCanvasStr !== lastSaved.current.canvasData;
     const hasChanges =
       debouncedTitle !== lastSaved.current.title ||
@@ -365,17 +412,6 @@ export default function NoteDetailPage() {
       currentFeaturesStr !== lastSaved.current.generatedFeatures ||
       currentTasksStr !== lastSaved.current.generatedTasks ||
       canvasChanged;
-
-    // Debug logging for canvas save
-    if (process.env.NODE_ENV === 'development' && debouncedCanvasChangeCount > 0) {
-      console.log('[Note Auto-Save] Canvas check:', {
-        canvasChangeCount: debouncedCanvasChangeCount,
-        canvasChanged,
-        currentCanvasLength: currentCanvasStr.length,
-        lastSavedCanvasLength: lastSaved.current.canvasData.length,
-        hasElements: canvasDataRef.current?.elements?.length || 0,
-      });
-    }
 
     if (hasChanges) {
       // Update last saved values immediately to prevent duplicate saves
@@ -389,44 +425,25 @@ export default function NoteDetailPage() {
         canvasData: currentCanvasStr,
       };
 
-      // Debug logging for canvas save
-      if (process.env.NODE_ENV === 'development' && canvasChanged) {
-        console.log('[Note Auto-Save] Saving canvas data:', {
-          canvasDataLength: currentCanvasStr.length,
-          hasElements: canvasDataRef.current?.elements?.length || 0,
-        });
-      }
-
-      // Ensure canvasData is passed correctly - use empty string check
-      // An empty canvas still has valid JSON structure, so we should save it
+      // Ensure canvasData is passed correctly
       const canvasDataToSave = currentCanvasStr.length > 0 ? currentCanvasStr : undefined;
 
       updateNote(
-        { 
-          id: noteId, 
-          data: { 
-            title: debouncedTitle, 
-            content: debouncedContent, 
-            tags: debouncedTags, 
+        {
+          id: noteId,
+          data: {
+            title: debouncedTitle,
+            content: debouncedContent,
+            tags: debouncedTags,
             projectId: debouncedProjectId,
             generatedFeatures: debouncedGeneratedFeatures,
             generatedTasks: debouncedGeneratedTasks,
             canvasData: canvasDataToSave,
-          } 
+          }
         },
         {
           onSuccess: () => {
             setLastSavedAt(new Date());
-            if (process.env.NODE_ENV === 'development' && canvasChanged) {
-              console.log('[Note Auto-Save] Canvas saved successfully!', {
-                savedCanvasLength: canvasDataToSave?.length || 0,
-              });
-            }
-          },
-          onError: (error) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.error('[Note Auto-Save] Failed to save:', error);
-            }
           },
         }
       );
@@ -438,12 +455,12 @@ export default function NoteDetailPage() {
     return () => {
       if (!isInitialized.current) return;
 
-      const { title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData } = currentValues.current;
+      const { title, content, tags, projectId, generatedFeatures, generatedTasks, canvases } = currentValues.current;
       const currentTagsStr = JSON.stringify(tags);
       const currentProjectId = projectId || '';
       const currentFeaturesStr = JSON.stringify(generatedFeatures);
       const currentTasksStr = JSON.stringify(generatedTasks);
-      const currentCanvasStr = canvasData ? JSON.stringify(canvasData) : '';
+      const currentCanvasStr = serializeCanvasesForStorage(canvases);
 
       const hasChanges =
         title !== lastSaved.current.title ||
@@ -456,7 +473,6 @@ export default function NoteDetailPage() {
 
       if (hasChanges) {
         // Force immediate save on unmount
-        // We use the mutation directly without optimistic updates to ensure the request fires
         updateNote({
           id: noteId,
           data: { title, content, tags, projectId, generatedFeatures, generatedTasks, canvasData: currentCanvasStr || undefined }
@@ -546,13 +562,12 @@ export default function NoteDetailPage() {
   }, [generatedTasks]);
 
   // Confirm feature/pipeline creation with selected roadmap
-  // This handles both features AND tasks being added to a roadmap/pipeline
   const handleConfirmFeatureCreation = useCallback(async (roadmapId: string) => {
     if (!currentUser) {
       toast.error('Please sign in to create features');
       return;
     }
-    
+
     setIsCreating(true);
     try {
       const featureOptions = {
@@ -561,20 +576,18 @@ export default function NoteDetailPage() {
         userName: currentUser.name || currentUser.email,
         userAvatar: currentUser.avatar,
       };
-      
+
       if (pendingFeatureAction === 'single' && pendingFeature) {
         await createFeatureFromGenerated(pendingFeature, featureOptions);
         toast.success(`Feature "${pendingFeature.title}" created in pipeline`);
         setGeneratedFeatures(prev => prev.filter(f => f.id !== pendingFeature.id));
       } else if (pendingFeatureAction === 'bulk') {
-        // Handle both selected features AND selected tasks
         const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
         const selectedTasks = generatedTasks.filter(t => t.isSelected);
-        
+
         let totalCreated = 0;
         let totalFailed = 0;
-        
-        // Create features in pipeline
+
         if (selectedFeatures.length > 0) {
           const featureResult = await createFeaturesFromGenerated(selectedFeatures, featureOptions);
           totalCreated += featureResult.totalCreated;
@@ -583,8 +596,7 @@ export default function NoteDetailPage() {
             setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
           }
         }
-        
-        // Convert tasks to features and add to pipeline
+
         if (selectedTasks.length > 0) {
           const tasksAsFeatures: GeneratedFeature[] = selectedTasks.map(task => ({
             id: task.id,
@@ -604,7 +616,7 @@ export default function NoteDetailPage() {
             setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
           }
         }
-        
+
         if (totalCreated > 0) {
           toast.success(`${totalCreated} items added to pipeline`);
         }
@@ -622,41 +634,35 @@ export default function NoteDetailPage() {
   }, [pendingFeatureAction, pendingFeature, generatedFeatures, generatedTasks, currentUser]);
 
   // Confirm task creation with selected project
-  // This handles both tasks AND features being added as tasks
   const handleConfirmTaskCreation = useCallback(async (projectId: string | null, newProjectName?: string) => {
     setIsCreating(true);
     try {
-      // Create new project if needed
       let targetProjectId = projectId;
       if (newProjectName) {
         const newTab = await addTab(newProjectName);
         targetProjectId = newTab.id;
-        // Set the newly created tab as active so it shows when navigating to Tasks
         setActiveTab(newTab.id);
         toast.success(`Project "${newProjectName}" created`);
       } else if (projectId) {
-        // Set the selected project as active tab
         setActiveTab(projectId);
       }
 
       if (pendingTaskAction === 'single' && pendingTask) {
-        await createTaskFromGenerated(pendingTask, { 
+        await createTaskFromGenerated(pendingTask, {
           defaultStatus: 'planned',
           projectId: targetProjectId || undefined
         });
         toast.success(`Task "${pendingTask.title}" created`);
         setGeneratedTasks(prev => prev.filter(t => t.id !== pendingTask.id));
       } else if (pendingTaskAction === 'bulk') {
-        // Handle both selected tasks AND selected features
         const selectedTasks = generatedTasks.filter(t => t.isSelected);
         const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
-        
+
         let totalCreated = 0;
         let totalFailed = 0;
-        
-        // Create tasks
+
         if (selectedTasks.length > 0) {
-          const taskResult = await createTasksFromGenerated(selectedTasks, { 
+          const taskResult = await createTasksFromGenerated(selectedTasks, {
             defaultStatus: 'planned',
             projectId: targetProjectId || undefined
           });
@@ -666,8 +672,7 @@ export default function NoteDetailPage() {
             setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
           }
         }
-        
-        // Convert features to tasks and create
+
         if (selectedFeatures.length > 0) {
           const featuresAsTasks: GeneratedTask[] = selectedFeatures.map(feature => ({
             id: feature.id,
@@ -679,7 +684,7 @@ export default function NoteDetailPage() {
             dependencies: [],
             isSelected: true,
           }));
-          const featureResult = await createTasksFromGenerated(featuresAsTasks, { 
+          const featureResult = await createTasksFromGenerated(featuresAsTasks, {
             defaultStatus: 'planned',
             projectId: targetProjectId || undefined
           });
@@ -689,7 +694,7 @@ export default function NoteDetailPage() {
             setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
           }
         }
-        
+
         if (totalCreated > 0) {
           toast.success(`${totalCreated} items added to Tasks`);
         }
@@ -711,7 +716,6 @@ export default function NoteDetailPage() {
     try {
       await createTaskInDb(taskData);
       toast.success(`Task "${taskData.title}" created`);
-      // Add to generated tasks list for display
       const newTask: GeneratedTask = {
         id: crypto.randomUUID(),
         title: taskData.title,
@@ -810,7 +814,7 @@ export default function NoteDetailPage() {
     const remainingFeatures = generatedFeatures.filter(f => !f.isSelected);
     const remainingTasks = generatedTasks.filter(t => !t.isSelected);
     const deletedCount = (generatedFeatures.length - remainingFeatures.length) + (generatedTasks.length - remainingTasks.length);
-    
+
     setGeneratedFeatures(remainingFeatures);
     setGeneratedTasks(remainingTasks);
     toast.success(`${deletedCount} items deleted`);
@@ -818,24 +822,33 @@ export default function NoteDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Skeleton className="h-6 w-6" />
-          <Skeleton className="h-6 w-20" />
+      <div className="flex flex-col h-full bg-white">
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-[1280px] mx-auto px-8 py-6">
+            <div className="grid grid-cols-12 gap-6">
+              <div className="col-span-7">
+                <Skeleton className="h-4 w-24 mb-8" />
+                <Skeleton className="h-[52px] w-2/3 mb-8" />
+                <Skeleton className="h-4 w-48 mb-8" />
+                <Skeleton className="h-[350px] w-full" />
+              </div>
+              <div className="col-span-5 pl-12">
+                <Skeleton className="h-[200px] w-full mb-6" />
+                <Skeleton className="h-[150px] w-full" />
+              </div>
+            </div>
+          </div>
         </div>
-        <Skeleton className="h-8 w-1/2 mb-2" />
-        <Skeleton className="h-4 w-32 mb-6" />
-        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
 
   if (!note) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-xl font-semibold mb-2">Note not found</h2>
-        <p className="text-muted-foreground mb-4">This note may have been deleted.</p>
-        <Button asChild>
+      <div className="flex flex-col h-full bg-white items-center justify-center">
+        <h2 className="text-xl font-semibold mb-2 text-note-text">Note not found</h2>
+        <p className="text-note-text-muted mb-4">This note may have been deleted.</p>
+        <Button asChild className="bg-note-text text-white hover:bg-note-text/90">
           <Link href="/notes">Back to Notes</Link>
         </Button>
       </div>
@@ -843,249 +856,249 @@ export default function NoteDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Section Header */}
-      <div className="flex h-[69px] items-center justify-between px-8 border-b border-border bg-background flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" asChild>
-            <Link href="/notes">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-medium">Notes</h1>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {isSaving ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Saving...</span>
-            </div>
-          ) : lastSavedAt ? (
-            <div className="flex items-center gap-1.5 text-muted-foreground/80">
-              <Check className="h-3.5 w-3.5" />
-              <span>Saved</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full bg-white text-note-text">
       <div className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto w-full">
-          {/* Title and Meta Block */}
-          <div className="flex items-start justify-between px-8 py-6 border-b border-border gap-6">
-            <div className="flex-1 flex flex-col gap-1">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Product Team Meeting"
-                className="text-xl md:text-xl font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent placeholder:text-muted-foreground/50"
-              />
-              <p className="text-[14px] leading-[150%] text-muted-foreground">
-                {format(new Date(note.createdAt), 'MMM d, yyyy HH:mm')}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Project Selector */}
-              <Select
-                value={projectId || 'none'}
-                onValueChange={(val) => {
-                  if (val === 'create-new') {
-                    setShowCreateProjectDialog(true);
-                  } else {
-                    setProjectId(val === 'none' ? undefined : val);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-[160px] h-8">
-                  <FolderOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="No Project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Project</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="create-new" className="text-primary">
-                    <span className="flex items-center gap-2">
-                      <Plus className="h-3.5 w-3.5" />
-                      Create New Project
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Tags */}
-              <div className="flex items-center gap-2">
-                {tags.map((tag) => (
-                  <TagBadge
-                    key={tag}
-                    name={tag}
-                    color={getTagColor(tag)}
-                  />
-                ))}
+        <div className="max-w-[1280px] mx-auto px-8 py-6">
+          {/* 12-column grid layout */}
+          <div className="grid grid-cols-12 gap-6">
+            {/* Left Content Area - col-span-7 */}
+            <div className="col-span-7 flex flex-col gap-4">
+              {/* Back Navigation */}
+              <div className="flex items-center justify-between">
+                <Link
+                  href="/notes"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-note-text-muted hover:text-note-text transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>All notes</span>
+                </Link>
+                <div className="flex items-center gap-2 text-xs text-note-text-muted">
+                  {isSaving ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Saving...</span>
+                    </div>
+                  ) : lastSavedAt ? (
+                    <div className="flex items-center gap-1.5">
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Saved</span>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
-              {/* Add Tag Button */}
-              <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full">
-                    <Tag className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-2" align="end">
-                  <div className="space-y-1">
-                    {allTags
-                      .filter((t) => !tags.includes(t.name))
-                      .map((tag) => (
-                        <button
-                          key={tag.id}
-                          onClick={() => handleAddTag(tag.name)}
-                          className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
-                        >
-                          <TagBadge name={tag.name} color={tag.color} />
-                        </button>
-                      ))}
-                    {allTags.filter((t) => !tags.includes(t.name)).length === 0 && (
-                      <p className="text-xs text-muted-foreground px-2 py-1">
-                        All tags added
-                      </p>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              {/* More options */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {/* View mode toggle - conditional based on current mode */}
-                  {viewMode === 'preview' ? (
-                    <DropdownMenuItem onClick={handleViewMarkup}>
-                      <Code className="h-4 w-4 mr-2" />
-                      View Markup
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={handleViewPreview}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Preview
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
-                    <FolderInput className="h-4 w-4 mr-2" />
-                    Move to
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                  <DropdownMenuItem>Export</DropdownMenuItem>
-                  <DropdownMenuItem>Share</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {/* Editor - conditionally render based on view mode */}
-          <div className="px-8 py-6">
-            {viewMode === 'preview' ? (
-              <NoteEditor
-                content={content}
-                onChange={setContent}
-                placeholder="Start typing, or press '/' for commands..."
-                className="min-h-[500px]"
-                savedFeatures={generatedFeatures}
-                projectInstructions={currentProject?.instructions}
-                onFeaturesGenerated={handleFeaturesGenerated}
-                onTasksGenerated={handleTasksGenerated}
-              />
-            ) : (
-              /* Markup mode - show raw markdown in a textarea */
-              <div className="relative border rounded-lg bg-card min-h-[500px]">
-                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Code className="h-4 w-4" />
-                    <span>Markup View</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleViewPreview}
-                    className="h-7 text-xs"
-                  >
-                    <Eye className="h-3.5 w-3.5 mr-1.5" />
-                    Switch to Preview
-                  </Button>
+              {/* Title and Meta Block */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Untitled Note"
+                    className="text-[42px] font-bold border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-note-text placeholder:text-note-text-muted leading-[52px] tracking-[-0.462px] shadow-none"
+                  />
                 </div>
-                <textarea
-                  value={markupContent}
-                  onChange={(e) => handleMarkupChange(e.target.value)}
-                  placeholder="# Heading 1&#10;## Heading 2&#10;### Heading 3&#10;&#10;Regular paragraph text with **bold** and *italic*.&#10;&#10;* Bullet point 1&#10;* Bullet point 2&#10;&#10;1. Numbered item 1&#10;2. Numbered item 2"
-                  className="w-full h-[calc(100%-48px)] min-h-[452px] p-4 bg-transparent resize-none focus:outline-none font-mono text-sm leading-relaxed"
-                  spellCheck={false}
+
+                {/* Close/More button */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-note-text-muted hover:text-note-text hover:bg-note-border rounded-md">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {/* View mode toggle - conditional based on current mode */}
+                    {viewMode === 'preview' ? (
+                      <DropdownMenuItem onClick={handleViewMarkup}>
+                        <Code className="h-4 w-4 mr-2" />
+                        View Markup
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={handleViewPreview}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Preview
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowMoveDialog(true)}>
+                      <FolderInput className="h-4 w-4 mr-2" />
+                      Move to
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                    <DropdownMenuItem>Export</DropdownMenuItem>
+                    <DropdownMenuItem>Share</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Metadata row */}
+              <div className="flex flex-wrap items-center gap-2 text-sm text-note-text-muted">
+                <span>{format(new Date(note.createdAt), 'MMM d, yyyy')}</span>
+                <span>•</span>
+                <span>{format(new Date(note.updatedAt), 'h:mm a')}</span>
+                {/* Project Selector */}
+                <Select
+                  value={projectId || 'none'}
+                  onValueChange={(val) => {
+                    if (val === 'create-new') {
+                      setShowCreateProjectDialog(true);
+                    } else {
+                      setProjectId(val === 'none' ? undefined : val);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-auto py-0.5 px-2 text-xs font-medium bg-transparent border-0 shadow-none focus:ring-0 focus:ring-offset-0 text-note-text-muted hover:text-note-text data-[state=open]:text-note-text inline-flex items-center gap-1">
+                    <FolderOpen className="h-3 w-3" />
+                    <SelectValue placeholder="No Project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Project</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="create-new" className="text-primary">
+                      <span className="flex items-center gap-2">
+                        <Plus className="h-3 w-3" />
+                        Create New
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {tags.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <div className="flex items-center gap-1.5">
+                      {tags.map((tag) => (
+                        <TagBadge
+                          key={tag}
+                          name={tag}
+                          color={getTagColor(tag)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+                {/* Add Tag Button */}
+                <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-auto py-0 px-2 text-xs bg-transparent text-note-text-muted hover:text-note-text">
+                      <Tag className="h-3 w-3 mr-1" />
+                      Add Tag
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-2" align="start">
+                    <div className="space-y-1">
+                      {allTags
+                        .filter((t) => !tags.includes(t.name))
+                        .map((tag) => (
+                          <button
+                            key={tag.id}
+                            onClick={() => handleAddTag(tag.name)}
+                            className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
+                          >
+                            <TagBadge name={tag.name} color={tag.color} />
+                          </button>
+                        ))}
+                      {allTags.filter((t) => !tags.includes(t.name)).length === 0 && (
+                        <p className="text-xs text-muted-foreground px-2 py-1">
+                          All tags added
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Editor - conditionally render based on view mode */}
+              <div className="mb-8">
+                {viewMode === 'preview' ? (
+                  <NoteEditor
+                    content={content}
+                    onChange={setContent}
+                    placeholder="Start typing, or press '/' for commands..."
+                    className="min-h-[400px] bg-white"
+                    savedFeatures={generatedFeatures}
+                    projectInstructions={currentProject?.instructions}
+                    onFeaturesGenerated={handleFeaturesGenerated}
+                    onTasksGenerated={handleTasksGenerated}
+                  />
+                ) : (
+                  /* Markup mode - show raw markdown in a textarea */
+                  <div className="relative bg-transparent min-h-[400px] overflow-hidden">
+                    <div className="flex items-center justify-between px-0 py-2 mb-4">
+                      <div className="flex items-center gap-2 text-xs text-note-text-muted">
+                        <Code className="h-3.5 w-3.5" />
+                        <span>Markup View</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleViewPreview}
+                        className="h-6 text-xs px-2 text-note-text-muted hover:text-note-text"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Preview
+                      </Button>
+                    </div>
+                    <textarea
+                      value={markupContent}
+                      onChange={(e) => handleMarkupChange(e.target.value)}
+                      placeholder="# Heading 1&#10;## Heading 2&#10;### Heading 3&#10;&#10;Regular paragraph text with **bold** and *italic*.&#10;&#10;* Bullet point 1&#10;* Bullet point 2&#10;&#10;1. Numbered item 1&#10;2. Numbered item 2"
+                      className="w-full min-h-[352px] p-4 bg-transparent resize-none focus:outline-none font-mono text-xs leading-relaxed text-note-text"
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Generated Items Section */}
+              <div className="mb-8">
+                <GeneratedItemsSection
+                  features={generatedFeatures}
+                  tasks={generatedTasks}
+                  onFeaturesChange={setGeneratedFeatures}
+                  onTasksChange={setGeneratedTasks}
+                  onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
+                  onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
+                  onOpenAITaskGeneration={handleOpenAITaskGeneration}
+                  onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
+                  onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
+                  onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
+                  alwaysShow={true}
                 />
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* PRD Canvas - Whiteboard for visual planning */}
-          {/* IMPORTANT: Only render PRDCanvas after note is loaded to ensure initialData is available
-              The PRDCanvas component memoizes initialData on first render, so we must wait for note data */}
-          <div className="px-8 pb-6">
-            {isNoteLoaded ? (
-              <PRDCanvas
-                key={`canvas-${noteId}`} // Force remount if noteId changes
-                ref={canvasRef}
-                initialData={initialCanvasData}
-                onChange={handleCanvasChange}
-                prdContent={prdPlainText}
-                productDescription={title}
-                defaultCollapsed={false}
-                onGenerateContent={handleGenerateCanvasContent}
-                isGenerating={isCanvasGenerating}
-                generatingType={canvasGeneratingType}
-              />
-            ) : (
-              <div className="border rounded-lg bg-card overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-4" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                </div>
-                <div className="h-[400px] flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
+            {/* Right Sidebar - col-span-5 */}
+            <div className="col-span-5 pl-12">
+              <div className="space-y-6">
+                {/* Canvas Card */}
+                {isNoteLoaded && (
+                  <CanvasCard
+                    canvases={canvases}
+                    onCanvasesChange={handleCanvasesChange}
+                    prdContent={prdPlainText}
+                    productDescription={title}
+                    onGenerateContent={handleGenerateCanvasContent}
+                    isGenerating={isCanvasGenerating}
+                    generatingType={canvasGeneratingType}
+                  />
+                )}
+
+                {/* Resources Card - only shows if there are mermaid diagrams */}
+                <ResourcesCard content={content} />
               </div>
-            )}
+            </div>
           </div>
-
-          {/* Generated Items Section */}
-          <GeneratedItemsSection
-            features={generatedFeatures}
-            tasks={generatedTasks}
-            onFeaturesChange={setGeneratedFeatures}
-            onTasksChange={setGeneratedTasks}
-            onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
-            onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
-            onOpenAITaskGeneration={handleOpenAITaskGeneration}
-            onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
-            onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
-            onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
-            alwaysShow={true}
-          />
         </div>
       </div>
 
@@ -1147,8 +1160,8 @@ export default function NoteDetailPage() {
             <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)} className="px-4">
               Cancel
             </Button>
-            <Button 
-              onClick={handleCreateProject} 
+            <Button
+              onClick={handleCreateProject}
               disabled={!newProjectName.trim() || createProject.isPending}
               className="px-4"
             >
@@ -1169,8 +1182,8 @@ export default function NoteDetailPage() {
       <FeatureDestinationDialog
         open={showFeatureDialog}
         onOpenChange={setShowFeatureDialog}
-        features={pendingFeatureAction === 'single' && pendingFeature 
-          ? [pendingFeature] 
+        features={pendingFeatureAction === 'single' && pendingFeature
+          ? [pendingFeature]
           : generatedFeatures.filter(f => f.isSelected)}
         mode={pendingFeatureAction}
         onConfirm={handleConfirmFeatureCreation}
@@ -1181,8 +1194,8 @@ export default function NoteDetailPage() {
       <TaskDestinationDialog
         open={showTaskDialog}
         onOpenChange={setShowTaskDialog}
-        tasks={pendingTaskAction === 'single' && pendingTask 
-          ? [pendingTask] 
+        tasks={pendingTaskAction === 'single' && pendingTask
+          ? [pendingTask]
           : generatedTasks.filter(t => t.isSelected)}
         mode={pendingTaskAction}
         onConfirm={handleConfirmTaskCreation}

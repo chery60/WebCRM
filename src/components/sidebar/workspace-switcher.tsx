@@ -92,19 +92,68 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
 
     if (collapsed) {
         return (
-            <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: '#EBEBEB' }}>
+            <div className="border-t" style={{ borderColor: 'var(--sidebar-separator)', backgroundColor: 'white' }}>
+                <div className="p-3" style={{ paddingLeft: '24px', paddingRight: '24px' }}>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="flex w-full items-center justify-center rounded-lg p-2 hover:bg-sidebar-accent">
+                                <Avatar className="h-8 w-8 rounded-lg">
+                                    <AvatarImage src={currentWorkspace?.icon} />
+                                    <AvatarFallback className="rounded-lg bg-primary text-primary-foreground text-sm">
+                                        {workspaceInitials}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent side="right" align="end" className="w-56">
+                            <WorkspaceSwitcherContent
+                                currentWorkspace={currentWorkspace}
+                                userWorkspaces={userWorkspaces}
+                                onSwitch={handleSwitchWorkspace}
+                                onCreateClick={() => setIsCreateOpen(true)}
+                            />
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <CreateWorkspaceDialog
+                        open={isCreateOpen}
+                        onOpenChange={setIsCreateOpen}
+                        workspaceName={newWorkspaceName}
+                        setWorkspaceName={setNewWorkspaceName}
+                        onSubmit={handleCreateWorkspace}
+                        isLoading={isLoading}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="border-t" style={{ borderColor: 'var(--sidebar-separator)', backgroundColor: 'white' }}>
+            <div className="p-3" style={{ paddingLeft: '24px', paddingRight: '24px' }}>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className="flex w-full items-center justify-center rounded-lg p-2 hover:bg-sidebar-accent">
-                            <Avatar className="h-8 w-8 rounded-lg">
+                        <button 
+                            className="flex w-full items-center transition-colors"
+                            style={{
+                                height: '24px',
+                                fontSize: '14px',
+                                color: 'var(--sidebar-text-secondary)',
+                                gap: '8px',
+                            }}
+                        >
+                            <Avatar className="h-6 w-6 rounded-lg" style={{ width: '24px', height: '24px' }}>
                                 <AvatarImage src={currentWorkspace?.icon} />
-                                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground text-sm">
+                                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground text-xs">
                                     {workspaceInitials}
                                 </AvatarFallback>
                             </Avatar>
+                            <span className="flex-1 truncate text-left">
+                                {currentWorkspace?.name || 'Select Workspace'}
+                            </span>
+                            <ChevronsUpDown className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px' }} />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="end" className="w-56">
+                    <DropdownMenuContent side="top" align="start" className="w-56">
                         <WorkspaceSwitcherContent
                             currentWorkspace={currentWorkspace}
                             userWorkspaces={userWorkspaces}
@@ -113,6 +162,7 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
                         />
                     </DropdownMenuContent>
                 </DropdownMenu>
+
                 <CreateWorkspaceDialog
                     open={isCreateOpen}
                     onOpenChange={setIsCreateOpen}
@@ -122,44 +172,6 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
                     isLoading={isLoading}
                 />
             </div>
-        );
-    }
-
-    return (
-        <div className="border-t border-sidebar-border p-3" style={{ backgroundColor: '#EBEBEB' }}>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent">
-                        <Avatar className="h-8 w-8 rounded-lg">
-                            <AvatarImage src={currentWorkspace?.icon} />
-                            <AvatarFallback className="rounded-lg bg-primary text-primary-foreground text-sm">
-                                {workspaceInitials}
-                            </AvatarFallback>
-                        </Avatar>
-                        <span className="flex-1 truncate text-left text-sidebar-foreground">
-                            {currentWorkspace?.name || 'Select Workspace'}
-                        </span>
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56">
-                    <WorkspaceSwitcherContent
-                        currentWorkspace={currentWorkspace}
-                        userWorkspaces={userWorkspaces}
-                        onSwitch={handleSwitchWorkspace}
-                        onCreateClick={() => setIsCreateOpen(true)}
-                    />
-                </DropdownMenuContent>
-            </DropdownMenu>
-
-            <CreateWorkspaceDialog
-                open={isCreateOpen}
-                onOpenChange={setIsCreateOpen}
-                workspaceName={newWorkspaceName}
-                setWorkspaceName={setNewWorkspaceName}
-                onSubmit={handleCreateWorkspace}
-                isLoading={isLoading}
-            />
         </div>
     );
 }

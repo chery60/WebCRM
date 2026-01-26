@@ -549,6 +549,19 @@ export interface CustomPRDTemplate {
   updatedAt: Date;
 }
 
+// Canvas Item for multiple canvases per note
+export interface CanvasItem {
+  id: string;
+  name: string;
+  data: {
+    elements: unknown[];
+    appState?: Record<string, unknown>;
+    files?: Record<string, unknown>;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Export format for sharing templates
 export interface TemplateExportFormat {
   formatVersion: '1.0'; // For future compatibility

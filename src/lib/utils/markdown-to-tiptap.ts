@@ -195,6 +195,19 @@ function createCodeBlock(code: string, language?: string): TipTapNode {
 }
 
 /**
+ * Creates a mermaid diagram node
+ */
+function createMermaid(code: string): TipTapNode {
+  return {
+    type: 'mermaid',
+    attrs: {
+      code,
+      title: null,
+    },
+  };
+}
+
+/**
  * Creates an excalidraw node from stored data
  */
 function createExcalidraw(data: unknown, minHeight: number = 400): TipTapNode {
@@ -297,7 +310,13 @@ export function markdownToTipTap(markdown: string): TipTapNode {
         i++;
       }
       i++; // Skip closing ```
-      content.push(createCodeBlock(codeLines.join('\n'), language));
+
+      // Convert mermaid code blocks to mermaid nodes for proper rendering
+      if (language?.toLowerCase() === 'mermaid') {
+        content.push(createMermaid(codeLines.join('\n')));
+      } else {
+        content.push(createCodeBlock(codeLines.join('\n'), language));
+      }
       continue;
     }
 
@@ -552,6 +571,15 @@ export function tipTapToMarkdown(doc: TipTapNode): string {
         const lang = node.attrs?.language || '';
         lines.push('```' + lang);
         lines.push(extractText(node));
+        lines.push('```');
+        lines.push('');
+        break;
+
+      case 'mermaid':
+        // Preserve mermaid diagrams as mermaid code blocks
+        const mermaidCode = node.attrs?.code || '';
+        lines.push('```mermaid');
+        lines.push(mermaidCode);
         lines.push('```');
         lines.push('');
         break;

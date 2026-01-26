@@ -221,14 +221,14 @@ export function GeneratedItemsSection({
   // Empty state when alwaysShow is true but no items
   if (totalCount === 0 && alwaysShow) {
     return (
-      <div className={cn('border-t bg-muted/30', className)}>
+      <div className={cn('rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)]', className)}>
         <div className="px-4 py-6">
           <div className="flex flex-col items-center justify-center text-center">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span className="font-medium">Tasks & Features</span>
+              <span className="font-medium text-note-text">Tasks & Features</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4 max-w-md">
+            <p className="text-xs text-note-text-muted mb-4 max-w-md">
               Add tasks and features to track work items for this note. You can create them manually or generate them using AI.
             </p>
             <DropdownMenu>
@@ -265,22 +265,22 @@ export function GeneratedItemsSection({
   }
 
   return (
-    <div className={cn('border-t bg-muted/30', className)}>
+    <div className={cn('rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden', className)}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         {/* Header */}
         <CollapsibleTrigger asChild>
-          <button className="flex items-center justify-between w-full px-4 py-3 hover:bg-muted/50 transition-colors">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <span className="font-medium">AI Generated Items</span>
+          <button className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-note-bg/50 transition-colors border-b border-note-border bg-note-bg/30">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="font-medium text-sm text-note-text">AI Generated Items</span>
               <Badge variant="secondary" className="text-xs">
-                {totalCount} items
+                {totalCount}
               </Badge>
             </div>
             {isOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              <ChevronUp className="h-4 w-4 text-note-text-muted" />
             ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-note-text-muted" />
             )}
           </button>
         </CollapsibleTrigger>
@@ -389,10 +389,10 @@ export function GeneratedItemsSection({
               {/* Features Tab */}
               <TabsContent value="features" className="mt-0">
                 {features.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Lightbulb className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No features generated yet.</p>
-                    <p className="text-xs mt-1">
+                  <div className="text-center py-6 text-note-text-muted">
+                    <Lightbulb className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                    <p className="text-xs font-medium">No features generated yet.</p>
+                    <p className="text-[10px] mt-1 opacity-70">
                       Use the "/" command and select "Generate Features" from your PRD content.
                     </p>
                   </div>
@@ -416,10 +416,10 @@ export function GeneratedItemsSection({
               {/* Tasks Tab */}
               <TabsContent value="tasks" className="mt-0">
                 {tasks.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <ListTodo className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No tasks generated yet.</p>
-                    <p className="text-xs mt-1">
+                  <div className="text-center py-6 text-note-text-muted">
+                    <ListTodo className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                    <p className="text-xs font-medium">No tasks generated yet.</p>
+                    <p className="text-[10px] mt-1 opacity-70">
                       Use the "/" command and select "Generate Tasks" from your features.
                     </p>
                   </div>
