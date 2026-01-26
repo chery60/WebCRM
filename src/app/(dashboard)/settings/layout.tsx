@@ -14,9 +14,9 @@ interface SettingsNavItem {
 }
 
 const settingsNavItems: SettingsNavItem[] = [
+    { title: 'Account', href: '/settings/account', icon: User, section: 'app' },
     { title: 'Apps', href: '/settings/apps', icon: Grid2X2, section: 'app' },
     { title: 'Features', href: '/settings/features', icon: ToggleLeft, section: 'app' },
-    { title: 'Account', href: '/settings/account', icon: User, section: 'app' },
     { title: 'Notifications', href: '/settings/notifications', icon: Bell, section: 'app' },
     { title: 'Language & Region', href: '/settings/language-region', icon: Globe, section: 'app' },
     { title: 'General', href: '/settings/workspace/general', icon: Building2, section: 'workspace' },

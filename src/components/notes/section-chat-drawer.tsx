@@ -10,9 +10,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { 
-  Sparkles, 
+  Target, 
   X,
-  MessageSquare,
   RotateCcw,
   Replace,
   Plus,
@@ -27,28 +26,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { PRDChatMessageComponent } from './prd-chat-message';
-import { PRDChatInput } from './prd-chat-input';
+import { SectionChatMessageComponent } from './section-chat-message';
+import { SectionChatInput } from './section-chat-input';
 import { CustomTemplateModal } from './custom-template-modal';
 import { EditTemplatesModal } from './edit-templates-modal';
-import { usePRDChatStore } from '@/lib/stores/prd-chat-store';
+import { useSectionChatStore } from '@/lib/stores/section-chat-store';
 import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
-import { useAISettingsStore, type AIProviderType } from '@/lib/stores/ai-settings-store';
-import { TEMPLATE_CONTEXT_PROMPTS } from '@/lib/ai/prompts/prd-templates';
+import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 import { prdGenerator } from '@/lib/ai/services/prd-generator';
-import type { PRDTemplateType, CustomPRDTemplate } from '@/types';
+import type { CustomPRDTemplate } from '@/types';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-interface PRDChatDrawerProps {
+interface SectionChatDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   noteContent: string;
   onApplyContent: (content: string, mode: 'overwrite' | 'append') => void;
-  onGenerateFeatures?: (content: string) => void;
-  onGenerateTasks?: (content: string) => void;
   noteId?: string;
 }
 
@@ -56,19 +52,10 @@ interface PRDChatDrawerProps {
 // AI GENERATION FUNCTION
 // ============================================================================
 
-// Map starter template IDs to their PRDTemplateType for context prompts
-const STARTER_TEMPLATE_MAP: Record<string, PRDTemplateType> = {
-  'starter-b2b-saas': 'b2b-saas',
-  'starter-consumer-app': 'consumer-app',
-  'starter-platform': 'platform',
-  'starter-api-product': 'api-product',
-  'starter-internal-tool': 'internal-tool',
-  'starter-custom': 'custom',
-};
-
-async function generatePRDWithAI(
+async function generateSectionWithAI(
   prompt: string,
   templateId: string,
+  sectionId: string,
   provider: AIProviderType | null,
   customTemplates: CustomPRDTemplate[],
   existingContent?: string
@@ -76,92 +63,58 @@ async function generatePRDWithAI(
   // Find the template from the store
   const template = customTemplates.find(t => t.id === templateId);
   
-  // Get sections from the template
-  const templateSections = template?.sections
-    .sort((a, b) => a.order - b.order)
-    .map(s => s.title) || [];
+  // Get the specific section
+  const section = template?.sections.find(s => s.id === sectionId);
+  const sectionTitle = section?.title || 'Section';
+  const sectionDescription = section?.description || '';
 
-  // Determine if this is an improvement request (has existing content)
-  if (existingContent && existingContent.trim().length > 100) {
-    // Improve existing PRD
-    const result = await prdGenerator.improvePRD({
-      currentContent: existingContent,
-      focusAreas: prompt ? [prompt] : undefined,
-      provider: provider || undefined,
-    });
-    
-    return {
-      content: result.content,
-      thinking: `Analyzing the existing PRD and incorporating: "${prompt}"`,
-    };
-  }
+  // Use the PRD generator to create section content
+  // We pass the user prompt as description and include section context
+  const result = await prdGenerator.generateSection({
+    sectionId: sectionId,
+    description: prompt,
+    existingContent: existingContent,
+    guidance: `Section to generate: "${sectionTitle}"
+${sectionDescription ? `\nSection purpose: ${sectionDescription}` : ''}
+${template?.contextPrompt ? `\nTemplate context: ${template.contextPrompt}` : ''}
 
-  // Check if it's a starter template (we can use built-in context prompts)
-  const mappedTemplateType = STARTER_TEMPLATE_MAP[templateId];
+Generate content specifically for this section based on the user's input. Make it comprehensive and well-structured.`,
+    provider: provider || undefined,
+  });
   
-  if (mappedTemplateType && mappedTemplateType !== 'custom') {
-    // Use built-in template type for generation with custom sections
-    const sectionsContext = templateSections.length > 0
-      ? `Please structure the PRD with these specific sections:\n${templateSections.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
-      : undefined;
-    
-    const result = await prdGenerator.generateFullPRD({
-      description: prompt,
-      templateType: mappedTemplateType,
-      context: sectionsContext,
-      provider: provider || undefined,
-    });
-    
-    return {
-      content: result.content,
-      thinking: `Using ${template?.name || 'template'} to structure the PRD`,
-    };
-  } else if (templateSections.length > 0) {
-    // Generate with custom sections
-    const sectionsContext = `Please structure the PRD with these specific sections:\n${templateSections.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
-    
-    const result = await prdGenerator.generateFullPRD({
-      description: prompt,
-      templateType: 'custom',
-      context: sectionsContext,
-      provider: provider || undefined,
-    });
-    
-    return {
-      content: result.content,
-      thinking: `Using ${template?.name || 'custom template'} with ${templateSections.length} sections`,
-    };
-  } else {
-    // Quick generate without template
-    const result = await prdGenerator.quickGenerate(prompt, provider || undefined);
-    
-    return {
-      content: result.content,
-      thinking: `Generating a comprehensive PRD based on the description`,
-    };
-  }
+  return {
+    content: result.content,
+    thinking: `Generating "${sectionTitle}" section based on your input`,
+  };
 }
 
 // ============================================================================
 // WELCOME MESSAGE COMPONENT
 // ============================================================================
 
-function WelcomeMessage({ onSuggestionClick }: { onSuggestionClick: (text: string) => void }) {
+function WelcomeMessage({ 
+  onSuggestionClick,
+  sectionTitle 
+}: { 
+  onSuggestionClick: (text: string) => void;
+  sectionTitle?: string;
+}) {
   const suggestions = [
-    "Build a task management app for remote teams",
-    "Create a customer feedback portal with analytics",
-    "Design an AI-powered writing assistant",
+    "Generate based on the existing PRD content",
+    "Include specific requirements and constraints",
+    "Focus on user needs and pain points",
   ];
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
       <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-        <Sparkles className="w-8 h-8 text-primary" />
+        <Target className="w-8 h-8 text-primary" />
       </div>
-      <h3 className="text-lg font-semibold mb-2">Generate PRD with AI</h3>
+      <h3 className="text-lg font-semibold mb-2">Generate Section</h3>
       <p className="text-sm text-muted-foreground max-w-sm mb-6">
-        Describe your product or feature idea, and I&apos;ll help you create a comprehensive 
-        Product Requirements Document based on your selected template.
+        {sectionTitle 
+          ? `Describe what you want in the "${sectionTitle}" section, and I'll generate it for you.`
+          : 'Select a template and section, then describe what you want to generate.'}
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
         {suggestions.map((suggestion) => (
@@ -182,15 +135,13 @@ function WelcomeMessage({ onSuggestionClick }: { onSuggestionClick: (text: strin
 // MAIN COMPONENT
 // ============================================================================
 
-export function PRDChatDrawer({
+export function SectionChatDrawer({
   open,
   onOpenChange,
   noteContent,
   onApplyContent,
-  onGenerateFeatures,
-  onGenerateTasks,
   noteId,
-}: PRDChatDrawerProps) {
+}: SectionChatDrawerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = React.useState(false);
   const [isEditTemplatesModalOpen, setIsEditTemplatesModalOpen] = React.useState(false);
@@ -204,17 +155,24 @@ export function PRDChatDrawer({
     session,
     selectedProvider,
     selectedTemplate,
+    selectedSection,
     startNewSession,
     addUserMessage,
     addAssistantMessage,
     updateAssistantMessage,
     setSelectedProvider,
     setSelectedTemplate,
+    setSelectedSection,
     setCurrentNoteContent,
     revertToVersion,
-  } = usePRDChatStore();
+  } = useSectionChatStore();
 
   const { templates: customTemplates, seedStarterTemplates, hasSeededStarterTemplates } = useCustomTemplatesStore();
+
+  // Get current section title for display
+  const selectedTemplateData = customTemplates.find(t => t.id === selectedTemplate);
+  const currentSection = selectedTemplateData?.sections.find(s => s.id === selectedSection);
+  const currentSectionTitle = currentSection?.title;
 
   // Seed starter templates on first load
   useEffect(() => {
@@ -256,7 +214,7 @@ export function PRDChatDrawer({
     if (isGenerating) return;
 
     // Add user message with current note snapshot
-    const userMsg = addUserMessage(message, noteContent);
+    addUserMessage(message, noteContent);
 
     // Create placeholder assistant message
     const assistantMsg = addAssistantMessage('', undefined);
@@ -265,25 +223,26 @@ export function PRDChatDrawer({
     setIsGenerating(true);
 
     try {
-      // Generate PRD with AI
-      const result = await generatePRDWithAI(
+      // Generate section with AI
+      const result = await generateSectionWithAI(
         message,
         selectedTemplate,
+        selectedSection,
         selectedProvider,
         customTemplates,
-        noteContent // Pass existing content for context/improvement
+        noteContent // Pass existing content for context
       );
 
       updateAssistantMessage(assistantMsg.id, {
-        content: result.thinking || 'Here\'s your generated PRD:',
+        content: result.thinking || 'Here\'s the generated section:',
         generatedContent: result.content,
         isGenerating: false,
       });
     } catch (error) {
-      console.error('PRD generation failed:', error);
+      console.error('Section generation failed:', error);
       
       // Provide user-friendly error messages
-      let errorMessage = 'Failed to generate PRD. Please try again.';
+      let errorMessage = 'Failed to generate section. Please try again.';
       if (error instanceof Error) {
         if (error.message.includes('API key') || error.message.includes('401')) {
           errorMessage = 'Invalid API key. Please check your settings.';
@@ -307,6 +266,7 @@ export function PRDChatDrawer({
     isGenerating,
     noteContent,
     selectedTemplate,
+    selectedSection,
     selectedProvider,
     customTemplates,
     addUserMessage,
@@ -322,14 +282,9 @@ export function PRDChatDrawer({
   }, [revertToVersion, onApplyContent]);
 
   const handleAddToNote = useCallback((content: string) => {
-    if (!content) {
-      console.warn('No content to add to note');
-      return;
-    }
-
     // Check if there's existing content in the note (more than just whitespace)
     const hasExistingContent = noteContent && noteContent.trim().length > 0;
-
+    
     if (hasExistingContent) {
       // Show dialog to ask user whether to overwrite or append
       setPendingContent(content);
@@ -341,10 +296,10 @@ export function PRDChatDrawer({
   }, [noteContent, onApplyContent]);
 
   const handleApplyModeSelect = useCallback((mode: 'overwrite' | 'append') => {
-    if (pendingContent && onApplyContent) {
+    if (pendingContent) {
       onApplyContent(pendingContent, mode);
+      setPendingContent(null);
     }
-    setPendingContent(null);
     setShowApplyModeDialog(false);
   }, [pendingContent, onApplyContent]);
 
@@ -372,12 +327,12 @@ export function PRDChatDrawer({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <Target className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <SheetTitle className="text-left">PRD Assistant</SheetTitle>
+                  <SheetTitle className="text-left">Section Generator</SheetTitle>
                   <SheetDescription className="text-left">
-                    Generate and refine your PRD through conversation
+                    Generate specific PRD sections through conversation
                   </SheetDescription>
                 </div>
               </div>
@@ -411,18 +366,19 @@ export function PRDChatDrawer({
             className="flex-1 overflow-y-auto px-6 py-4"
           >
             {messages.length === 0 ? (
-              <WelcomeMessage onSuggestionClick={handleSendMessage} />
+              <WelcomeMessage 
+                onSuggestionClick={handleSendMessage} 
+                sectionTitle={currentSectionTitle}
+              />
             ) : (
               <div className="space-y-6 pb-4">
                 {messages.map((message) => (
-                  <PRDChatMessageComponent
+                  <SectionChatMessageComponent
                     key={message.id}
                     message={message}
                     isLastAssistantMessage={message.id === lastAssistantMessageId}
                     onRevert={message.role === 'user' ? handleRevert : undefined}
                     onAddToNote={handleAddToNote}
-                    onGenerateFeatures={onGenerateFeatures}
-                    onGenerateTasks={onGenerateTasks}
                   />
                 ))}
               </div>
@@ -430,7 +386,7 @@ export function PRDChatDrawer({
           </div>
 
           {/* Input Area */}
-          <PRDChatInput
+          <SectionChatInput
             onSend={handleSendMessage}
             onOpenTemplateModal={() => setIsTemplateModalOpen(true)}
             onOpenEditTemplatesModal={() => setIsEditTemplatesModalOpen(true)}
@@ -438,8 +394,12 @@ export function PRDChatDrawer({
             onProviderChange={setSelectedProvider}
             selectedTemplate={selectedTemplate}
             onTemplateChange={setSelectedTemplate}
+            selectedSection={selectedSection}
+            onSectionChange={setSelectedSection}
             disabled={isGenerating}
-            placeholder="Describe your product or feature..."
+            placeholder={currentSectionTitle 
+              ? `Describe what you want in "${currentSectionTitle}"...` 
+              : 'Describe what you want in this section...'}
           />
         </SheetContent>
       </Sheet>
@@ -462,9 +422,9 @@ export function PRDChatDrawer({
       <AlertDialog open={showApplyModeDialog} onOpenChange={setShowApplyModeDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Add PRD to Note</AlertDialogTitle>
+            <AlertDialogTitle>Add Section to Note</AlertDialogTitle>
             <AlertDialogDescription>
-              Your note already has content. Would you like to replace the existing content or add the new PRD at the end?
+              Your note already has content. Would you like to replace the existing content or add the new section at the end?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
@@ -492,4 +452,4 @@ export function PRDChatDrawer({
   );
 }
 
-export default PRDChatDrawer;
+export default SectionChatDrawer;

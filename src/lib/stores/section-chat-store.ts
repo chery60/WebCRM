@@ -1,22 +1,53 @@
 'use client';
 
 import { create } from 'zustand';
-import type { PRDChatMessage, PRDChatSession } from '@/types';
 import type { AIProviderType } from './ai-settings-store';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export interface PRDChatState {
+export interface SectionChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  // For AI messages - the generated section content
+  generatedContent?: string;
+  // For version history - snapshot of note content at this point
+  noteSnapshot?: string;
+  // Template used for this generation
+  templateUsed?: string;
+  // Section being generated
+  sectionUsed?: string;
+  // Provider used for generation
+  providerUsed?: string;
+  // Is the AI currently generating this message
+  isGenerating?: boolean;
+  // Error message if generation failed
+  error?: string;
+}
+
+export interface SectionChatSession {
+  id: string;
+  messages: SectionChatMessage[];
+  noteId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SectionChatState {
   // Current chat session
-  session: PRDChatSession | null;
+  session: SectionChatSession | null;
   
   // Selected AI model/provider
   selectedProvider: AIProviderType | null;
   
   // Selected template ID (from templates store)
   selectedTemplate: string;
+  
+  // Selected section ID
+  selectedSection: string;
   
   // Current note content (for version history)
   currentNoteContent: string;
@@ -36,9 +67,9 @@ export interface PRDChatState {
   clearSession: () => void;
   
   // Message management
-  addUserMessage: (content: string, noteSnapshot: string) => PRDChatMessage;
-  addAssistantMessage: (content: string, generatedContent?: string) => PRDChatMessage;
-  updateAssistantMessage: (messageId: string, updates: Partial<PRDChatMessage>) => void;
+  addUserMessage: (content: string, noteSnapshot: string) => SectionChatMessage;
+  addAssistantMessage: (content: string, generatedContent?: string) => SectionChatMessage;
+  updateAssistantMessage: (messageId: string, updates: Partial<SectionChatMessage>) => void;
   setMessageGenerating: (messageId: string, isGenerating: boolean) => void;
   setMessageError: (messageId: string, error: string) => void;
   
@@ -50,6 +81,7 @@ export interface PRDChatState {
   // Settings
   setSelectedProvider: (provider: AIProviderType | null) => void;
   setSelectedTemplate: (template: string) => void;
+  setSelectedSection: (section: string) => void;
   setCurrentNoteContent: (content: string) => void;
 }
 
@@ -69,10 +101,11 @@ function generateSessionId(): string {
 // STORE
 // ============================================================================
 
-export const usePRDChatStore = create<PRDChatState>((set, get) => ({
+export const useSectionChatStore = create<SectionChatState>((set, get) => ({
   session: null,
   selectedProvider: null,
   selectedTemplate: '', // Will be set from templates store on first load
+  selectedSection: '', // Will be set based on selected template
   currentNoteContent: '',
   versionHistory: new Map(),
   isOpen: false,
@@ -91,7 +124,7 @@ export const usePRDChatStore = create<PRDChatState>((set, get) => ({
   },
 
   startNewSession: (noteId?: string) => {
-    const newSession: PRDChatSession = {
+    const newSession: SectionChatSession = {
       id: generateSessionId(),
       messages: [],
       noteId,
@@ -112,15 +145,16 @@ export const usePRDChatStore = create<PRDChatState>((set, get) => ({
   },
 
   addUserMessage: (content: string, noteSnapshot: string) => {
-    const { session, selectedTemplate, selectedProvider } = get();
+    const { session, selectedTemplate, selectedSection, selectedProvider } = get();
     
-    const message: PRDChatMessage = {
+    const message: SectionChatMessage = {
       id: generateId(),
       role: 'user',
       content,
       timestamp: new Date(),
       noteSnapshot,
       templateUsed: selectedTemplate,
+      sectionUsed: selectedSection,
       providerUsed: selectedProvider || undefined,
     };
 
@@ -143,7 +177,7 @@ export const usePRDChatStore = create<PRDChatState>((set, get) => ({
   addAssistantMessage: (content: string, generatedContent?: string) => {
     const { session, selectedProvider } = get();
     
-    const message: PRDChatMessage = {
+    const message: SectionChatMessage = {
       id: generateId(),
       role: 'assistant',
       content,
@@ -166,7 +200,7 @@ export const usePRDChatStore = create<PRDChatState>((set, get) => ({
     return message;
   },
 
-  updateAssistantMessage: (messageId: string, updates: Partial<PRDChatMessage>) => {
+  updateAssistantMessage: (messageId: string, updates: Partial<SectionChatMessage>) => {
     const { session } = get();
     if (!session) return;
 
@@ -216,9 +250,13 @@ export const usePRDChatStore = create<PRDChatState>((set, get) => ({
     set({ selectedTemplate: template });
   },
 
+  setSelectedSection: (section: string) => {
+    set({ selectedSection: section });
+  },
+
   setCurrentNoteContent: (content: string) => {
     set({ currentNoteContent: content });
   },
 }));
 
-export default usePRDChatStore;
+export default useSectionChatStore;

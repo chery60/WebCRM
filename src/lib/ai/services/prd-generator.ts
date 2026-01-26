@@ -12,7 +12,8 @@ import type {
   AIGenerateResponse, 
   PRDTemplateType,
   PRDSection,
-  PRDGenerationResult 
+  PRDGenerationResult,
+  CustomPRDTemplate 
 } from '@/types';
 import { generateAIContent } from '../use-ai-service';
 import {
@@ -38,8 +39,10 @@ import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 export interface PRDGenerationOptions {
   /** Product description or brief */
   description: string;
-  /** Template type to use */
-  templateType?: PRDTemplateType;
+  /** Template type to use (legacy support for hardcoded types or custom template ID) */
+  templateType?: PRDTemplateType | string;
+  /** Custom template object (takes precedence over templateType if provided) */
+  customTemplate?: CustomPRDTemplate;
   /** Specific sections to generate (if not full PRD) */
   sections?: string[];
   /** Additional context to include */
@@ -96,6 +99,7 @@ export class PRDGeneratorService {
     const {
       description,
       templateType = 'custom',
+      customTemplate,
       context,
       audience = 'mixed',
       detailLevel = 'standard',
@@ -104,8 +108,8 @@ export class PRDGeneratorService {
       useStructuredFormat = true, // Default to new structured format
     } = options;
 
-    // Use new structured format by default
-    if (useStructuredFormat) {
+    // Use new structured format by default, unless custom template is provided
+    if (useStructuredFormat && !customTemplate) {
       return this.generateStructuredPRD({
         description,
         context,
@@ -114,8 +118,30 @@ export class PRDGeneratorService {
       });
     }
 
-    const template = getTemplate(templateType);
-    const templateContext = getTemplateContextPrompt(templateType);
+    // Use custom template if provided, otherwise fall back to legacy hardcoded templates
+    let template: { name: string; description: string; sections: { id: string; title: string; order: number; description?: string }[] };
+    let templateContext: string;
+    
+    if (customTemplate) {
+      // Use the custom template from the store (includes section descriptions)
+      template = {
+        name: customTemplate.name,
+        description: customTemplate.description,
+        sections: customTemplate.sections.map(s => ({
+          id: s.id,
+          title: s.title,
+          order: s.order,
+          description: s.description, // Include section descriptions for AI guidance
+        })),
+      };
+      templateContext = customTemplate.contextPrompt || `You are writing a PRD with a custom structure. 
+Adapt the format and depth to the specific needs of this product.
+Focus on the most relevant sections and be flexible with the structure.`;
+    } else {
+      // Fall back to legacy hardcoded templates for backward compatibility
+      template = getTemplate(templateType as PRDTemplateType);
+      templateContext = getTemplateContextPrompt(templateType as PRDTemplateType);
+    }
 
     // Build the comprehensive prompt
     const systemPrompt = this.buildSystemPrompt(templateContext, audience, detailLevel, projectInstructions);
@@ -441,7 +467,7 @@ Generate a complete, structured PRD with Mermaid diagrams:`;
 
   private buildUserPrompt(
     description: string,
-    template: { sections: { id: string; title: string; order: number }[] },
+    template: { sections: { id: string; title: string; order: number; description?: string }[] },
     context?: string
   ): string {
     let prompt = PRD_GENERATION_PROMPT + '\n\n';
@@ -453,12 +479,16 @@ Generate a complete, structured PRD with Mermaid diagrams:`;
     }
 
     prompt += `## Sections to Generate\n`;
-    prompt += `Generate the following sections:\n`;
+    prompt += `Generate the following sections. Pay close attention to the description for each section as it specifies what content should be included:\n\n`;
     template.sections.forEach((section, index) => {
-      prompt += `${index + 1}. ${section.title}\n`;
+      prompt += `### ${index + 1}. ${section.title}\n`;
+      if (section.description) {
+        prompt += `**Requirements:** ${section.description}\n`;
+      }
+      prompt += '\n';
     });
 
-    prompt += `\nGenerate the complete PRD now:`;
+    prompt += `Generate the complete PRD now, ensuring each section follows its specified requirements:`;
 
     return prompt;
   }
