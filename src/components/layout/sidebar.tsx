@@ -394,7 +394,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px', overflow: 'hidden', width: '100%' }}>
           {/* All PRDs link */}
           <Link
             href="/notes"
@@ -427,11 +427,12 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
             const isAnyPRDActive = projectPRDs.some(prd => pathname === `/notes/${prd.id}`);
 
             return (
-              <div key={project.id}>
+              <div key={project.id} style={{ width: '100%', overflow: 'hidden' }}>
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div
                       className="group relative"
+                      style={{ width: '100%', overflow: 'hidden' }}
                       onDragOver={(e) => handleDragOver(e, project.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, project.id)}
@@ -449,7 +450,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                           }
                         }}
                         className={cn(
-                          'flex items-center transition-colors w-full pr-8',
+                          'flex items-center transition-colors',
                           (isExpanded && (isProjectSettingsActive || isAnyPRDActive)) ? 'font-medium' : '',
                           dragOverTarget === project.id && 'ring-2 ring-primary bg-primary/10'
                         )}
@@ -460,18 +461,22 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                             ? 'var(--sidebar-text-primary)'
                             : 'var(--sidebar-text-secondary)',
                           gap: '8px',
+                          paddingRight: '28px',
+                          width: '100%',
+                          overflow: 'hidden',
                         }}
                       >
-                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform shrink-0', !isExpanded && '-rotate-90')} />
-                        <FolderOpen className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px' }} />
-                        <span className="truncate">{project.name}</span>
+                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform shrink-0', !isExpanded && '-rotate-90')} style={{ flexShrink: 0 }} />
+                        <FolderOpen className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{project.name}</span>
                       </Link>
 
                       {/* More options button (visible on hover) */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
-                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                            className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                            style={{ zIndex: 10 }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
@@ -512,16 +517,16 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
 
                 {/* Expanded project content */}
                 {isExpanded && (
-                  <div className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px' }}>
+                  <div className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px', width: '100%', overflow: 'hidden' }}>
                     {/* PRDs list */}
                     {projectPRDs.map((prd) => {
                       const isPRDActive = pathname === `/notes/${prd.id}`;
                       return (
-                        <div key={prd.id} className="group relative">
+                        <div key={prd.id} className="group relative" style={{ width: '100%', overflow: 'hidden' }}>
                           <Link
                             href={`/notes/${prd.id}`}
                             className={cn(
-                              'flex items-center transition-colors pr-6',
+                              'flex items-center transition-colors',
                               isPRDActive ? 'font-medium' : ''
                             )}
                             style={{
@@ -531,15 +536,19 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                                 ? 'var(--sidebar-text-primary)'
                                 : 'var(--sidebar-text-secondary)',
                               gap: '8px',
+                              paddingRight: '24px',
+                              width: '100%',
+                              overflow: 'hidden',
                             }}
                           >
-                            <StickyNote className="h-3.5 w-3.5 shrink-0" style={{ width: '14px', height: '14px' }} />
-                            <span className="truncate">{prd.title || 'Untitled'}</span>
+                            <StickyNote className="h-3.5 w-3.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{prd.title || 'Untitled'}</span>
                           </Link>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button
                                 className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                                style={{ zIndex: 10 }}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <MoreHorizontal className="h-3 w-3" />

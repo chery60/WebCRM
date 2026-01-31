@@ -11,6 +11,7 @@ function rowToNote(row: any): Note {
         content: typeof row.content === 'string' ? row.content : JSON.stringify(row.content),
         tags: row.tags || [],
         projectId: row.project_id || undefined,
+        workspaceId: row.workspace_id || undefined,
         authorId: row.author_id,
         authorName: row.author_name,
         authorAvatar: row.author_avatar,
@@ -48,6 +49,15 @@ export const notesRepository = {
 
         if (filter?.search) {
             query = query.or(`title.ilike.%${filter.search}%,content::text.ilike.%${filter.search}%`);
+        }
+
+        // Filter by workspace - STRICT: only show notes in the specified workspace
+        if (filter?.workspaceId) {
+            query = query.eq('workspace_id', filter.workspaceId);
+        } else {
+            // If no workspace is provided, don't return any notes
+            // This prevents leaking data between workspaces
+            query = query.eq('workspace_id', '00000000-0000-0000-0000-000000000000'); // Non-existent UUID
         }
 
         // Filter by project: if projectId provided, show PRDs for that project
@@ -102,11 +112,17 @@ export const notesRepository = {
         const supabase = getSupabaseClient();
         if (!supabase) return null;
 
+        // SECURITY: workspace_id is REQUIRED - prevent data leaks
+        if (!data.workspaceId) {
+            throw new Error('Workspace ID is required to create a note. Please ensure you have a workspace selected.');
+        }
+
         const noteData = {
             title: data.title,
             content: data.content,
             tags: data.tags,
             project_id: data.projectId || null,
+            workspace_id: data.workspaceId,
             author_id: authorId,
             author_name: authorName,
             author_avatar: authorAvatar || null,
@@ -123,8 +139,15 @@ export const notesRepository = {
             .single();
 
         if (error || !insertedData) {
-            console.error('Error creating note:', error);
-            return null;
+            console.error('Error creating note:', {
+                message: error?.message,
+                code: error?.code,
+                details: error?.details,
+                hint: error?.hint,
+                workspaceId: data.workspaceId,
+            });
+            // Throw error with details for better debugging
+            throw new Error(error?.message || 'Failed to create note. You may not have permission to create notes in this workspace.');
         }
 
         return rowToNote(insertedData);

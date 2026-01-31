@@ -14,7 +14,7 @@ import { MERMAID_SYNTAX_EXAMPLES } from '../prompts/prd-structured-prompts';
 // TYPES
 // ============================================================================
 
-export type MermaidDiagramType = 
+export type MermaidDiagramType =
   | 'flowchart'
   | 'sequenceDiagram'
   | 'erDiagram'
@@ -125,7 +125,7 @@ function getDiagramPrompt(type: MermaidDiagramType, context: string, focus?: str
   let prompt = `Generate a ${metadata.title} (${type}) diagram.\n\n`;
   prompt += `## Use Case\n${metadata.useCase}\n\n`;
   prompt += `## Context\n${context}\n\n`;
-  
+
   if (focus) {
     prompt += `## Focus Area\n${focus}\n\n`;
   }
@@ -172,7 +172,7 @@ export class MermaidGeneratorService {
       // Validate the diagram syntax using the shared validator
       const { validateMermaidDiagram } = await import('@/lib/utils/mermaid-validator');
       const validation = validateMermaidDiagram(diagram);
-      
+
       if (!validation.valid) {
         return {
           success: false,
@@ -182,7 +182,7 @@ export class MermaidGeneratorService {
           error: validation.error,
         };
       }
-      
+
       // Use sanitized version if available
       const finalDiagram = validation.sanitizedCode || diagram;
 
@@ -287,105 +287,157 @@ export class MermaidGeneratorService {
    * Sanitize Mermaid code to fix common syntax issues
    * - Escapes special characters in node labels by wrapping text in quotes
    * - Handles parentheses, quotes, arrows, and other problematic characters
+   * - Special handling for ERD relationship labels with special characters
+   * - Prevents double-escaping of already-escaped quotes
    */
   private sanitizeMermaidCode(code: string): string {
     const lines = code.split('\n');
-    
+
+    // Detect diagram type for specialized handling
+    const isERD = lines.some(line => line.trim().startsWith('erDiagram'));
+
     return lines.map(line => {
+      const trimmed = line.trim();
+
       // Skip lines that are just diagram type declarations or empty
-      if (line.trim().startsWith('flowchart') || 
-          line.trim().startsWith('graph') ||
-          line.trim().startsWith('sequenceDiagram') ||
-          line.trim().startsWith('erDiagram') ||
-          line.trim().startsWith('gantt') ||
-          line.trim().startsWith('stateDiagram') ||
-          line.trim().startsWith('journey') ||
-          line.trim().startsWith('pie') ||
-          line.trim().startsWith('%%') || // Skip comments
-          line.trim() === '') {
+      if (trimmed.startsWith('flowchart') ||
+        trimmed.startsWith('graph') ||
+        trimmed.startsWith('sequenceDiagram') ||
+        trimmed.startsWith('erDiagram') ||
+        trimmed.startsWith('gantt') ||
+        trimmed.startsWith('stateDiagram') ||
+        trimmed.startsWith('journey') ||
+        trimmed.startsWith('pie') ||
+        trimmed.startsWith('%%') || // Skip comments
+        trimmed === '') {
         return line;
       }
-      
-      // Pattern to match node definitions: ID[text], ID(text), ID{text}, ID([text]), etc.
-      // We need to handle multiple bracket types and ensure special characters are quoted
+
       let processedLine = line;
-      
+
+      // ERD-specific handling: Quote relationship labels with special characters
+      // ERD syntax: ENTITY1 ||--o{ ENTITY2 : "label" or ENTITY1 ||--o{ ENTITY2 : label
+      if (isERD) {
+        // Match ERD relationship pattern: ENTITY relationship ENTITY : label
+        const erdPattern = /^(\s*)(\w+)\s+(\|[|o{}]--[|o{}]\||\}[|o{}]--[|o{}]\{|\|[|o{}]--[|o{}]\{|\}[|o{}]--[|o{}]\|)\s+(\w+)\s*:\s*(.+)$/;
+        const erdMatch = trimmed.match(erdPattern);
+
+        if (erdMatch) {
+          const [, , entity1, relationship, entity2, label] = erdMatch;
+          const actualLeadingSpace = line.match(/^(\s*)/)?.[1] || '';
+
+          // Check if label is already quoted
+          const isAlreadyQuoted = (label.startsWith('"') && label.endsWith('"')) ||
+            (label.startsWith("'") && label.endsWith("'"));
+
+          if (!isAlreadyQuoted) {
+            // Check if label contains special characters that need quoting
+            const needsQuoting = /[\/|(){}\[\]<>"'\\]/.test(label);
+
+            if (needsQuoting) {
+              const escapedLabel = label.replace(/"/g, "'");
+              return `${actualLeadingSpace}${entity1} ${relationship} ${entity2} : "${escapedLabel}"`;
+            }
+          }
+        }
+
+        return processedLine;
+      }
+
       // Match all node label patterns with various bracket types
       // First, handle double brackets (must come before single brackets): [[label]], ((label))
       const doubleBracketPattern = /(\w+)(\[\[|\(\()([^[\]()]*?)(\]\]|\)\))/g;
       processedLine = processedLine.replace(doubleBracketPattern, (match, id, openBracket, content, closeBracket) => {
-        if ((content.startsWith('"') && content.endsWith('"')) || 
-            (content.startsWith("'") && content.endsWith("'"))) {
+        if ((content.startsWith('"') && content.endsWith('"')) ||
+          (content.startsWith("'") && content.endsWith("'"))) {
           return match;
         }
-        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+        // Convert already-escaped quotes to single quotes
+        if (content.includes('\\"') || content.includes("\\'")) {
+          const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+          return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+        }
+        const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
         if (hasSpecialChars) {
-          const escapedContent = content.replace(/"/g, '\\"');
+          const escapedContent = content.replace(/"/g, "'");
           return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
         }
         return match;
       });
-      
+
       // Then handle mixed brackets: [(label)], ([label])
       const mixedBracketPattern = /(\w+)(\[\(|\(\[)([^[\]()]*?)(\]\)|\)\])/g;
       processedLine = processedLine.replace(mixedBracketPattern, (match, id, openBracket, content, closeBracket) => {
-        if ((content.startsWith('"') && content.endsWith('"')) || 
-            (content.startsWith("'") && content.endsWith("'"))) {
+        if ((content.startsWith('"') && content.endsWith('"')) ||
+          (content.startsWith("'") && content.endsWith("'"))) {
           return match;
         }
-        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+        if (content.includes('\\"') || content.includes("\\'")) {
+          const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+          return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+        }
+        const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
         if (hasSpecialChars) {
-          const escapedContent = content.replace(/"/g, '\\"');
+          const escapedContent = content.replace(/"/g, "'");
           return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
         }
         return match;
       });
-      
+
       // Finally handle single brackets/parens/braces: [label], (label), {label}
-      // Match content that may include parentheses, but ensure proper bracket/brace matching
       const singleBracketPattern = /(\w+)\[([^\[\]]*)\]|(\w+)\{([^\{\}]*)\}|(\w+)\(([^\(\)]*)\)/g;
       processedLine = processedLine.replace(singleBracketPattern, (match, id1, content1, id2, content2, id3, content3) => {
         const id = id1 || id2 || id3;
         const content = content1 !== undefined ? content1 : (content2 !== undefined ? content2 : content3);
         const openBracket = id1 ? '[' : (id2 ? '{' : '(');
         const closeBracket = id1 ? ']' : (id2 ? '}' : ')');
-        
+
         if (!content) return match;
-        
-        if ((content.startsWith('"') && content.endsWith('"')) || 
-            (content.startsWith("'") && content.endsWith("'"))) {
+
+        if ((content.startsWith('"') && content.endsWith('"')) ||
+          (content.startsWith("'") && content.endsWith("'"))) {
           return match;
         }
-        
-        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+
+        if (content.includes('\\"') || content.includes("\\'")) {
+          const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+          return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+        }
+
+        const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
         if (hasSpecialChars) {
-          const escapedContent = content.replace(/"/g, '\\"');
+          const escapedContent = content.replace(/"/g, "'");
           return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
         }
         return match;
       });
-      
+
       // Also handle edge labels that might have special characters
-      // Pattern: -->|label| or -.->|label| etc.
+      // Pattern: -->|label| or -.->, etc.
       processedLine = processedLine.replace(
         /(-{1,2}>|={1,2}>|\.{1,2}>)\s*\|([^|]+)\|/g,
         (match, arrow, label) => {
           // Skip if already quoted
-          if ((label.startsWith('"') && label.endsWith('"')) || 
-              (label.startsWith("'") && label.endsWith("'"))) {
+          if ((label.startsWith('"') && label.endsWith('"')) ||
+            (label.startsWith("'") && label.endsWith("'"))) {
             return match;
           }
-          
-          const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(label);
+
+          if (label.includes('\\"') || label.includes("\\'")) {
+            const fixedLabel = label.replace(/\\"/g, "'").replace(/\\'/g, "'");
+            return `${arrow}|"${fixedLabel}"|`;
+          }
+
+          const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(label);
           if (hasSpecialChars) {
-            const escapedLabel = label.replace(/"/g, '\\"');
+            const escapedLabel = label.replace(/"/g, "'");
             return `${arrow}|"${escapedLabel}"|`;
           }
-          
+
           return match;
         }
       );
-      
+
       return processedLine;
     }).join('\n');
   }
@@ -474,7 +526,7 @@ export class MermaidGeneratorService {
     };
 
     const validPrefixes = typeChecks[expectedType];
-    const hasValidPrefix = validPrefixes.some(prefix => 
+    const hasValidPrefix = validPrefixes.some(prefix =>
       trimmed.toLowerCase().startsWith(prefix.toLowerCase())
     );
 

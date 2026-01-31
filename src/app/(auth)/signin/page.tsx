@@ -1,19 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AuthMarketingPanel } from '@/components/auth/auth-marketing-panel';
 
-export default function SignInPage() {
+function SignInContent() {
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const invitationToken = searchParams?.get('invitation');
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +29,13 @@ export default function SignInPage() {
 
         try {
             await login(email, password);
-            router.push('/notes');
+
+            // If user was invited, redirect to accept the invitation
+            if (invitationToken) {
+                router.push(`/invitation?token=${invitationToken}`);
+            } else {
+                router.push('/notes');
+            }
         } catch (err) {
             setError('Login failed. Please check your email and password.');
         }
@@ -169,18 +178,33 @@ export default function SignInPage() {
 
                     {/* Sign Up Link */}
                     <p className="mt-6 text-center text-sm text-muted-foreground">
-                        Don&apos;t you have an acount?{' '}
-                        <Link href="/signup" className="font-medium text-foreground hover:underline">
+                        Don&apos;t you have an account?{' '}
+                        <Link
+                            href={invitationToken ? `/signup?invitation=${invitationToken}` : '/signup'}
+                            className="font-medium text-foreground hover:underline"
+                        >
                             Sign Up
                         </Link>
                     </p>
 
                     {/* Copyright */}
                     <p className="mt-8 text-center text-xs text-muted-foreground">
-                        ©2023 Venture. All rights reserved
+                        ©2026 Venture.ai. All rights reserved
                     </p>
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function SignInPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        }>
+            <SignInContent />
+        </Suspense>
     );
 }

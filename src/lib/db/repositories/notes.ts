@@ -15,7 +15,7 @@ export const notesRepository = {
 
     // Apply filters
     if (filter?.tags && filter.tags.length > 0) {
-      notes = notes.filter(note => 
+      notes = notes.filter(note =>
         filter.tags!.some(tag => note.tags.includes(tag))
       );
     }
@@ -32,6 +32,11 @@ export const notesRepository = {
       notes = notes.filter(note => note.authorId === filter.authorId);
     }
 
+    // Filter by workspace - include notes that belong to the workspace OR have no workspace (legacy notes)
+    if (filter?.workspaceId) {
+      notes = notes.filter(note => note.workspaceId === filter.workspaceId || !note.workspaceId);
+    }
+
     // Filter by project: if projectId provided, show PRDs for that project
     // If includeAllProjects is true, return all PRDs (for sidebar)
     // If no projectId and not includeAllProjects, show only unassigned PRDs
@@ -46,19 +51,19 @@ export const notesRepository = {
       notes.sort((a, b) => {
         const aVal = a[sort.field];
         const bVal = b[sort.field];
-        
+
         if (aVal instanceof Date && bVal instanceof Date) {
-          return sort.direction === 'asc' 
+          return sort.direction === 'asc'
             ? aVal.getTime() - bVal.getTime()
             : bVal.getTime() - aVal.getTime();
         }
-        
+
         if (typeof aVal === 'string' && typeof bVal === 'string') {
           return sort.direction === 'asc'
             ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
         }
-        
+
         return 0;
       });
     } else {
@@ -83,6 +88,7 @@ export const notesRepository = {
       content: data.content,
       tags: data.tags,
       projectId: data.projectId,
+      workspaceId: data.workspaceId,
       generatedFeatures: data.generatedFeatures,
       generatedTasks: data.generatedTasks,
       authorId,
@@ -110,7 +116,7 @@ export const notesRepository = {
 
   // Soft delete a note
   async delete(id: string): Promise<void> {
-    await db.notes.update(id, { 
+    await db.notes.update(id, {
       isDeleted: true,
       updatedAt: new Date()
     });

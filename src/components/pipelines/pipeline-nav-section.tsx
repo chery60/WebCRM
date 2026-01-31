@@ -195,13 +195,13 @@ function PipelineItem({
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="group relative">
+        <div className="group relative" style={{ width: '100%', overflow: 'hidden' }}>
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    'flex items-center transition-colors w-full pr-8',
+                    'flex items-center transition-colors',
                     isPipelineActive && !isOpen ? 'font-medium' : ''
                   )}
                   style={{
@@ -211,15 +211,19 @@ function PipelineItem({
                       ? 'var(--sidebar-text-primary)'
                       : 'var(--sidebar-text-secondary)',
                     gap: '8px',
+                    paddingRight: '28px',
+                    width: '100%',
+                    overflow: 'hidden',
                   }}
                 >
-                  <FolderKanban className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px' }} />
-                  <span className="truncate flex-1 text-left">{pipeline.name}</span>
+                  <FolderKanban className="h-4 w-4" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, textAlign: 'left' }}>{pipeline.name}</span>
                   <ChevronDown
                     className={cn(
-                      'h-3.5 w-3.5 transition-transform shrink-0',
+                      'h-3.5 w-3.5 transition-transform',
                       isOpen && 'rotate-180'
                     )}
+                    style={{ flexShrink: 0 }}
                   />
                 </button>
               </CollapsibleTrigger>
@@ -249,7 +253,8 @@ function PipelineItem({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                style={{ zIndex: 10 }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -277,7 +282,7 @@ function PipelineItem({
           </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px', width: '100%', overflow: 'hidden' }}>
           {roadmaps.map((roadmap) => {
             const isRoadmapActive =
               pathname === `/pipelines/${pipeline.id}` && currentRoadmapId === roadmap.id;
@@ -288,6 +293,7 @@ function PipelineItem({
                 <ContextMenuTrigger asChild>
                   <div
                     className="group relative"
+                    style={{ width: '100%', overflow: 'hidden' }}
                     onDragOver={(e) => handleDragOver(e, roadmap.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, roadmap.id)}
@@ -295,7 +301,7 @@ function PipelineItem({
                     <Link
                       href={`/pipelines/${pipeline.id}?roadmap=${roadmap.id}`}
                       className={cn(
-                        'flex items-center transition-colors pr-8',
+                        'flex items-center transition-colors',
                         isRoadmapActive ? 'font-medium' : '',
                         isDragOver && 'ring-2 ring-primary bg-primary/10'
                       )}
@@ -306,16 +312,20 @@ function PipelineItem({
                           ? 'var(--sidebar-text-primary)'
                           : 'var(--sidebar-text-secondary)',
                         gap: '8px',
+                        paddingRight: '24px',
+                        width: '100%',
+                        overflow: 'hidden',
                       }}
                     >
-                      <Map className="h-3.5 w-3.5 shrink-0" style={{ width: '14px', height: '14px' }} />
-                      <span className="truncate">{roadmap.name}</span>
+                      <Map className="h-3.5 w-3.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{roadmap.name}</span>
                     </Link>
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent transition-opacity"
+                          style={{ zIndex: 10 }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreHorizontal className="h-3 w-3" />
@@ -581,7 +591,7 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col w-full max-w-full overflow-hidden min-w-0" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px', minWidth: 0, maxWidth: '100%' }}>
           {pipelines.map((pipeline) => (
             <PipelineItem
               key={pipeline.id}

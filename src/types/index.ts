@@ -29,17 +29,18 @@ export interface Note {
   content: string; // JSON (TipTap format)
   tags: string[];
   projectId?: string; // Optional project ID for organizing notes
+  workspaceId?: string; // Workspace this note belongs to
   authorId: string;
   authorName: string;
   authorAvatar?: string;
-  
+
   // PRD Metadata fields
   status?: NoteStatus; // Document lifecycle status
   priority?: NotePriority; // Priority level
   targetRelease?: string; // Target release/sprint (e.g., "Q1 2026", "Sprint 23")
   dueDate?: Date; // Target completion date
   stakeholders?: string[]; // List of stakeholder user IDs or names
-  
+
   generatedFeatures?: GeneratedFeature[]; // AI-generated features stored with the note
   generatedTasks?: GeneratedTask[]; // AI-generated tasks stored with the note
   canvasData?: string; // JSON string of Excalidraw canvas data
@@ -56,6 +57,7 @@ export interface Project {
   instructions?: string; // Default AI instructions for generating PRDs in this project
   icon?: string; // Emoji or icon identifier
   color?: string; // Color for the project
+  workspaceId?: string; // Workspace this project belongs to
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
@@ -247,6 +249,8 @@ export interface User {
   gender?: string;
   resetToken?: string; // Token for password reset
   resetTokenExpiry?: Date; // Expiry time for reset token
+  hasCompletedOnboarding?: boolean; // Whether user has completed onboarding
+  onboardingCompletedAt?: Date; // When onboarding was completed
 }
 
 // Employee Status
@@ -373,6 +377,7 @@ export interface NoteFormData {
   content: string;
   tags: string[];
   projectId?: string;
+  workspaceId?: string;
   status?: NoteStatus;
   priority?: NotePriority;
   targetRelease?: string;
@@ -392,6 +397,7 @@ export interface NotesFilter {
   search?: string;
   authorId?: string;
   projectId?: string; // Filter notes by project
+  workspaceId?: string; // Filter notes by workspace
   /** When true, returns all PRDs regardless of project assignment (for sidebar) */
   includeAllProjects?: boolean;
 }
@@ -544,7 +550,7 @@ export interface TemplateSection {
 }
 
 // Template Category for organizing templates
-export type TemplateCategory = 
+export type TemplateCategory =
   | 'saas'           // SaaS & B2B products
   | 'consumer'       // Consumer apps
   | 'platform'       // Platforms & marketplaces

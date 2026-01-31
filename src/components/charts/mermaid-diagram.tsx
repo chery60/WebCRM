@@ -36,7 +36,7 @@ function buildMermaidTheme(isDark: boolean): Record<string, string> {
   const lightGray = '#f5f5f5';
   const mediumGray = '#e0e0e0';
   const darkGray = '#333333';
-  
+
   // For dark mode, invert the scheme
   const nodeFill = isDark ? darkGray : white;
   const nodeText = isDark ? white : black;
@@ -50,36 +50,36 @@ function buildMermaidTheme(isDark: boolean): Record<string, string> {
     primaryColor: nodeFill,
     primaryTextColor: nodeText,
     primaryBorderColor: nodeBorder,
-    
+
     // Secondary colors - same monochromatic style
     secondaryColor: nodeFill,
     secondaryTextColor: nodeText,
     secondaryBorderColor: nodeBorder,
-    
+
     // Tertiary colors - same monochromatic style
     tertiaryColor: nodeFill,
     tertiaryTextColor: nodeText,
     tertiaryBorderColor: nodeBorder,
-    
+
     // Background and text
     background: background,
     mainBkg: nodeFill,
     textColor: nodeText,
-    
+
     // Lines - dark for visibility
     lineColor: lineColor,
-    
+
     // Note styling (for sequence diagrams)
     noteBkgColor: noteFill,
     noteTextColor: nodeText,
     noteBorderColor: nodeBorder,
-    
+
     // Flowchart specific
     nodeBkg: nodeFill,
     nodeTextColor: nodeText,
     clusterBkg: isDark ? '#252525' : mediumGray,
     clusterBorder: nodeBorder,
-    
+
     // All node types use same monochromatic style
     fillType0: nodeFill,
     fillType1: nodeFill,
@@ -89,26 +89,26 @@ function buildMermaidTheme(isDark: boolean): Record<string, string> {
     fillType5: nodeFill,
     fillType6: nodeFill,
     fillType7: nodeFill,
-    
+
     // Ensure text is always readable
     labelTextColor: nodeText,
     signalTextColor: nodeText,
     actorTextColor: nodeText,
     actorLineColor: lineColor,
-    
+
     // Sequence diagram specific
     actorBkg: nodeFill,
     actorBorder: nodeBorder,
     signalColor: lineColor,
-    
+
     // State diagram specific
     labelColor: nodeText,
     altBackground: noteFill,
-    
+
     // ER diagram specific  
     attributeBackgroundColorOdd: nodeFill,
     attributeBackgroundColorEven: noteFill,
-    
+
     // Gantt specific
     sectionBkgColor: nodeFill,
     taskBkgColor: nodeFill,
@@ -120,18 +120,168 @@ function buildMermaidTheme(isDark: boolean): Record<string, string> {
 }
 
 /**
+ * Sanitize ERD attribute definitions
+ * Fixes common issues:
+ * - Multiple attributes on same line
+ * - Missing type or name
+ * - Invalid attribute format
+ */
+function sanitizeERDAttributes(lines: string[]): string[] {
+  const result: string[] = [];
+  let insideEntityBlock = false;
+  let entityIndent = '';
+
+  // Common ERD types
+  const erdTypes = ['string', 'int', 'integer', 'float', 'double', 'decimal', 'number', 
+                    'bool', 'boolean', 'date', 'datetime', 'timestamp', 'time', 
+                    'text', 'varchar', 'char', 'uuid', 'bigint', 'smallint',
+                    'json', 'jsonb', 'array', 'enum', 'serial', 'bytea', 'blob'];
+  
+  // ERD constraint keywords
+  const constraints = ['PK', 'FK', 'UK'];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Detect start of entity block: ENTITY_NAME {
+    const entityStartMatch = trimmed.match(/^(\w+)\s*\{$/);
+    if (entityStartMatch) {
+      insideEntityBlock = true;
+      entityIndent = line.match(/^(\s*)/)?.[1] || '';
+      result.push(line);
+      continue;
+    }
+
+    // Detect end of entity block
+    if (insideEntityBlock && trimmed === '}') {
+      insideEntityBlock = false;
+      result.push(line);
+      continue;
+    }
+
+    // Process attribute lines inside entity block
+    if (insideEntityBlock && trimmed !== '' && !trimmed.startsWith('%%')) {
+      const leadingSpace = line.match(/^(\s*)/)?.[1] || '        ';
+      
+      // Split by whitespace
+      const tokens = trimmed.split(/\s+/).filter(t => t.length > 0);
+      
+      if (tokens.length === 0) {
+        result.push(line);
+        continue;
+      }
+
+      // Check if first token is a type
+      const firstTokenIsType = erdTypes.some(t => tokens[0].toLowerCase() === t.toLowerCase());
+      
+      // Valid attribute: type name [PK|FK|UK] ["comment"]
+      if (firstTokenIsType && tokens.length >= 2 && tokens.length <= 4) {
+        const hasValidStructure = tokens.slice(2).every(t => 
+          constraints.includes(t.toUpperCase()) || 
+          (t.startsWith('"') && t.endsWith('"'))
+        );
+        if (hasValidStructure || tokens.length === 2) {
+          result.push(line);
+          continue;
+        }
+      }
+
+      // Try to detect and fix multiple attributes on same line
+      const attributes: string[] = [];
+      let currentAttr: string[] = [];
+      let expectingType = true;
+
+      for (let j = 0; j < tokens.length; j++) {
+        const token = tokens[j];
+        const isType = erdTypes.some(t => token.toLowerCase() === t.toLowerCase());
+        const isConstraint = constraints.includes(token.toUpperCase());
+        const isComment = token.startsWith('"');
+
+        if (expectingType && isType) {
+          if (currentAttr.length >= 2) {
+            attributes.push(currentAttr.join(' '));
+          }
+          currentAttr = [token];
+          expectingType = false;
+        } else if (!expectingType && currentAttr.length === 1 && !isType && !isConstraint) {
+          currentAttr.push(token);
+        } else if (!expectingType && currentAttr.length >= 2 && isConstraint) {
+          currentAttr.push(token);
+        } else if (!expectingType && currentAttr.length >= 2 && isComment) {
+          currentAttr.push(token);
+        } else if (!expectingType && currentAttr.length >= 2 && isType) {
+          attributes.push(currentAttr.join(' '));
+          currentAttr = [token];
+          expectingType = false;
+        } else if (currentAttr.length === 1 && !isType) {
+          currentAttr.push(token);
+        } else {
+          if (currentAttr.length > 0) {
+            currentAttr.push(token);
+          } else {
+            currentAttr = [token];
+            expectingType = false;
+          }
+        }
+      }
+
+      if (currentAttr.length >= 1) {
+        if (currentAttr.length === 1 && !erdTypes.some(t => currentAttr[0].toLowerCase() === t.toLowerCase())) {
+          if (!constraints.includes(currentAttr[0].toUpperCase())) {
+            currentAttr.unshift('string');
+          }
+        }
+        if (currentAttr.length >= 2) {
+          attributes.push(currentAttr.join(' '));
+        }
+      }
+
+      if (attributes.length > 1) {
+        console.warn(`Fixed ERD attributes - split into ${attributes.length} separate lines:`, attributes);
+        attributes.forEach(attr => result.push(leadingSpace + attr));
+        continue;
+      }
+
+      if (attributes.length === 1) {
+        result.push(leadingSpace + attributes[0]);
+        continue;
+      }
+
+      result.push(line);
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  return result;
+}
+
+/**
  * Sanitize Mermaid code to fix common syntax issues
  * - Detects and removes incomplete arrows
  * - Escapes special characters in node labels by wrapping text in quotes
  * - Handles parentheses, quotes, arrows, and other problematic characters
+ * - Special handling for ERD relationship labels with special characters
+ * - Fixes ERD attribute definitions (ensures proper format)
  */
 function sanitizeMermaidCode(code: string): string {
   const lines = code.split('\n');
-  
-  // First pass: detect and fix incomplete arrows
-  const fixedLines = lines.map((line, index) => {
+
+  // Detect diagram type for specialized handling
+  const isERD = lines.some(line => line.trim().startsWith('erDiagram'));
+
+  // For ERD diagrams, pre-process to fix attribute blocks
+  let processedLines = lines;
+  if (isERD) {
+    processedLines = sanitizeERDAttributes(lines);
+  }
+
+  // First pass: detect and fix incomplete arrows (skip for ERD as they use different syntax)
+  const fixedLines = processedLines.map((line, index) => {
     const trimmed = line.trim();
-    
+
     // Skip diagram declarations and comments
     if (
       trimmed.startsWith('flowchart') ||
@@ -147,70 +297,122 @@ function sanitizeMermaidCode(code: string): string {
     ) {
       return line;
     }
-    
+
+    // Skip incomplete arrow detection for ERD diagrams (they use ||--o{ syntax)
+    if (isERD) {
+      return line;
+    }
+
     // Check if line ends with an incomplete arrow (arrow without target)
-    // Patterns: -->, ===>, -.-> etc. at end of line
+    // Patterns: -->, ===>, -.->, etc. at end of line
     const incompleteArrowPattern = /(-{1,3}>|={1,3}>|\.{1,3}>)\s*$/;
     if (incompleteArrowPattern.test(trimmed)) {
       // Comment out this line or remove the incomplete arrow
       console.warn(`Line ${index + 1} has incomplete arrow, commenting out:`, trimmed);
       return `%% ${line} %% (Incomplete arrow removed)`;
     }
-    
+
     return line;
   });
-  
+
   // Second pass: quote special characters in labels
   return fixedLines.map(line => {
+    const trimmed = line.trim();
+
     // Skip lines that are just diagram type declarations or empty
-    if (line.trim().startsWith('flowchart') || 
-        line.trim().startsWith('graph') ||
-        line.trim().startsWith('sequenceDiagram') ||
-        line.trim().startsWith('erDiagram') ||
-        line.trim().startsWith('gantt') ||
-        line.trim().startsWith('stateDiagram') ||
-        line.trim().startsWith('journey') ||
-        line.trim().startsWith('pie') ||
-        line.trim().startsWith('%%') || // Skip comments
-        line.trim() === '') {
+    if (trimmed.startsWith('flowchart') ||
+      trimmed.startsWith('graph') ||
+      trimmed.startsWith('sequenceDiagram') ||
+      trimmed.startsWith('erDiagram') ||
+      trimmed.startsWith('gantt') ||
+      trimmed.startsWith('stateDiagram') ||
+      trimmed.startsWith('journey') ||
+      trimmed.startsWith('pie') ||
+      trimmed.startsWith('%%') || // Skip comments
+      trimmed === '') {
       return line;
     }
-    
-    // Pattern to match node definitions: ID[text], ID(text), ID{text}, ID([text]), etc.
-    // We need to handle multiple bracket types and ensure special characters are quoted
+
     let processedLine = line;
-    
+
+    // ERD-specific handling: Quote relationship labels with special characters
+    // ERD syntax: ENTITY1 ||--o{ ENTITY2 : "label" or ENTITY1 ||--o{ ENTITY2 : label
+    if (isERD) {
+      // Match ERD relationship pattern: ENTITY relationship ENTITY : label
+      // Relationship patterns: ||--o{, }o--||, ||--|{, }|--||, ||--||, etc.
+      const erdPattern = /^(\s*)(\w+)\s+([|}{o][-|}{o]+)\s+(\w+)\s*:\s*(.+)$/;
+      const erdMatch = trimmed.match(erdPattern);
+
+      if (erdMatch) {
+        const [, leadingSpace, entity1, relationship, entity2, label] = erdMatch;
+        const actualLeadingSpace = line.match(/^(\s*)/)?.[1] || '';
+
+        // Check if label is already quoted
+        const isAlreadyQuoted = (label.startsWith('"') && label.endsWith('"')) ||
+          (label.startsWith("'") && label.endsWith("'"));
+
+        if (!isAlreadyQuoted) {
+          // Check if label contains special characters that need quoting
+          // Forward slash, pipes, and other special chars need quoting in ERD labels
+          const needsQuoting = /[\/|(){}\[\]<>"'\\]/.test(label);
+
+          if (needsQuoting) {
+            // Replace internal quotes with single quotes and wrap in quotes
+            const escapedLabel = label.replace(/"/g, "'");
+            return `${actualLeadingSpace}${entity1} ${relationship} ${entity2} : "${escapedLabel}"`;
+          }
+        }
+      }
+
+      // Attribute lines inside entity blocks are already handled by sanitizeERDAttributes
+      return processedLine;
+    }
+
+    // Flowchart/other diagram handling:
     // Match all node label patterns with various bracket types
+
     // First, handle double brackets (must come before single brackets): [[label]], ((label))
     const doubleBracketPattern = /(\w+)(\[\[|\(\()([^[\]()]*?)(\]\]|\)\))/g;
     processedLine = processedLine.replace(doubleBracketPattern, (match, id, openBracket, content, closeBracket) => {
-      if ((content.startsWith('"') && content.endsWith('"')) || 
-          (content.startsWith("'") && content.endsWith("'"))) {
+      // Skip if already quoted
+      if ((content.startsWith('"') && content.endsWith('"')) ||
+        (content.startsWith("'") && content.endsWith("'"))) {
         return match;
       }
-      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+      // Check for already-escaped quotes or if already has formatted quotes
+      if (content.includes('\\"') || content.includes("\\'")) {
+        // Convert backslash-escaped quotes to single quotes
+        const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+        return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+      }
+      const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
       if (hasSpecialChars) {
-        const escapedContent = content.replace(/"/g, '\\"');
+        // Replace internal quotes with single quotes instead of backslash escaping
+        const escapedContent = content.replace(/"/g, "'");
         return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
       }
       return match;
     });
-    
+
     // Then handle mixed brackets: [(label)], ([label])
     const mixedBracketPattern = /(\w+)(\[\(|\(\[)([^[\]()]*?)(\]\)|\)\])/g;
     processedLine = processedLine.replace(mixedBracketPattern, (match, id, openBracket, content, closeBracket) => {
-      if ((content.startsWith('"') && content.endsWith('"')) || 
-          (content.startsWith("'") && content.endsWith("'"))) {
+      if ((content.startsWith('"') && content.endsWith('"')) ||
+        (content.startsWith("'") && content.endsWith("'"))) {
         return match;
       }
-      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+      if (content.includes('\\"') || content.includes("\\'")) {
+        const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+        return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+      }
+      const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
       if (hasSpecialChars) {
-        const escapedContent = content.replace(/"/g, '\\"');
+        const escapedContent = content.replace(/"/g, "'");
         return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
       }
       return match;
     });
-    
+
     // Finally handle single brackets/parens/braces: [label], (label), {label}
     // Match content that may include parentheses, but ensure proper bracket/brace matching
     const singleBracketPattern = /(\w+)\[([^\[\]]*)\]|(\w+)\{([^\{\}]*)\}|(\w+)\(([^\(\)]*)\)/g;
@@ -219,43 +421,57 @@ function sanitizeMermaidCode(code: string): string {
       const content = content1 !== undefined ? content1 : (content2 !== undefined ? content2 : content3);
       const openBracket = id1 ? '[' : (id2 ? '{' : '(');
       const closeBracket = id1 ? ']' : (id2 ? '}' : ')');
-      
+
       if (!content) return match;
-      
-      if ((content.startsWith('"') && content.endsWith('"')) || 
-          (content.startsWith("'") && content.endsWith("'"))) {
+
+      // Skip if already quoted
+      if ((content.startsWith('"') && content.endsWith('"')) ||
+        (content.startsWith("'") && content.endsWith("'"))) {
         return match;
       }
-      
-      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+
+      // Fix already-escaped quotes by converting to single quotes
+      if (content.includes('\\"') || content.includes("\\'")) {
+        const fixedContent = content.replace(/\\"/g, "'").replace(/\\'/g, "'");
+        return `${id}${openBracket}"${fixedContent}"${closeBracket}`;
+      }
+
+      const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(content);
       if (hasSpecialChars) {
-        const escapedContent = content.replace(/"/g, '\\"');
+        // Replace internal quotes with single quotes
+        const escapedContent = content.replace(/"/g, "'");
         return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
       }
       return match;
     });
-    
+
     // Also handle edge labels that might have special characters
-    // Pattern: -->|label| or -.->|label| etc.
+    // Pattern: -->|label| or -.->, etc.
     processedLine = processedLine.replace(
       /(-{1,2}>|={1,2}>|\.{1,2}>)\s*\|([^|]+)\|/g,
       (match, arrow, label) => {
         // Skip if already quoted
-        if ((label.startsWith('"') && label.endsWith('"')) || 
-            (label.startsWith("'") && label.endsWith("'"))) {
+        if ((label.startsWith('"') && label.endsWith('"')) ||
+          (label.startsWith("'") && label.endsWith("'"))) {
           return match;
         }
-        
-        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(label);
+
+        // Fix already-escaped quotes by converting to single quotes
+        if (label.includes('\\"') || label.includes("\\'")) {
+          const fixedLabel = label.replace(/\\"/g, "'").replace(/\\'/g, "'");
+          return `${arrow}|"${fixedLabel}"|`;
+        }
+
+        const hasSpecialChars = /[(){}[\]"'<>|\\-]/.test(label);
         if (hasSpecialChars) {
-          const escapedLabel = label.replace(/"/g, '\\"');
+          const escapedLabel = label.replace(/"/g, "'");
           return `${arrow}|"${escapedLabel}"|`;
         }
-        
+
         return match;
       }
     );
-    
+
     return processedLine;
   }).join('\n');
 }
@@ -400,11 +616,11 @@ export function MermaidDiagram({
     const errorMessage = error.message || 'Unknown error';
     const isParseError = errorMessage.toLowerCase().includes('parse');
     const isSyntaxError = errorMessage.toLowerCase().includes('syntax');
-    
+
     // Try to extract line number from error message
     const lineMatch = errorMessage.match(/line (\d+)/i);
     const lineNumber = lineMatch ? parseInt(lineMatch[1], 10) : null;
-    
+
     return (
       <div className={cn('p-4 rounded-lg bg-destructive/10 border border-destructive/20', className)}>
         <div className="flex items-start gap-2">
@@ -419,7 +635,7 @@ export function MermaidDiagram({
               {lineNumber ? `Error on line ${lineNumber}: ` : ''}
               {errorMessage}
             </p>
-            
+
             {(isParseError || isSyntaxError) && (
               <div className="mt-3 p-2 bg-muted/50 rounded text-xs space-y-1">
                 <p className="font-medium text-foreground">Common fixes:</p>
@@ -431,7 +647,7 @@ export function MermaidDiagram({
                 </ul>
               </div>
             )}
-            
+
             <details className="mt-3">
               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground font-medium">
                 Show diagram code

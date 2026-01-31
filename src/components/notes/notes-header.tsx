@@ -12,12 +12,24 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotesStore, useUIStore } from '@/lib/stores/ui-store';
 import { useTags } from '@/lib/hooks/use-tags';
 import { useCreateNote } from '@/lib/hooks/use-notes';
+import { useCreateProject } from '@/lib/hooks/use-projects';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { ArrowUpDown, Filter, Plus, Check, FolderOpen, LayoutGrid, List, Table as TableIcon, Loader2 } from 'lucide-react';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { ArrowUpDown, Filter, Plus, Check, FolderOpen, FolderPlus, FileText, LayoutGrid, List, Table as TableIcon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type NotesViewType = 'grid' | 'list' | 'table';
@@ -25,21 +37,31 @@ type NotesViewType = 'grid' | 'list' | 'table';
 interface NotesHeaderProps {
   projectId?: string;
   projectName?: string;
+  isEmpty?: boolean;
 }
 
-export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
+export function NotesHeader({ projectId, projectName, isEmpty = false }: NotesHeaderProps) {
   const router = useRouter();
   const { filter, sort, setFilter, setSort, clearFilter } = useNotesStore();
   const { notesView, setNotesView } = useUIStore();
   const { data: tags = [] } = useTags();
   const { currentUser } = useAuthStore();
+  const { currentWorkspace } = useWorkspaceStore();
   const createNote = useCreateNote();
+  const createProject = useCreateProject();
   const [isCreating, setIsCreating] = useState(false);
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [projectNameInput, setProjectNameInput] = useState('');
 
-  // Create a new note immediately and redirect to it
-  const handleCreateNote = async () => {
+  // Create a new PRD immediately and redirect to it
+  const handleCreatePRD = async () => {
     if (!currentUser) {
       toast.error('Please sign in to create notes');
+      return;
+    }
+
+    if (!currentWorkspace) {
+      toast.error('Please select a workspace first');
       return;
     }
 
@@ -47,10 +69,19 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
     try {
       const newNote = await createNote.mutateAsync({
         data: {
-          title: 'Untitled Note',
-          content: '',
+          title: 'Untitled PRD',
+          content: JSON.stringify({
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Start writing your PRD here...' }]
+              }
+            ]
+          }),
           tags: [],
           projectId: projectId,
+          workspaceId: currentWorkspace.id,
         },
         authorId: currentUser.id,
         authorName: currentUser.name || currentUser.email,
@@ -59,9 +90,34 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
 
       if (newNote) {
         router.push(`/notes/${newNote.id}`);
+        toast.success('PRD created successfully');
       }
-    } catch (error) {
-      toast.error('Failed to create note');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create PRD');
+      setIsCreating(false);
+    }
+  };
+
+  // Create a new project
+  const handleCreateProject = async () => {
+    if (!projectNameInput.trim() || !currentWorkspace) {
+      toast.error('Please enter a project name');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await createProject.mutateAsync({
+        name: projectNameInput.trim(),
+        workspaceId: currentWorkspace.id,
+      });
+
+      toast.success('Project created successfully');
+      setIsProjectDialogOpen(false);
+      setProjectNameInput('');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create project');
+    } finally {
       setIsCreating(false);
     }
   };
@@ -183,21 +239,84 @@ export function NotesHeader({ projectId, projectName }: NotesHeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Add note button */}
-        <Button 
-          size="sm" 
-          className="gap-2" 
-          onClick={handleCreateNote}
-          disabled={isCreating}
-        >
-          {isCreating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-          {isCreating ? 'Creating...' : 'Add Notes'}
-        </Button>
+        {/* Add button with dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              className="gap-2"
+              disabled={isCreating}
+            >
+              {isCreating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              {isCreating ? 'Creating...' : 'Create'}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              onClick={handleCreatePRD}
+              className="gap-2 cursor-pointer"
+              disabled={isCreating}
+            >
+              <FileText className="h-4 w-4" />
+              <span>New PRD</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setIsProjectDialogOpen(true)}
+              className="gap-2 cursor-pointer"
+            >
+              <FolderPlus className="h-4 w-4" />
+              <span>New Project</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      {/* Create Project Dialog */}
+      <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+            <DialogDescription>
+              Projects help you organize related PRDs together.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Project Name</Label>
+              <Input
+                id="project-name"
+                placeholder="Enter project name"
+                value={projectNameInput}
+                onChange={(e) => setProjectNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isCreating) {
+                    handleCreateProject();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsProjectDialogOpen(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateProject}
+              disabled={isCreating || !projectNameInput.trim()}
+            >
+              {isCreating ? 'Creating...' : 'Create Project'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

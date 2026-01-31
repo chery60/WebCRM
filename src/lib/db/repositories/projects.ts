@@ -5,10 +5,15 @@ import { USE_SUPABASE } from '../database';
 import { projectsRepository as supabaseProjectsRepository } from './supabase/projects';
 
 const dexieProjectsRepository = {
-  async getAll(): Promise<Project[]> {
-    return db.projects
-      .filter(p => !p.isDeleted)
-      .toArray();
+  async getAll(workspaceId?: string): Promise<Project[]> {
+    let collection = db.projects.filter(p => !p.isDeleted);
+
+    // Filter by workspace - include projects that belong to the workspace OR have no workspace (legacy projects)
+    if (workspaceId) {
+      collection = collection.filter(p => p.workspaceId === workspaceId || !p.workspaceId);
+    }
+
+    return collection.toArray();
   },
 
   async getById(id: string): Promise<Project | undefined> {
@@ -50,7 +55,7 @@ const dexieProjectsRepository = {
     const notesInProject = await db.notes
       .filter(n => !n.isDeleted && n.projectId === id)
       .toArray();
-    
+
     for (const note of notesInProject) {
       await db.notes.update(note.id, {
         projectId: undefined,

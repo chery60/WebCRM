@@ -39,6 +39,8 @@ function supabaseUserToUser(supabaseUser: any, profile?: any): User {
         department: profile?.department,
         location: profile?.location,
         gender: profile?.gender,
+        hasCompletedOnboarding: profile?.has_completed_onboarding || false,
+        onboardingCompletedAt: profile?.onboarding_completed_at ? new Date(profile.onboarding_completed_at) : undefined,
     };
 }
 
@@ -74,7 +76,14 @@ export const useAuthStore = create<AuthState>()(
                             throw new Error('Login failed');
                         }
 
-                        // Get user profile from employees table
+                        // Get user profile from users table (contains hasCompletedOnboarding)
+                        const { data: userProfile } = await supabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', data.user.id)
+                            .single();
+
+                        // Get employee data for additional checks
                         const employee = await employeesRepository.getByEmail(email);
 
                         if (employee && !employee.isActive) {
@@ -87,7 +96,19 @@ export const useAuthStore = create<AuthState>()(
                             await employeesRepository.updateLastActivity(employee.id);
                         }
 
-                        const user = supabaseUserToUser(data.user, employee);
+                        // Merge user profile data with employee data, prioritizing user profile for onboarding flags
+                        // Build name: prefer userProfile.name, then employee name, then fallback handled by supabaseUserToUser
+                        const employeeName = (employee?.firstName && employee?.lastName)
+                            ? `${employee.firstName} ${employee.lastName}`.trim()
+                            : undefined;
+
+                        const user = supabaseUserToUser(data.user, {
+                            ...employee,
+                            has_completed_onboarding: userProfile?.has_completed_onboarding,
+                            onboarding_completed_at: userProfile?.onboarding_completed_at,
+                            name: userProfile?.name || employeeName,
+                            avatar: userProfile?.avatar || employee?.avatar,
+                        });
                         set({ currentUser: user, isAuthenticated: true });
                     } else {
                         // Dexie fallback (original implementation)
@@ -146,7 +167,7 @@ export const useAuthStore = create<AuthState>()(
                         // Create user profile in users table
                         const { error: profileError } = await supabase
                             .from('users')
-                            .insert({
+                            .upsert({
                                 id: data.user.id,
                                 name: userData.name,
                                 email: userData.email,
@@ -156,6 +177,7 @@ export const useAuthStore = create<AuthState>()(
 
                         if (profileError) {
                             console.error('Error creating user profile:', profileError);
+                            console.error('Error details:', JSON.stringify(profileError, null, 2));
                         }
 
                         const user: User = {
@@ -217,16 +239,19 @@ export const useAuthStore = create<AuthState>()(
                         }
 
                         // Update user profile in database
+                        const updateData: Record<string, any> = {};
+                        if (data.name !== undefined) updateData.name = data.name;
+                        if (data.avatar !== undefined) updateData.avatar = data.avatar;
+                        if (data.phone !== undefined) updateData.phone = data.phone;
+                        if (data.department !== undefined) updateData.department = data.department;
+                        if (data.location !== undefined) updateData.location = data.location;
+                        if (data.gender !== undefined) updateData.gender = data.gender;
+                        if (data.hasCompletedOnboarding !== undefined) updateData.has_completed_onboarding = data.hasCompletedOnboarding;
+                        if (data.onboardingCompletedAt !== undefined) updateData.onboarding_completed_at = data.onboardingCompletedAt;
+
                         const { error } = await supabase
                             .from('users')
-                            .update({
-                                name: data.name,
-                                avatar: data.avatar,
-                                phone: data.phone,
-                                department: data.department,
-                                location: data.location,
-                                gender: data.gender,
-                            })
+                            .update(updateData)
                             .eq('id', currentUser.id);
 
                         if (error) {
@@ -256,8 +281,28 @@ export const useAuthStore = create<AuthState>()(
                     const { data: { session } } = await supabase.auth.getSession();
 
                     if (session?.user) {
+                        // Get user profile from users table (contains hasCompletedOnboarding)
+                        const { data: userProfile } = await supabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', session.user.id)
+                            .single();
+
                         const employee = await employeesRepository.getByEmail(session.user.email || '');
-                        const user = supabaseUserToUser(session.user, employee);
+
+                        // Build name: prefer userProfile.name, then employee name
+                        const employeeName = (employee?.firstName && employee?.lastName)
+                            ? `${employee.firstName} ${employee.lastName}`.trim()
+                            : undefined;
+
+                        // Merge user profile data with employee data
+                        const user = supabaseUserToUser(session.user, {
+                            ...employee,
+                            has_completed_onboarding: userProfile?.has_completed_onboarding,
+                            onboarding_completed_at: userProfile?.onboarding_completed_at,
+                            name: userProfile?.name || employeeName,
+                            avatar: userProfile?.avatar || employee?.avatar,
+                        });
                         set({ currentUser: user, isAuthenticated: true });
                     } else {
                         set({ currentUser: null, isAuthenticated: false });

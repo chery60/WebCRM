@@ -16,10 +16,18 @@ export default function AccountSettingsPage() {
     const [isLoading, setIsLoading] = useState(false);
 
     // Profile form state - split into first and last name
-    const nameParts = currentUser?.name.split(' ') || ['', ''];
+    // Handle edge case where name might be "undefined undefined" or malformed
+    const sanitizeName = (name: string | undefined) => {
+        if (!name || name === 'undefined' || name === 'undefined undefined') {
+            return '';
+        }
+        return name;
+    };
+    const sanitizedName = sanitizeName(currentUser?.name);
+    const nameParts = sanitizedName ? sanitizedName.split(' ') : ['', ''];
     const [profileData, setProfileData] = useState({
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
+        firstName: nameParts[0] !== 'undefined' ? nameParts[0] : '',
+        lastName: nameParts.slice(1).join(' ') !== 'undefined' ? nameParts.slice(1).join(' ') : '',
     });
 
     // Security settings
@@ -106,12 +114,14 @@ export default function AccountSettingsPage() {
 
     if (!currentUser) return null;
 
-    const initials = currentUser.name
+    const displayName = sanitizeName(currentUser.name) || currentUser.email?.split('@')[0] || 'U';
+    const initials = displayName
         .split(' ')
         .map(n => n[0])
+        .filter(Boolean)
         .join('')
         .toUpperCase()
-        .slice(0, 2);
+        .slice(0, 2) || 'U';
 
     return (
         <div className="p-8 max-w-4xl">
@@ -194,8 +204,8 @@ export default function AccountSettingsPage() {
                             variant="outline"
                             onClick={() =>
                                 setProfileData({
-                                    firstName: nameParts[0] || '',
-                                    lastName: nameParts.slice(1).join(' ') || '',
+                                    firstName: nameParts[0] !== 'undefined' ? nameParts[0] : '',
+                                    lastName: nameParts.slice(1).join(' ') !== 'undefined' ? nameParts.slice(1).join(' ') : '',
                                 })
                             }
                         >

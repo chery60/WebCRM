@@ -2,14 +2,30 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsRepository } from '@/lib/db/repositories/projects';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import type { Project } from '@/types';
 
-export function useProjects() {
+// Get all projects (optionally filtered by workspace)
+export function useProjects(workspaceId?: string) {
   return useQuery({
-    queryKey: ['projects'],
-    queryFn: () => projectsRepository.getAll(),
+    queryKey: ['projects', { workspaceId }],
+    queryFn: () => projectsRepository.getAll(workspaceId),
   });
 }
+
+// Workspace-aware hook that automatically filters by current workspace
+// If no workspace is set, fetches all accessible projects (including legacy projects)
+export function useWorkspaceProjects() {
+  const { currentWorkspace } = useWorkspaceStore();
+  const workspaceId = currentWorkspace?.id;
+
+  return useQuery({
+    queryKey: ['projects', { workspaceId }],
+    queryFn: () => projectsRepository.getAll(workspaceId),
+    // Always enabled - will fetch all projects if no workspace, or workspace-filtered + legacy if workspace is set
+  });
+}
+
 
 export function useProject(id: string | undefined) {
   return useQuery({

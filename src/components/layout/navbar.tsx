@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Search, HelpCircle, ChevronDown, User, Settings, LogOut, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Search, HelpCircle, ChevronDown, LogOut, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useState, useEffect } from 'react';
@@ -32,18 +32,30 @@ export function Navbar() {
     router.push('/signin');
   };
 
+  // Sanitize name to handle "undefined" edge case
+  const sanitizeName = (name: string | undefined): string => {
+    if (!name || name === 'undefined' || name === 'undefined undefined') {
+      return '';
+    }
+    return name;
+  };
+
   // Get user initials for avatar fallback
   const getInitials = (name: string) => {
-    return name
+    const sanitized = sanitizeName(name);
+    if (!sanitized) return 'U';
+    return sanitized
       .split(' ')
       .map((part) => part[0])
+      .filter(Boolean)
       .join('')
       .toUpperCase()
-      .substring(0, 2);
+      .substring(0, 2) || 'U';
   };
 
   // Default values if no user is logged in (though typically this page is protected)
-  const userName = currentUser?.name || 'Guest';
+  const rawName = currentUser?.name;
+  const userName = sanitizeName(rawName) || currentUser?.email?.split('@')[0] || 'Guest';
   const userEmail = currentUser?.email || '';
   const userAvatar = currentUser?.avatar || '';
 
@@ -108,15 +120,6 @@ export function Navbar() {
                 <p className="text-xs text-muted-foreground">{userEmail}</p>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"

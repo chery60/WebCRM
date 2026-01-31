@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notesRepository } from '@/lib/db/repositories/unified-notes';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import type { Note, NotesFilter, NotesSort, NoteFormData } from '@/types';
 
 // Query keys
@@ -13,7 +14,7 @@ export const noteKeys = {
   detail: (id: string) => [...noteKeys.details(), id] as const,
 };
 
-// Get all notes/PRDs
+// Get all notes/PRDs (with optional workspace filtering)
 export function useNotes(filter?: NotesFilter, sort?: NotesSort) {
   return useQuery({
     queryKey: noteKeys.list(filter, sort),
@@ -21,13 +22,35 @@ export function useNotes(filter?: NotesFilter, sort?: NotesSort) {
   });
 }
 
-// Get all PRDs for sidebar (includes all projects)
-export function useAllPRDs() {
+// Get all PRDs for sidebar (includes all projects, workspace-filtered)
+export function useAllPRDs(workspaceId?: string) {
+  const filter: NotesFilter = {
+    includeAllProjects: true,
+    workspaceId
+  };
   return useQuery({
-    queryKey: noteKeys.list({ includeAllProjects: true }),
-    queryFn: () => notesRepository.getAll({ includeAllProjects: true }),
+    queryKey: noteKeys.list(filter),
+    queryFn: () => notesRepository.getAll(filter),
   });
 }
+
+// Workspace-aware hook that automatically filters by current workspace
+export function useWorkspaceNotes(filter?: Omit<NotesFilter, 'workspaceId'>, sort?: NotesSort) {
+  const { currentWorkspace } = useWorkspaceStore();
+  const workspaceId = currentWorkspace?.id;
+
+  const fullFilter: NotesFilter = {
+    ...filter,
+    workspaceId,
+  };
+
+  return useQuery({
+    queryKey: noteKeys.list(fullFilter, sort),
+    queryFn: () => notesRepository.getAll(fullFilter, sort),
+    enabled: !!workspaceId, // Only fetch when workspace is available
+  });
+}
+
 
 // Get single note
 export function useNote(id: string) {

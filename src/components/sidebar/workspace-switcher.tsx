@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,6 +41,7 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
         switchWorkspace,
         createWorkspace,
     } = useWorkspaceStore();
+    const queryClient = useQueryClient();
 
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -62,6 +64,9 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
         setIsLoading(true);
         try {
             await createWorkspace(newWorkspaceName.trim(), currentUser.id, undefined, undefined);
+            // Invalidate all workspace-scoped queries
+            queryClient.invalidateQueries({ queryKey: ['notes'] });
+            queryClient.invalidateQueries({ queryKey: ['projects'] });
             toast.success('Workspace created successfully');
             setIsCreateOpen(false);
             setNewWorkspaceName('');
@@ -76,6 +81,9 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
     const handleSwitchWorkspace = async (workspaceId: string) => {
         try {
             await switchWorkspace(workspaceId);
+            // Invalidate all workspace-scoped queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ['notes'] });
+            queryClient.invalidateQueries({ queryKey: ['projects'] });
             toast.success('Switched workspace');
         } catch (error) {
             toast.error('Failed to switch workspace');
@@ -132,7 +140,7 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
             <div className="p-3" style={{ paddingLeft: '24px', paddingRight: '24px' }}>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button 
+                        <button
                             className="flex w-full items-center transition-colors"
                             style={{
                                 height: '24px',

@@ -12,6 +12,7 @@ function rowToProject(row: any): Project {
     instructions: row.instructions || undefined,
     icon: row.icon || undefined,
     color: row.color || undefined,
+    workspaceId: row.workspace_id || undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
     isDeleted: row.is_deleted,
@@ -22,22 +23,32 @@ function rowToProject(row: any): Project {
 async function getCurrentUserId(): Promise<string | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  
+
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id || null;
 }
 
 export const projectsRepository = {
-  // Get all projects for current user
-  async getAll(): Promise<Project[]> {
+  // Get all projects for current user, optionally filtered by workspace
+  async getAll(workspaceId?: string): Promise<Project[]> {
     const supabase = getSupabaseClient();
     if (!supabase) return [];
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('projects')
       .select('*')
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false });
+      .eq('is_deleted', false);
+
+    // Filter by workspace - STRICT: only show projects in the specified workspace
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    } else {
+      // If no workspace is provided, don't return any projects
+      // This prevents leaking data between workspaces
+      query = query.eq('workspace_id', '00000000-0000-0000-0000-000000000000'); // Non-existent UUID
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
@@ -78,6 +89,11 @@ export const projectsRepository = {
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('User not authenticated');
 
+    // SECURITY: workspace_id is REQUIRED - prevent data leaks
+    if (!data.workspaceId) {
+      throw new Error('Workspace ID is required to create a project. Please ensure you have a workspace selected.');
+    }
+
     const { data: insertedData, error } = await supabase
       .from('projects')
       .insert({
@@ -86,6 +102,7 @@ export const projectsRepository = {
         instructions: data.instructions || null,
         icon: data.icon || null,
         color: data.color || null,
+        workspace_id: data.workspaceId,
         user_id: userId,
         is_deleted: false,
       })
