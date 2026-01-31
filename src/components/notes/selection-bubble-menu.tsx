@@ -108,8 +108,8 @@ export function SelectionBubbleMenu({ editor, onAIRewrite }: SelectionBubbleMenu
     const start = view.coordsAtPos(from);
     const end = view.coordsAtPos(to);
 
-    // Calculate center position above the selection
-    const left = (start.left + end.left) / 2;
+    // Position at the left edge of the selection, above it
+    const left = start.left;
     const top = start.top - 10; // Position above the selection
 
     setPosition({ top, left });
@@ -191,7 +191,7 @@ export function SelectionBubbleMenu({ editor, onAIRewrite }: SelectionBubbleMenu
         style={{
           top: position.top,
           left: position.left,
-          transform: 'translate(-50%, -100%)',
+          transform: 'translateY(-100%)',
         }}
       >
         <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-lg">

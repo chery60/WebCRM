@@ -121,15 +121,47 @@ function buildMermaidTheme(isDark: boolean): Record<string, string> {
 
 /**
  * Sanitize Mermaid code to fix common syntax issues
- * - Escapes parentheses in node labels by wrapping text in quotes
- * - Handles other special characters that break parsing
+ * - Detects and removes incomplete arrows
+ * - Escapes special characters in node labels by wrapping text in quotes
+ * - Handles parentheses, quotes, arrows, and other problematic characters
  */
 function sanitizeMermaidCode(code: string): string {
-  // Pattern to match node labels like A[text], A(text), A{text}, etc.
-  // and wrap them in quotes if they contain problematic characters
   const lines = code.split('\n');
   
-  return lines.map(line => {
+  // First pass: detect and fix incomplete arrows
+  const fixedLines = lines.map((line, index) => {
+    const trimmed = line.trim();
+    
+    // Skip diagram declarations and comments
+    if (
+      trimmed.startsWith('flowchart') ||
+      trimmed.startsWith('graph') ||
+      trimmed.startsWith('sequenceDiagram') ||
+      trimmed.startsWith('erDiagram') ||
+      trimmed.startsWith('gantt') ||
+      trimmed.startsWith('stateDiagram') ||
+      trimmed.startsWith('journey') ||
+      trimmed.startsWith('pie') ||
+      trimmed.startsWith('%%') ||
+      trimmed === ''
+    ) {
+      return line;
+    }
+    
+    // Check if line ends with an incomplete arrow (arrow without target)
+    // Patterns: -->, ===>, -.-> etc. at end of line
+    const incompleteArrowPattern = /(-{1,3}>|={1,3}>|\.{1,3}>)\s*$/;
+    if (incompleteArrowPattern.test(trimmed)) {
+      // Comment out this line or remove the incomplete arrow
+      console.warn(`Line ${index + 1} has incomplete arrow, commenting out:`, trimmed);
+      return `%% ${line} %% (Incomplete arrow removed)`;
+    }
+    
+    return line;
+  });
+  
+  // Second pass: quote special characters in labels
+  return fixedLines.map(line => {
     // Skip lines that are just diagram type declarations or empty
     if (line.trim().startsWith('flowchart') || 
         line.trim().startsWith('graph') ||
@@ -139,22 +171,92 @@ function sanitizeMermaidCode(code: string): string {
         line.trim().startsWith('stateDiagram') ||
         line.trim().startsWith('journey') ||
         line.trim().startsWith('pie') ||
+        line.trim().startsWith('%%') || // Skip comments
         line.trim() === '') {
       return line;
     }
     
-    // Match node definitions with brackets: ID[text], ID(text), ID{text}, ID([text]), etc.
-    // Look for unquoted text containing parentheses inside shape brackets
-    return line.replace(
-      /(\w+)(\[|\(|\{|\(\[|\[\(|\[\[|\(\()([^\]}\)]*\([^\]}\)]*\)[^\]}\)]*)(\]|\)|\}|\]\)|\)\]|\]\]|\)\))/g,
-      (match, id, openBracket, content, closeBracket) => {
-        // If content contains parentheses and isn't already quoted, add quotes
-        if (content.includes('(') && !content.startsWith('"') && !content.startsWith("'")) {
-          return `${id}${openBracket}"${content}"${closeBracket}`;
+    // Pattern to match node definitions: ID[text], ID(text), ID{text}, ID([text]), etc.
+    // We need to handle multiple bracket types and ensure special characters are quoted
+    let processedLine = line;
+    
+    // Match all node label patterns with various bracket types
+    // First, handle double brackets (must come before single brackets): [[label]], ((label))
+    const doubleBracketPattern = /(\w+)(\[\[|\(\()([^[\]()]*?)(\]\]|\)\))/g;
+    processedLine = processedLine.replace(doubleBracketPattern, (match, id, openBracket, content, closeBracket) => {
+      if ((content.startsWith('"') && content.endsWith('"')) || 
+          (content.startsWith("'") && content.endsWith("'"))) {
+        return match;
+      }
+      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+      if (hasSpecialChars) {
+        const escapedContent = content.replace(/"/g, '\\"');
+        return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+      }
+      return match;
+    });
+    
+    // Then handle mixed brackets: [(label)], ([label])
+    const mixedBracketPattern = /(\w+)(\[\(|\(\[)([^[\]()]*?)(\]\)|\)\])/g;
+    processedLine = processedLine.replace(mixedBracketPattern, (match, id, openBracket, content, closeBracket) => {
+      if ((content.startsWith('"') && content.endsWith('"')) || 
+          (content.startsWith("'") && content.endsWith("'"))) {
+        return match;
+      }
+      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+      if (hasSpecialChars) {
+        const escapedContent = content.replace(/"/g, '\\"');
+        return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+      }
+      return match;
+    });
+    
+    // Finally handle single brackets/parens/braces: [label], (label), {label}
+    // Match content that may include parentheses, but ensure proper bracket/brace matching
+    const singleBracketPattern = /(\w+)\[([^\[\]]*)\]|(\w+)\{([^\{\}]*)\}|(\w+)\(([^\(\)]*)\)/g;
+    processedLine = processedLine.replace(singleBracketPattern, (match, id1, content1, id2, content2, id3, content3) => {
+      const id = id1 || id2 || id3;
+      const content = content1 !== undefined ? content1 : (content2 !== undefined ? content2 : content3);
+      const openBracket = id1 ? '[' : (id2 ? '{' : '(');
+      const closeBracket = id1 ? ']' : (id2 ? '}' : ')');
+      
+      if (!content) return match;
+      
+      if ((content.startsWith('"') && content.endsWith('"')) || 
+          (content.startsWith("'") && content.endsWith("'"))) {
+        return match;
+      }
+      
+      const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+      if (hasSpecialChars) {
+        const escapedContent = content.replace(/"/g, '\\"');
+        return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+      }
+      return match;
+    });
+    
+    // Also handle edge labels that might have special characters
+    // Pattern: -->|label| or -.->|label| etc.
+    processedLine = processedLine.replace(
+      /(-{1,2}>|={1,2}>|\.{1,2}>)\s*\|([^|]+)\|/g,
+      (match, arrow, label) => {
+        // Skip if already quoted
+        if ((label.startsWith('"') && label.endsWith('"')) || 
+            (label.startsWith("'") && label.endsWith("'"))) {
+          return match;
         }
+        
+        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(label);
+        if (hasSpecialChars) {
+          const escapedLabel = label.replace(/"/g, '\\"');
+          return `${arrow}|"${escapedLabel}"|`;
+        }
+        
         return match;
       }
     );
+    
+    return processedLine;
   }).join('\n');
 }
 
@@ -241,7 +343,9 @@ export function MermaidDiagram({
     };
 
     renderDiagram();
-  }, [chart, isDark, onRender, onError]);
+    // Remove onRender and onError from dependencies to prevent re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart, isDark]);
 
   // Re-render on theme change
   useEffect(() => {
@@ -292,18 +396,52 @@ export function MermaidDiagram({
   }
 
   if (error) {
+    // Extract more user-friendly error information
+    const errorMessage = error.message || 'Unknown error';
+    const isParseError = errorMessage.toLowerCase().includes('parse');
+    const isSyntaxError = errorMessage.toLowerCase().includes('syntax');
+    
+    // Try to extract line number from error message
+    const lineMatch = errorMessage.match(/line (\d+)/i);
+    const lineNumber = lineMatch ? parseInt(lineMatch[1], 10) : null;
+    
     return (
       <div className={cn('p-4 rounded-lg bg-destructive/10 border border-destructive/20', className)}>
-        <p className="text-sm text-destructive font-medium">Failed to render diagram</p>
-        <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
-        <details className="mt-2">
-          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-            Show diagram code
-          </summary>
-          <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto">
-            {chart}
-          </pre>
-        </details>
+        <div className="flex items-start gap-2">
+          <svg className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm text-destructive font-medium">
+              {isParseError || isSyntaxError ? 'Diagram Syntax Error' : 'Failed to Render Diagram'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lineNumber ? `Error on line ${lineNumber}: ` : ''}
+              {errorMessage}
+            </p>
+            
+            {(isParseError || isSyntaxError) && (
+              <div className="mt-3 p-2 bg-muted/50 rounded text-xs space-y-1">
+                <p className="font-medium text-foreground">Common fixes:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                  <li>Wrap labels with special characters in quotes: <code className="bg-background px-1 rounded">A["Label (text)"]</code></li>
+                  <li>Ensure all brackets are properly closed</li>
+                  <li>Check for missing node IDs or connection syntax</li>
+                  <li>Verify the diagram type declaration (e.g., <code className="bg-background px-1 rounded">flowchart TD</code>)</li>
+                </ul>
+              </div>
+            )}
+            
+            <details className="mt-3">
+              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground font-medium">
+                Show diagram code
+              </summary>
+              <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-[200px] whitespace-pre-wrap break-words">
+                {chart}
+              </pre>
+            </details>
+          </div>
+        </div>
       </div>
     );
   }

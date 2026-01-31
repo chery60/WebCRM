@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -221,43 +222,44 @@ export function GeneratedItemsSection({
   // Empty state when alwaysShow is true but no items
   if (totalCount === 0 && alwaysShow) {
     return (
-      <div className={cn('rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)]', className)}>
-        <div className="px-4 py-6">
-          <div className="flex flex-col items-center justify-center text-center">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <span className="font-medium text-note-text">Tasks & Features</span>
-            </div>
-            <p className="text-xs text-note-text-muted mb-4 max-w-md">
-              Add tasks and features to track work items for this note. You can create them manually or generate them using AI.
-            </p>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="gap-1">
-                  <Plus className="h-4 w-4" />
-                  Add
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-52">
-                <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
-                  <ListTodo className="h-4 w-4 mr-2" />
-                  Create a Task
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
-                  <Lightbulb className="h-4 w-4 mr-2" />
-                  Create a Feature
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenAITaskGeneration}>
-                  <Wand2 className="h-4 w-4 mr-2" />
-                  Create Task using AI
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
-                  <Wand2 className="h-4 w-4 mr-2" />
-                  Create Feature using AI
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+      <div className={cn('rounded-2xl border bg-white shadow-sm', className)}>
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-note-text-muted" />
+            <h2 className="text-sm font-medium">Tasks & Features</h2>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
+                <ListTodo className="h-4 w-4 mr-2" />
+                Create a Task
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Create a Feature
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenAITaskGeneration}>
+                <Wand2 className="h-4 w-4 mr-2" />
+                Create Task using AI
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
+                <Wand2 className="h-4 w-4 mr-2" />
+                Create Feature using AI
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <Separator className="opacity-15" />
+        <div className="py-2">
+          <div className="px-6 py-12 text-center border-2 border-dashed mx-6 mb-6 rounded-xl bg-slate-50/50">
+            <Sparkles className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-20" />
+            <p className="text-sm font-medium text-muted-foreground">No tasks or features yet</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Start by generating items using AI or add them manually</p>
           </div>
         </div>
       </div>
@@ -265,184 +267,171 @@ export function GeneratedItemsSection({
   }
 
   return (
-    <div className={cn('rounded-lg bg-note-card border-[0.5px] border-note-border shadow-[var(--note-shadow)] overflow-hidden', className)}>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        {/* Header */}
-        <CollapsibleTrigger asChild>
-          <button className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-note-bg/50 transition-colors border-b border-note-border bg-note-bg/30">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm text-note-text">AI Generated Items</span>
-              <Badge variant="secondary" className="text-xs">
-                {totalCount}
-              </Badge>
+    <div className={cn('rounded-2xl border bg-white shadow-sm', className)}>
+      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-note-text-muted" />
+          <h2 className="text-sm font-medium">Tasks & Features</h2>
+          <Badge variant="secondary" className="text-xs ml-1">
+            {totalCount}
+          </Badge>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
+              <ListTodo className="h-4 w-4 mr-2" />
+              Create a Task
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
+              <Lightbulb className="h-4 w-4 mr-2" />
+              Create a Feature
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenAITaskGeneration}>
+              <Wand2 className="h-4 w-4 mr-2" />
+              Create Task using AI
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
+              <Wand2 className="h-4 w-4 mr-2" />
+              Create Feature using AI
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <Separator className="opacity-15" />
+
+      <div className="px-4 pb-4 pt-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'features' | 'tasks')}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+              <TabsList className="grid grid-cols-2 w-full sm:w-auto">
+                <TabsTrigger value="features" className="gap-2 text-xs sm:text-sm">
+                  <Lightbulb className="h-3.5 w-3.5" />
+                  Features
+                  {features.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 h-4 min-w-[18px] flex items-center justify-center">
+                      {features.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="tasks" className="gap-2 text-xs sm:text-sm">
+                  <ListTodo className="h-3.5 w-3.5" />
+                  Tasks
+                  {tasks.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 h-4 min-w-[18px] flex items-center justify-center">
+                      {tasks.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
             </div>
-            {isOpen ? (
-              <ChevronUp className="h-4 w-4 text-note-text-muted" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-note-text-muted" />
-            )}
-          </button>
-        </CollapsibleTrigger>
 
-        <CollapsibleContent>
-          <div className="px-4 pb-4">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'features' | 'tasks')}>
-              <div className="flex items-center justify-between mb-3">
-                <TabsList>
-                  <TabsTrigger value="features" className="gap-2">
-                    <Lightbulb className="h-4 w-4" />
-                    Features
-                    {features.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 text-xs">
-                        {features.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="tasks" className="gap-2">
-                    <ListTodo className="h-4 w-4" />
-                    Tasks
-                    {tasks.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 text-xs">
-                        {tasks.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Actions for current tab */}
-                <div className="flex items-center gap-2">
-                  {activeTab === 'features' && features.length > 0 && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={selectAllFeatures}
-                        className="text-xs"
-                      >
-                        Select All
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={requestClearAllFeatures}
-                        className="text-xs text-muted-foreground"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Clear
-                      </Button>
-                    </>
-                  )}
-                  {activeTab === 'tasks' && tasks.length > 0 && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={selectAllTasks}
-                        className="text-xs"
-                      >
-                        Select All
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={requestClearAllTasks}
-                        className="text-xs text-muted-foreground"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Clear
-                      </Button>
-                    </>
-                  )}
-                  
-                  {/* Add Dropdown Button */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" className="gap-1">
-                        <Plus className="h-4 w-4" />
-                        Add
-                        <ChevronDown className="h-3 w-3 ml-1" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuItem onClick={onOpenCreateTaskDrawer}>
-                        <ListTodo className="h-4 w-4 mr-2" />
-                        Create a Task
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={onOpenCreateFeatureDrawer}>
-                        <Lightbulb className="h-4 w-4 mr-2" />
-                        Create a Feature
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={onOpenAITaskGeneration}>
-                        <Wand2 className="h-4 w-4 mr-2" />
-                        Create Task using AI
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={onOpenAIFeatureGeneration}>
-                        <Wand2 className="h-4 w-4 mr-2" />
-                        Create Feature using AI
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-
-              {/* Features Tab */}
-              <TabsContent value="features" className="mt-0">
-                {features.length === 0 ? (
-                  <div className="text-center py-6 text-note-text-muted">
-                    <Lightbulb className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                    <p className="text-xs font-medium">No features generated yet.</p>
-                    <p className="text-[10px] mt-1 opacity-70">
-                      Use the "/" command and select "Generate Features" from your PRD content.
-                    </p>
-                  </div>
-                ) : (
-                  <ScrollArea className="max-h-[400px]">
-                    <div className="space-y-2 pr-4">
-                      {features.map((feature) => (
-                        <FeaturePreviewCard
-                          key={feature.id}
-                          feature={feature}
-                          isSelected={feature.isSelected}
-                          onToggleSelect={() => toggleFeatureSelection(feature.id)}
-                          onDelete={() => requestDeleteFeature(feature.id)}
-                        />
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-              </TabsContent>
-
-              {/* Tasks Tab */}
-              <TabsContent value="tasks" className="mt-0">
-                {tasks.length === 0 ? (
-                  <div className="text-center py-6 text-note-text-muted">
-                    <ListTodo className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                    <p className="text-xs font-medium">No tasks generated yet.</p>
-                    <p className="text-[10px] mt-1 opacity-70">
-                      Use the "/" command and select "Generate Tasks" from your features.
-                    </p>
-                  </div>
-                ) : (
-                  <ScrollArea className="max-h-[400px]">
-                    <div className="space-y-2 pr-4">
-                      {tasks.map((task) => (
-                        <TaskPreviewCard
-                          key={task.id}
-                          task={task}
-                          isSelected={task.isSelected}
-                          onToggleSelect={() => toggleTaskSelection(task.id)}
-                          onDelete={() => requestDeleteTask(task.id)}
-                        />
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-              </TabsContent>
-            </Tabs>
+            {/* Actions for current tab */}
+            <div className="flex items-center justify-end gap-1 sm:gap-2 w-full sm:w-auto">
+              {activeTab === 'features' && features.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectAllFeatures}
+                    className="text-xs h-8 px-2 sm:px-3"
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={requestClearAllFeatures}
+                    className="text-xs h-8 px-2 sm:px-3 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    Clear
+                  </Button>
+                </>
+              )}
+              {activeTab === 'tasks' && tasks.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectAllTasks}
+                    className="text-xs h-8 px-2 sm:px-3"
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={requestClearAllTasks}
+                    className="text-xs h-8 px-2 sm:px-3 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    Clear
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
+
+          {/* Features Tab */}
+          <TabsContent value="features" className="mt-0 outline-none">
+            {features.length === 0 ? (
+              <div className="text-center py-10 border-2 border-dashed rounded-xl bg-slate-50/50 text-note-text-muted">
+                <Lightbulb className="h-8 w-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">No features generated yet</p>
+                <p className="text-xs mt-1 opacity-60 max-w-[240px] mx-auto">
+                  Use the "/" command and select "Generate Features" from your PRD content.
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[450px] -mr-4 pr-4">
+                <div className="space-y-3 pb-4">
+                  {features.map((feature) => (
+                    <FeaturePreviewCard
+                      key={feature.id}
+                      feature={feature}
+                      isSelected={feature.isSelected}
+                      onToggleSelect={() => toggleFeatureSelection(feature.id)}
+                      onDelete={() => requestDeleteFeature(feature.id)}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </TabsContent>
+
+          {/* Tasks Tab */}
+          <TabsContent value="tasks" className="mt-0 outline-none">
+            {tasks.length === 0 ? (
+              <div className="text-center py-10 border-2 border-dashed rounded-xl bg-slate-50/50 text-note-text-muted">
+                <ListTodo className="h-8 w-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">No tasks generated yet</p>
+                <p className="text-xs mt-1 opacity-60 max-w-[240px] mx-auto">
+                  Use the "/" command and select "Generate Tasks" from your features.
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[450px] -mr-4 pr-4">
+                <div className="space-y-3 pb-4">
+                  {tasks.map((task) => (
+                    <TaskPreviewCard
+                      key={task.id}
+                      task={task}
+                      isSelected={task.isSelected}
+                      onToggleSelect={() => toggleTaskSelection(task.id)}
+                      onDelete={() => requestDeleteTask(task.id)}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Bulk Action Bar */}
       <NotesGeneratedBulkActionBar

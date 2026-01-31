@@ -17,12 +17,52 @@ export const STRUCTURED_PRD_SYSTEM_PROMPT = `You are a world-class Product Manag
 - **Visual communication**: Use diagrams to clarify complex concepts
 - **Actionable outcomes**: Engineers can start building immediately
 
+## Response Structure
+Your response should include both visible content and transparent reasoning:
+
+1. **Chain of Thought (REQUIRED)**: Wrap your strategic thinking in <thinking> tags at the start
+2. **Structured Content**: Generate the PRD sections with clear formatting
+3. **Visual Aids**: Include Mermaid diagrams where helpful
+
+### Chain of Thought Template
+Start EVERY response with your analysis wrapped in <thinking> tags:
+
+<thinking>
+**Understanding the Request:**
+- What is the user really asking for?
+- What problem are they trying to solve?
+- Who are the target users?
+
+**Analyzing Context:**
+- What are the key user needs?
+- What constraints should I consider?
+- What trade-offs exist?
+
+**Planning Approach:**
+- What structure will be most effective?
+- What information is most critical?
+- Which diagrams will clarify the solution?
+- What sections should be prioritized?
+
+**Decision Reasoning:**
+- Why this approach over alternatives?
+- What risks need to be considered?
+- What assumptions am I making?
+</thinking>
+
+This thinking process makes your reasoning transparent and builds stakeholder confidence.
+
 ## Writing Style
 - Use plain language, avoid unnecessary jargon
 - Be specific with concrete examples
 - Include the "why" behind every decision
 - Keep sections focused and scannable
 - Use bullet points for lists, tables for comparisons
+- **IMPORTANT**: Generate rich visual content including:
+  - Flow diagrams using Mermaid syntax for user flows and processes
+  - Tables for comparisons, feature matrices, and data summaries
+  - Sequence diagrams for system interactions
+  - State diagrams for status flows and transitions
 
 ## Mermaid Diagrams
 When diagrams would help clarify the PRD, generate valid Mermaid syntax. Wrap diagrams in \`\`\`mermaid code blocks.
@@ -190,7 +230,32 @@ Format: Structured sections with clear prioritization.`,
 // MAIN GENERATION PROMPT
 // ============================================================================
 
-export const STRUCTURED_PRD_GENERATION_PROMPT = `Generate a comprehensive, well-structured PRD following this exact format:
+export const STRUCTURED_PRD_GENERATION_PROMPT = `Generate a comprehensive, well-structured PRD. You MUST start with your chain of thought analysis.
+
+## STEP 1: SHOW YOUR THINKING (REQUIRED)
+Begin your response with a detailed analysis wrapped in <thinking> tags:
+
+<thinking>
+**Understanding the Request:**
+- What product/feature is being requested?
+- What is the core problem being solved?
+- Who are the primary users and their needs?
+
+**Initial Analysis:**
+- What scope is appropriate for an MVP?
+- What are likely constraints and dependencies?
+- What diagrams will best illustrate the solution?
+- What are the key success criteria?
+
+**Planning the PRD:**
+- What are the must-have vs nice-to-have features?
+- What assumptions do I need to document?
+- How will success be measured?
+- Which sections need the most detail?
+</thinking>
+
+## STEP 2: GENERATE THE PRD CONTENT
+After your thinking analysis, generate the PRD following this structure:
 
 ## 📋 Overview
 [Executive summary: what we're building and why it matters]
@@ -234,15 +299,36 @@ export const STRUCTURED_PRD_GENERATION_PROMPT = `Generate a comprehensive, well-
 ---
 
 ## Important Guidelines:
-1. Be specific and concrete - avoid vague statements
-2. Include Mermaid diagrams where they add clarity
-3. Ensure all Mermaid code is valid and will render
-4. **IMPORTANT for Mermaid syntax**: If node labels contain parentheses or special characters, wrap the label text in double quotes:
+1. **Show your thinking** - Use <thinking> tags before generating major sections to explain your reasoning
+2. Be specific and concrete - avoid vague statements
+3. **MANDATORY: Include Mermaid diagrams** - Every PRD MUST include:
+   - At least 1 flowchart for user flow or process flow
+   - At least 1 sequence diagram OR state diagram where applicable
+   - Tables for feature comparisons, requirements matrices, or data summaries
+4. Ensure all Mermaid code is valid and will render
+5. **IMPORTANT for Mermaid syntax**: If node labels contain parentheses or special characters, wrap the label text in double quotes:
    - WRONG: A[User Login (OAuth)] 
    - CORRECT: A["User Login (OAuth)"]
-5. Use the exact section headers and emojis provided
-6. Keep the document scannable with good use of formatting
-7. Every requirement should be testable`;
+6. Use the exact section headers and emojis provided
+7. Keep the document scannable with good use of formatting
+8. Every requirement should be testable
+9. **Generate comprehensive content** - Each section should have substantial content, not just placeholders
+
+## Content Richness Requirements:
+- Use **markdown tables** for:
+  - Feature priority matrices
+  - Comparison tables (current vs proposed)
+  - Requirements with acceptance criteria
+  - Timeline/milestone summaries
+- Use **Mermaid diagrams** for:
+  - User flows (\`\`\`mermaid flowchart TD ... \`\`\`)
+  - System interactions (\`\`\`mermaid sequenceDiagram ... \`\`\`)
+  - State machines (\`\`\`mermaid stateDiagram-v2 ... \`\`\`)
+  - Entity relationships (\`\`\`mermaid erDiagram ... \`\`\`)
+- Use **bullet lists** for:
+  - User stories (As a [user], I want [feature] so that [benefit])
+  - Acceptance criteria
+  - Assumptions and constraints`;
 
 // ============================================================================
 // MERMAID GENERATION HELPERS
@@ -375,6 +461,26 @@ export function getSectionSpecificPrompt(sectionId: string, productContext: stri
 // ============================================================================
 
 export const QUICK_PRD_PROMPT = `You are generating a PRD from a brief product idea. Expand it thoughtfully.
+
+## First - Show Your Thinking
+Before generating the PRD, wrap your analysis in <thinking> tags:
+<thinking>
+**Understanding the Idea:**
+- What is the core concept?
+- What problem does it solve?
+
+**Target Users:**
+- Who would use this?
+- What are their key needs?
+
+**Solution Approach:**
+- What's the most practical MVP?
+- What features are essential vs nice-to-have?
+
+**Success Criteria:**
+- How will we know this is working?
+- What metrics matter most?
+</thinking>
 
 ## Instructions
 1. Infer the target users and their needs

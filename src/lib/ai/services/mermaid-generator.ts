@@ -90,17 +90,28 @@ const DIAGRAM_METADATA: Record<MermaidDiagramType, { title: string; description:
 
 const MERMAID_SYSTEM_PROMPT = `You are an expert at creating clear, informative Mermaid diagrams for product documentation.
 
-## Rules
+## Critical Syntax Rules
 1. Generate ONLY valid Mermaid syntax that will render correctly
 2. Keep diagrams focused and readable (not too many nodes)
 3. Use clear, concise labels
-4. IMPORTANT: If node labels contain parentheses, brackets, or special characters, wrap the entire label in double quotes
-   - WRONG: A[User Login (OAuth)]
-   - CORRECT: A["User Login (OAuth)"]
-   - WRONG: B(Process Data)
-   - CORRECT: B["Process Data"]
-5. Avoid using these characters in labels unless quoted: ( ) [ ] { } | < > #
-6. Test your syntax mentally before outputting
+4. **ALWAYS complete all arrow connections** - NEVER leave an arrow without a target node
+   - WRONG: \`A --> B -->\` (incomplete arrow)
+   - CORRECT: \`A --> B --> C\` (complete connection)
+5. **IMPORTANT**: If node labels contain parentheses, brackets, or special characters, wrap the entire label in double quotes
+   - WRONG: \`A[User Login (OAuth)]\`
+   - CORRECT: \`A["User Login (OAuth)"]\`
+   - WRONG: \`B(Process Data)\`
+   - CORRECT: \`B["Process Data"]\`
+6. Avoid using these characters in labels unless quoted: ( ) [ ] { } | < > #
+7. Ensure all brackets, parentheses, and braces are properly matched
+8. Always provide a valid diagram type declaration (flowchart TD, sequenceDiagram, etc.)
+9. Test your syntax mentally before outputting - check every line for completeness
+
+## Common Errors to Avoid
+- Incomplete arrows: Every arrow must have both source and target
+- Unmatched brackets: Every opening bracket must have a closing bracket
+- Missing node IDs: Every node must have an identifier
+- Unquoted special characters in labels
 
 ## Output Format
 Return ONLY the Mermaid code block, no explanation needed.
@@ -139,7 +150,7 @@ export class MermaidGeneratorService {
 
     try {
       const request: AIGenerateRequest = {
-        type: 'generate-diagram',
+        type: 'custom' as any,
         prompt: getDiagramPrompt(type, context, focus),
         context: MERMAID_SYSTEM_PROMPT,
         provider,
@@ -158,8 +169,10 @@ export class MermaidGeneratorService {
         };
       }
 
-      // Validate the diagram syntax
-      const validation = this.validateMermaidSyntax(diagram, type);
+      // Validate the diagram syntax using the shared validator
+      const { validateMermaidDiagram } = await import('@/lib/utils/mermaid-validator');
+      const validation = validateMermaidDiagram(diagram);
+      
       if (!validation.valid) {
         return {
           success: false,
@@ -169,10 +182,13 @@ export class MermaidGeneratorService {
           error: validation.error,
         };
       }
+      
+      // Use sanitized version if available
+      const finalDiagram = validation.sanitizedCode || diagram;
 
       return {
         success: true,
-        diagram,
+        diagram: finalDiagram,
         title: metadata.title,
         description: metadata.description,
       };
@@ -269,7 +285,8 @@ export class MermaidGeneratorService {
 
   /**
    * Sanitize Mermaid code to fix common syntax issues
-   * - Escapes parentheses in node labels by wrapping text in quotes
+   * - Escapes special characters in node labels by wrapping text in quotes
+   * - Handles parentheses, quotes, arrows, and other problematic characters
    */
   private sanitizeMermaidCode(code: string): string {
     const lines = code.split('\n');
@@ -284,21 +301,92 @@ export class MermaidGeneratorService {
           line.trim().startsWith('stateDiagram') ||
           line.trim().startsWith('journey') ||
           line.trim().startsWith('pie') ||
+          line.trim().startsWith('%%') || // Skip comments
           line.trim() === '') {
         return line;
       }
       
-      // Match node definitions with brackets that contain parentheses
-      return line.replace(
-        /(\w+)(\[|\(|\{|\(\[|\[\(|\[\[|\(\()([^\]}\)]*\([^\]}\)]*\)[^\]}\)]*)(\]|\)|\}|\]\)|\)\]|\]\]|\)\))/g,
-        (match, id, openBracket, content, closeBracket) => {
-          // If content contains parentheses and isn't already quoted, add quotes
-          if (content.includes('(') && !content.startsWith('"') && !content.startsWith("'")) {
-            return `${id}${openBracket}"${content}"${closeBracket}`;
+      // Pattern to match node definitions: ID[text], ID(text), ID{text}, ID([text]), etc.
+      // We need to handle multiple bracket types and ensure special characters are quoted
+      let processedLine = line;
+      
+      // Match all node label patterns with various bracket types
+      // First, handle double brackets (must come before single brackets): [[label]], ((label))
+      const doubleBracketPattern = /(\w+)(\[\[|\(\()([^[\]()]*?)(\]\]|\)\))/g;
+      processedLine = processedLine.replace(doubleBracketPattern, (match, id, openBracket, content, closeBracket) => {
+        if ((content.startsWith('"') && content.endsWith('"')) || 
+            (content.startsWith("'") && content.endsWith("'"))) {
+          return match;
+        }
+        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+        if (hasSpecialChars) {
+          const escapedContent = content.replace(/"/g, '\\"');
+          return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+        }
+        return match;
+      });
+      
+      // Then handle mixed brackets: [(label)], ([label])
+      const mixedBracketPattern = /(\w+)(\[\(|\(\[)([^[\]()]*?)(\]\)|\)\])/g;
+      processedLine = processedLine.replace(mixedBracketPattern, (match, id, openBracket, content, closeBracket) => {
+        if ((content.startsWith('"') && content.endsWith('"')) || 
+            (content.startsWith("'") && content.endsWith("'"))) {
+          return match;
+        }
+        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+        if (hasSpecialChars) {
+          const escapedContent = content.replace(/"/g, '\\"');
+          return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+        }
+        return match;
+      });
+      
+      // Finally handle single brackets/parens/braces: [label], (label), {label}
+      // Match content that may include parentheses, but ensure proper bracket/brace matching
+      const singleBracketPattern = /(\w+)\[([^\[\]]*)\]|(\w+)\{([^\{\}]*)\}|(\w+)\(([^\(\)]*)\)/g;
+      processedLine = processedLine.replace(singleBracketPattern, (match, id1, content1, id2, content2, id3, content3) => {
+        const id = id1 || id2 || id3;
+        const content = content1 !== undefined ? content1 : (content2 !== undefined ? content2 : content3);
+        const openBracket = id1 ? '[' : (id2 ? '{' : '(');
+        const closeBracket = id1 ? ']' : (id2 ? '}' : ')');
+        
+        if (!content) return match;
+        
+        if ((content.startsWith('"') && content.endsWith('"')) || 
+            (content.startsWith("'") && content.endsWith("'"))) {
+          return match;
+        }
+        
+        const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(content);
+        if (hasSpecialChars) {
+          const escapedContent = content.replace(/"/g, '\\"');
+          return `${id}${openBracket}"${escapedContent}"${closeBracket}`;
+        }
+        return match;
+      });
+      
+      // Also handle edge labels that might have special characters
+      // Pattern: -->|label| or -.->|label| etc.
+      processedLine = processedLine.replace(
+        /(-{1,2}>|={1,2}>|\.{1,2}>)\s*\|([^|]+)\|/g,
+        (match, arrow, label) => {
+          // Skip if already quoted
+          if ((label.startsWith('"') && label.endsWith('"')) || 
+              (label.startsWith("'") && label.endsWith("'"))) {
+            return match;
           }
+          
+          const hasSpecialChars = /[(){}\[\]"'<>|\\-]/.test(label);
+          if (hasSpecialChars) {
+            const escapedLabel = label.replace(/"/g, '\\"');
+            return `${arrow}|"${escapedLabel}"|`;
+          }
+          
           return match;
         }
       );
+      
+      return processedLine;
     }).join('\n');
   }
 

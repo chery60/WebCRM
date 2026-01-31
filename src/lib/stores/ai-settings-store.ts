@@ -21,10 +21,10 @@ export const AI_MODELS = {
     { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most powerful for complex tasks' },
   ],
   gemini: [
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', description: 'Next-gen preview model (Fast)' },
-    { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', description: 'Next-gen preview model (Capable)' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient (Stable)' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable for complex tasks (Stable)' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Best price-performance, thinking support (Stable)' },
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', description: 'Newest model, fast and intelligent (Preview)' },
+    { id: 'gemini-2.5-flash-preview-09-2025', name: 'Gemini 2.5 Flash Preview', description: 'Preview version with latest features' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable for complex tasks' },
   ],
 } as const;
 
@@ -76,7 +76,7 @@ const initialState = {
   providers: {
     openai: { ...defaultProviderConfig, defaultModel: 'gpt-4o', webSearchEnabled: false },
     anthropic: { ...defaultProviderConfig, defaultModel: 'claude-sonnet-4-20250514', webSearchEnabled: false },
-    gemini: { ...defaultProviderConfig, defaultModel: 'gemini-1.5-flash', webSearchEnabled: true }, // Gemini has native Google Search
+    gemini: { ...defaultProviderConfig, defaultModel: 'gemini-2.5-flash', webSearchEnabled: true }, // Gemini has native Google Search
   },
   activeProvider: null as AIProviderType | null,
 };
@@ -220,11 +220,27 @@ export const useAISettingsStore = create<AISettingsState>()(
     }),
     {
       name: 'venture-ai-settings',
+      version: 3, // Increment version to trigger migration
       // Only persist provider configs, not methods
       partialize: (state) => ({
         providers: state.providers,
         activeProvider: state.activeProvider,
       }),
+      // Migration to fix deprecated models
+      migrate: (persistedState: any, version: number) => {
+        const geminiModel = persistedState?.providers?.gemini?.defaultModel;
+        // Migrate old/deprecated models to gemini-2.5-flash (stable)
+        const deprecatedModels = [
+          'gemini-1.5-flash',
+          'gemini-2.0-flash',
+          'gemini-2.0-flash-lite',
+          'gemini-pro',
+        ];
+        if (geminiModel && deprecatedModels.includes(geminiModel)) {
+          persistedState.providers.gemini.defaultModel = 'gemini-2.5-flash';
+        }
+        return persistedState;
+      },
     }
   )
 );

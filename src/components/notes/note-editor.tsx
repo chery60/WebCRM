@@ -25,6 +25,7 @@ import { SectionChatDrawer } from './section-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
 import { MermaidExtension } from './extensions/mermaid-extension';
 import { SelectionBubbleMenu } from './selection-bubble-menu';
+import { TableBubbleMenu } from './table-bubble-menu';
 import { AIRewriteDrawer } from './ai-rewrite-drawer';
 import type { GeneratedFeature, GeneratedTask, CustomPRDTemplate } from '@/types';
 import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
@@ -39,6 +40,8 @@ interface NoteEditorProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  /** Note ID for chat session persistence */
+  noteId?: string;
   /** Previously saved features (for task generation) */
   savedFeatures?: GeneratedFeature[];
   /** Project-specific instructions for PRD generation */
@@ -47,6 +50,8 @@ interface NoteEditorProps {
   onFeaturesGenerated?: (features: GeneratedFeature[]) => void;
   /** Callback when tasks are generated */
   onTasksGenerated?: (tasks: GeneratedTask[]) => void;
+  /** Callback when inline canvas expand is clicked */
+  onExpandCanvas?: (canvasId: string) => void;
 }
 
 export function NoteEditor({
@@ -55,10 +60,12 @@ export function NoteEditor({
   placeholder = 'Start typing, or press "/" for commands...',
   autoFocus = false,
   className,
+  noteId,
   savedFeatures = [],
   projectInstructions,
   onFeaturesGenerated,
   onTasksGenerated,
+  onExpandCanvas,
 }: NoteEditorProps) {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -82,6 +89,30 @@ export function NoteEditor({
   // AI Rewrite Drawer state
   const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
   const [selectedTextForRewrite, setSelectedTextForRewrite] = useState('');
+
+  const closeAllDrawers = useCallback(() => {
+    setShowPRDChatDrawer(false);
+    setShowSectionChatDrawer(false);
+    setShowRewriteDrawer(false);
+  }, []);
+
+  const openDrawer = useCallback(
+    (drawer: 'prd' | 'section' | 'rewrite') => {
+      closeAllDrawers();
+      switch (drawer) {
+        case 'prd':
+          setShowPRDChatDrawer(true);
+          break;
+        case 'section':
+          setShowSectionChatDrawer(true);
+          break;
+        case 'rewrite':
+          setShowRewriteDrawer(true);
+          break;
+      }
+    },
+    [closeAllDrawers]
+  );
   
   // Canvas AI generation state
   const [isCanvasGenerating, setIsCanvasGenerating] = useState(false);
@@ -157,10 +188,10 @@ export function NoteEditor({
 
         // PRD-specific commands - open conversational PRD chat drawer
         case 'generate-prd':
-          setShowPRDChatDrawer(true);
+          openDrawer('prd');
           break;
         case 'prd-template':
-          setShowPRDChatDrawer(true); // Now uses chat drawer with template selection
+          openDrawer('prd'); // Now uses chat drawer with template selection
           break;
         case 'generate-features':
           setAIPanelMode('generate-features');
@@ -175,7 +206,7 @@ export function NoteEditor({
           setShowAIPanel(true);
           break;
         case 'generate-section':
-          setShowSectionChatDrawer(true);
+          openDrawer('section');
           break;
 
         // AI commands
@@ -221,7 +252,7 @@ export function NoteEditor({
           break;
       }
     },
-    [generateContent]
+    [generateContent, openDrawer]
   );
 
   const editor = useEditor({
@@ -245,10 +276,22 @@ export function NoteEditor({
       }),
       Table.configure({
         resizable: true,
+        handleWidth: 5,
+        cellMinWidth: 120,
+        lastColumnResizable: true,
+        allowTableNodeSelection: true,
       }),
       TableRow,
-      TableCell,
-      TableHeader,
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'relative',
+        },
+      }),
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'relative',
+        },
+      }),
       Image,
       ExcalidrawExtension.configure({
         defaultMinHeight: 400,
@@ -290,9 +333,44 @@ export function NoteEditor({
       if (slashMatch) {
         // Get cursor position for menu placement
         const coords = editor.view.coordsAtPos(from);
+        
+        // Use the menuHeight from the ref if available, otherwise fallback to default
+        const currentMenuHeight = slashMenuRef.current?.menuHeight || 320;
+        const menuWidth = 280; // width from CSS
+        
+        // Get viewport dimensions
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        
+        // Calculate available space below and above cursor
+        const spaceBelow = viewportHeight - coords.bottom;
+        const spaceAbove = coords.top;
+        
+        // Determine if menu should open above or below
+        const shouldOpenAbove = spaceBelow < currentMenuHeight && spaceAbove > spaceBelow;
+        
+        // Calculate vertical position
+        let top: number;
+        if (shouldOpenAbove) {
+          // Position above cursor, accounting for menu height
+          top = coords.top - currentMenuHeight - 5;
+          // Ensure it doesn't go off top of screen
+          top = Math.max(10, top);
+        } else {
+          // Position below cursor (default)
+          top = coords.bottom + 5;
+        }
+        
+        // Calculate horizontal position (ensure it doesn't overflow right edge)
+        let left = coords.left;
+        if (left + menuWidth > viewportWidth) {
+          left = viewportWidth - menuWidth - 10;
+        }
+        left = Math.max(10, left); // Ensure it doesn't go off left edge
+        
         setSlashPosition({
-          top: coords.bottom + 5,
-          left: coords.left,
+          top,
+          left,
         });
         setSlashQuery(slashMatch[1]);
         setShowSlashMenu(true);
@@ -304,6 +382,54 @@ export function NoteEditor({
       }
     },
   });
+
+  // Use a ref to track the previous query to avoid unnecessary position updates
+  const prevSlashQueryRef = useRef<string>('');
+
+  // Use a separate effect to update position when slashQuery changes (filtering reduces menu height)
+  // Only update if the query actually changed to avoid infinite loops
+  useEffect(() => {
+    if (showSlashMenu && editor && slashMenuRef.current && slashQuery !== prevSlashQueryRef.current) {
+      prevSlashQueryRef.current = slashQuery;
+      
+      // Use requestAnimationFrame to defer position calculation until after menu renders
+      requestAnimationFrame(() => {
+        if (!editor || !slashMenuRef.current) return;
+        
+        const { state } = editor;
+        const { from } = state.selection;
+        const coords = editor.view.coordsAtPos(from);
+        
+        const currentMenuHeight = slashMenuRef.current.menuHeight;
+        const menuWidth = 280;
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const spaceBelow = viewportHeight - coords.bottom;
+        const spaceAbove = coords.top;
+        const shouldOpenAbove = spaceBelow < currentMenuHeight && spaceAbove > spaceBelow;
+        
+        let top: number;
+        if (shouldOpenAbove) {
+          top = coords.top - currentMenuHeight - 5;
+          top = Math.max(10, top);
+        } else {
+          top = coords.bottom + 5;
+        }
+        
+        let left = coords.left;
+        if (left + menuWidth > viewportWidth) {
+          left = viewportWidth - menuWidth - 10;
+        }
+        left = Math.max(10, left);
+
+        setSlashPosition(prev => {
+          // Only update if position actually changed to avoid re-renders
+          if (prev?.top === top && prev?.left === left) return prev;
+          return { top, left };
+        });
+      });
+    }
+  }, [slashQuery, showSlashMenu, editor]);
 
   // Sync editor content when the content prop changes from external source (e.g., database load)
   // This ensures the editor updates when navigating to an existing note
@@ -402,6 +528,7 @@ export function NoteEditor({
       generateContent: handleCanvasGenerate,
       isGenerating: isCanvasGenerating,
       generatingType: canvasGeneratingType,
+      onExpand: onExpandCanvas,
     };
     
     setInlineCanvasAIContext(context);
@@ -410,7 +537,7 @@ export function NoteEditor({
     return () => {
       setInlineCanvasAIContext(null);
     };
-  }, [editor, handleCanvasGenerate, isCanvasGenerating, canvasGeneratingType]);
+  }, [editor, handleCanvasGenerate, isCanvasGenerating, canvasGeneratingType, onExpandCanvas]);
 
   // Helper function to summarize canvas elements for AI context
   function summarizeCanvasElements(elements: any[]): string {
@@ -520,8 +647,8 @@ export function NoteEditor({
   // Handle AI rewrite from bubble menu
   const handleAIRewrite = useCallback((selectedText: string) => {
     setSelectedTextForRewrite(selectedText);
-    setShowRewriteDrawer(true);
-  }, []);
+    openDrawer('rewrite');
+  }, [openDrawer]);
 
   // Handle applying rewritten text
   const handleApplyRewrite = useCallback((newText: string) => {
@@ -597,6 +724,7 @@ export function NoteEditor({
         onOpenChange={setShowPRDChatDrawer}
         noteContent={editor?.state.doc.textContent || ''}
         onApplyContent={handlePRDGenerated}
+        noteId={noteId}
         onGenerateFeatures={(content) => {
           // Close chat drawer and open features panel
           setShowPRDChatDrawer(false);
@@ -617,6 +745,7 @@ export function NoteEditor({
         onOpenChange={setShowSectionChatDrawer}
         noteContent={editor?.state.doc.textContent || ''}
         onApplyContent={handlePRDGenerated}
+        noteId={noteId}
       />
 
       {/* Selection Bubble Menu */}
@@ -624,6 +753,9 @@ export function NoteEditor({
         editor={editor} 
         onAIRewrite={handleAIRewrite} 
       />
+
+      {/* Table Bubble Menu */}
+      <TableBubbleMenu editor={editor} />
 
       {/* AI Rewrite Drawer */}
       <AIRewriteDrawer

@@ -579,7 +579,7 @@ export function tipTapToMarkdown(doc: TipTapNode): string {
         // Preserve mermaid diagrams as mermaid code blocks
         const mermaidCode = node.attrs?.code || '';
         lines.push('```mermaid');
-        lines.push(mermaidCode);
+        lines.push(String(mermaidCode));
         lines.push('```');
         lines.push('');
         break;

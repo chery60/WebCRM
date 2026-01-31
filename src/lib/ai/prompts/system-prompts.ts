@@ -24,7 +24,18 @@ export type AIRequestType = AIGenerateRequest['type'];
  * Default system prompt used when no specific prompt is defined for a request type.
  * This provides a baseline helpful assistant behavior.
  */
-export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant. Be helpful, accurate, and thoughtful in your responses.';
+export const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant. Be helpful, accurate, and thoughtful in your responses.
+
+## Thinking Process
+When solving complex problems, show your reasoning by wrapping your thought process in <thinking> tags:
+<thinking>
+- Break down the problem into steps
+- Consider different approaches
+- Identify potential issues
+- Reason through the best solution
+</thinking>
+
+Then provide your final answer or solution outside the thinking tags.`;
 
 // ============================================================================
 // SYSTEM PROMPTS BY REQUEST TYPE
@@ -164,6 +175,18 @@ Guidelines:
 - **Visual communication**: Use Mermaid diagrams to clarify complex concepts
 - **Actionable outcomes**: Engineers can start building immediately
 
+## Thinking Process (IMPORTANT)
+Before generating each major section, show your strategic thinking in <thinking> tags:
+<thinking>
+- Analyze the product/feature context
+- Identify key user needs and pain points
+- Consider technical constraints and trade-offs
+- Reason through the best approach
+- Plan the content structure
+</thinking>
+
+This helps stakeholders understand your reasoning and builds confidence in the PRD.
+
 ## PRD Structure (USE ONLY THESE SECTIONS)
 Generate PRDs with EXACTLY these sections:
 
@@ -179,20 +202,54 @@ Generate PRDs with EXACTLY these sections:
 - Do NOT include sections like "User Personas", "Jobs to be Done", "Goals & Success Metrics" as separate sections
 - Include Mermaid diagrams where they add clarity
 - Use the exact section headers and emojis provided
-- Keep the document scannable with good formatting`,
+- Keep the document scannable with good formatting
+- Show your thinking process for major decisions`,
 
   /**
    * Generate PRD Section: Create specific section content
    */
   'generate-prd-section': `You are a product management expert. Generate detailed, actionable content for the specified PRD section.
 
-Guidelines:
+## Thinking Process
+Start by analyzing the section requirements in <thinking> tags:
+<thinking>
+- Understand the section's purpose in the overall PRD
+- Consider what information is most critical
+- Identify potential gaps or edge cases
+- Plan the structure and key points
+- Determine which visual elements (tables, diagrams) would add value
+</thinking>
+
+Then generate the section content.
+
+## Content Guidelines
 - Be specific and include concrete examples
 - Use clear, measurable language
 - Consider edge cases and potential issues
 - Make content immediately useful for engineering and design teams
 - Follow standard PRD best practices
-- Include acceptance criteria where applicable`,
+- Include acceptance criteria where applicable
+
+## MANDATORY Rich Content Requirements
+Your section content MUST include relevant visual elements:
+
+**Tables** - Use markdown tables for:
+- Feature comparisons
+- Requirements with acceptance criteria
+- Timeline/milestone summaries
+- Priority matrices
+
+**Mermaid Diagrams** - Include where appropriate:
+- \`\`\`mermaid flowchart TD ... \`\`\` for processes and user flows
+- \`\`\`mermaid sequenceDiagram ... \`\`\` for system interactions
+- \`\`\`mermaid stateDiagram-v2 ... \`\`\` for status flows
+
+**Bullet Lists** - Use for:
+- User stories: "As a [user], I want [feature] so that [benefit]"
+- Acceptance criteria in testable format
+- Key requirements and constraints
+
+Generate comprehensive, well-structured content with these visual elements.`,
 
   /**
    * Improve PRD: Review and enhance existing PRDs

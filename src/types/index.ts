@@ -1,5 +1,28 @@
 // Database types - designed for Supabase migration
 
+// Note/PRD Status for document lifecycle
+export type NoteStatus = 'draft' | 'in_review' | 'approved' | 'shipped' | 'archived';
+
+// Note/PRD Priority
+export type NotePriority = 'low' | 'medium' | 'high' | 'urgent';
+
+// Helper constants for note statuses
+export const NOTE_STATUSES: { value: NoteStatus; label: string; color: string; icon: string }[] = [
+  { value: 'draft', label: 'Draft', color: 'bg-gray-500', icon: 'pencil' },
+  { value: 'in_review', label: 'In Review', color: 'bg-yellow-500', icon: 'eye' },
+  { value: 'approved', label: 'Approved', color: 'bg-blue-500', icon: 'check' },
+  { value: 'shipped', label: 'Shipped', color: 'bg-green-500', icon: 'rocket' },
+  { value: 'archived', label: 'Archived', color: 'bg-gray-400', icon: 'archive' },
+];
+
+// Helper constants for note priorities
+export const NOTE_PRIORITIES: { value: NotePriority; label: string; color: string }[] = [
+  { value: 'low', label: 'Low', color: 'bg-gray-400' },
+  { value: 'medium', label: 'Medium', color: 'bg-yellow-400' },
+  { value: 'high', label: 'High', color: 'bg-orange-500' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-red-500' },
+];
+
 export interface Note {
   id: string;
   title: string;
@@ -9,6 +32,14 @@ export interface Note {
   authorId: string;
   authorName: string;
   authorAvatar?: string;
+  
+  // PRD Metadata fields
+  status?: NoteStatus; // Document lifecycle status
+  priority?: NotePriority; // Priority level
+  targetRelease?: string; // Target release/sprint (e.g., "Q1 2026", "Sprint 23")
+  dueDate?: Date; // Target completion date
+  stakeholders?: string[]; // List of stakeholder user IDs or names
+  
   generatedFeatures?: GeneratedFeature[]; // AI-generated features stored with the note
   generatedTasks?: GeneratedTask[]; // AI-generated tasks stored with the note
   canvasData?: string; // JSON string of Excalidraw canvas data
@@ -342,6 +373,11 @@ export interface NoteFormData {
   content: string;
   tags: string[];
   projectId?: string;
+  status?: NoteStatus;
+  priority?: NotePriority;
+  targetRelease?: string;
+  dueDate?: Date;
+  stakeholders?: string[];
   generatedFeatures?: GeneratedFeature[];
   generatedTasks?: GeneratedTask[];
   canvasData?: string; // JSON string of Excalidraw canvas data
@@ -439,6 +475,10 @@ export interface GeneratedFeature {
   acceptanceCriteria: string[];
   userStories: string[];
   isSelected: boolean;
+  /** Whether this feature has been added to a pipeline/roadmap */
+  addedToPipeline?: boolean;
+  /** Name of the roadmap it was added to (for display) */
+  addedToRoadmapName?: string;
 }
 
 export interface GeneratedTask {
@@ -451,6 +491,10 @@ export interface GeneratedTask {
   featureId?: string;
   dependencies: string[];
   isSelected: boolean;
+  /** Whether this task has been added to a project */
+  addedToProject?: boolean;
+  /** Name of the project it was added to (for display) */
+  addedToProjectName?: string;
 }
 
 export interface PRDGenerationResult {

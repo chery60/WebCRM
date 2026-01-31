@@ -123,20 +123,51 @@ export class PRDGeneratorService {
     let templateContext: string;
     
     if (customTemplate) {
-      // Use the custom template from the store (includes section descriptions)
+      // CRITICAL: Use the custom template with ALL section details
+      // Sort sections by order to ensure correct sequence
+      const sortedSections = [...customTemplate.sections].sort((a, b) => a.order - b.order);
+      
       template = {
         name: customTemplate.name,
         description: customTemplate.description,
-        sections: customTemplate.sections.map(s => ({
+        sections: sortedSections.map(s => ({
           id: s.id,
           title: s.title,
           order: s.order,
-          description: s.description, // Include section descriptions for AI guidance
+          description: s.description, // CRITICAL: Include section descriptions for AI guidance
         })),
       };
-      templateContext = customTemplate.contextPrompt || `You are writing a PRD with a custom structure. 
-Adapt the format and depth to the specific needs of this product.
-Focus on the most relevant sections and be flexible with the structure.`;
+      
+      // Build context prompt that emphasizes following the template structure
+      templateContext = `You are an expert Product Manager creating a PRD using the "${customTemplate.name}" template.
+
+## Template Overview
+${customTemplate.description}
+
+${customTemplate.contextPrompt || ''}
+
+## Template Sections to Generate
+The following sections MUST be generated in this exact order:
+
+${sortedSections.map((section, index) => `${index + 1}. **${section.title}**${section.description ? `\n   - Description: ${section.description}` : ''}`).join('\n')}
+
+## CRITICAL INSTRUCTIONS
+1. You MUST generate ALL and ONLY the sections defined above
+2. Follow the EXACT order specified in the template
+3. Each section has a specific description that tells you what to include - follow it precisely
+4. If a section description is empty, use your best judgment but stay within the section's scope
+5. DO NOT add extra sections that are not in the template
+6. DO NOT skip any sections from the template
+7. Use the section descriptions as your primary guide for what content to include
+
+## CONTENT REQUIREMENTS
+For each section, generate rich, comprehensive content including:
+- **Tables** for comparisons, feature matrices, and requirements
+- **Mermaid diagrams** for flows, processes, and system interactions
+- **Bullet lists** for user stories, acceptance criteria, and key points
+- **Code blocks** for technical specifications where applicable
+
+This is a custom template created by the user - respect their structure exactly.`;
     } else {
       // Fall back to legacy hardcoded templates for backward compatibility
       template = getTemplate(templateType as PRDTemplateType);
@@ -478,17 +509,29 @@ Generate a complete, structured PRD with Mermaid diagrams:`;
       prompt += `## Additional Context\n${context}\n\n`;
     }
 
-    prompt += `## Sections to Generate\n`;
-    prompt += `Generate the following sections. Pay close attention to the description for each section as it specifies what content should be included:\n\n`;
+    prompt += `## Required Sections Structure\n`;
+    prompt += `You MUST generate EXACTLY these sections in this EXACT order. Each section has specific requirements that you MUST follow:\n\n`;
+    
     template.sections.forEach((section, index) => {
-      prompt += `### ${index + 1}. ${section.title}\n`;
-      if (section.description) {
-        prompt += `**Requirements:** ${section.description}\n`;
+      prompt += `### Section ${index + 1}: ${section.title}\n`;
+      if (section.description && section.description.trim()) {
+        prompt += `**REQUIRED CONTENT:** ${section.description}\n`;
+        prompt += `**INSTRUCTION:** Generate content that specifically addresses the requirements above.\n`;
+      } else {
+        prompt += `**INSTRUCTION:** Generate appropriate content for this section based on the section title and overall PRD context.\n`;
       }
       prompt += '\n';
     });
 
-    prompt += `Generate the complete PRD now, ensuring each section follows its specified requirements:`;
+    prompt += `## Generation Rules\n`;
+    prompt += `1. Generate ALL ${template.sections.length} sections listed above\n`;
+    prompt += `2. Generate ONLY these sections - do not add extra sections\n`;
+    prompt += `3. Follow the EXACT order specified\n`;
+    prompt += `4. For sections with "REQUIRED CONTENT", ensure you address all specified points\n`;
+    prompt += `5. Use markdown formatting with ## for section headers\n`;
+    prompt += `6. Make each section comprehensive and actionable\n\n`;
+
+    prompt += `Generate the complete PRD now:`;
 
     return prompt;
   }

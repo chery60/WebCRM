@@ -9,8 +9,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { 
-  Sparkles, 
+import {
+  Sparkles,
   X,
   MessageSquare,
   RotateCcw,
@@ -37,6 +37,14 @@ import { useAISettingsStore, type AIProviderType } from '@/lib/stores/ai-setting
 import { TEMPLATE_CONTEXT_PROMPTS } from '@/lib/ai/prompts/prd-templates';
 import { prdGenerator } from '@/lib/ai/services/prd-generator';
 import type { PRDTemplateType, CustomPRDTemplate } from '@/types';
+import {
+  createDefaultGenerationSteps,
+  startGeneration,
+  advanceToNextStep,
+  completeAllSteps,
+  updateStepStatus,
+  type GenerationStep,
+} from './thinking-indicator';
 
 // ============================================================================
 // TYPES
@@ -75,11 +83,13 @@ async function generatePRDWithAI(
 ): Promise<{ content: string; thinking?: string }> {
   // Find the template from the store
   const template = customTemplates.find(t => t.id === templateId);
-  
-  // Get sections from the template
-  const templateSections = template?.sections
-    .sort((a, b) => a.order - b.order)
-    .map(s => s.title) || [];
+
+  if (!template) {
+    throw new Error('Template not found. Please select a valid template.');
+  }
+
+  // Get sections from the template (sorted by order)
+  const sortedSections = [...template.sections].sort((a, b) => a.order - b.order);
 
   // Determine if this is an improvement request (has existing content)
   if (existingContent && existingContent.trim().length > 100) {
@@ -89,55 +99,49 @@ async function generatePRDWithAI(
       focusAreas: prompt ? [prompt] : undefined,
       provider: provider || undefined,
     });
-    
+
+    if (!result.content || result.content.trim().length < 50) {
+      throw new Error('AI failed to improve PRD content. Please try again.');
+    }
+
     return {
       content: result.content,
       thinking: `Analyzing the existing PRD and incorporating: "${prompt}"`,
     };
   }
 
-  // Check if it's a starter template (we can use built-in context prompts)
-  const mappedTemplateType = STARTER_TEMPLATE_MAP[templateId];
-  
-  if (mappedTemplateType && mappedTemplateType !== 'custom') {
-    // Use built-in template type for generation with custom sections
-    const sectionsContext = templateSections.length > 0
-      ? `Please structure the PRD with these specific sections:\n${templateSections.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
-      : undefined;
-    
+  // CRITICAL: Use the custom template directly with all section details
+  // This ensures the AI follows the EXACT structure defined in the template
+  if (sortedSections.length > 0) {
+    // Pass the FULL custom template to the generator
+    // This includes section titles AND descriptions
     const result = await prdGenerator.generateFullPRD({
       description: prompt,
-      templateType: mappedTemplateType,
-      context: sectionsContext,
+      customTemplate: template, // Pass the entire template object
       provider: provider || undefined,
+      useStructuredFormat: false, // Disable structured format to use custom template
     });
-    
+
+    if (!result.content || result.content.trim().length < 50) {
+      throw new Error('AI failed to generate PRD content. Please try again.');
+    }
+
     return {
       content: result.content,
-      thinking: `Using ${template?.name || 'template'} to structure the PRD`,
-    };
-  } else if (templateSections.length > 0) {
-    // Generate with custom sections
-    const sectionsContext = `Please structure the PRD with these specific sections:\n${templateSections.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
-    
-    const result = await prdGenerator.generateFullPRD({
-      description: prompt,
-      templateType: 'custom',
-      context: sectionsContext,
-      provider: provider || undefined,
-    });
-    
-    return {
-      content: result.content,
-      thinking: `Using ${template?.name || 'custom template'} with ${templateSections.length} sections`,
+      thinking: `Using ${template.name} with ${sortedSections.length} custom sections`,
     };
   } else {
-    // Quick generate without template
+    // Fallback: No sections selected - use quick generation
     const result = await prdGenerator.quickGenerate(prompt, provider || undefined);
-    
+
+    // Validate that content was actually generated
+    if (!result.content || result.content.trim().length < 50) {
+      throw new Error('AI failed to generate PRD content. Please try again.');
+    }
+
     return {
       content: result.content,
-      thinking: `Generating a comprehensive PRD based on the description`,
+      thinking: `Generating a comprehensive PRD (no template sections selected)`,
     };
   }
 }
@@ -160,7 +164,7 @@ function WelcomeMessage({ onSuggestionClick }: { onSuggestionClick: (text: strin
       </div>
       <h3 className="text-lg font-semibold mb-2">Generate PRD with AI</h3>
       <p className="text-sm text-muted-foreground max-w-sm mb-6">
-        Describe your product or feature idea, and I&apos;ll help you create a comprehensive 
+        Describe your product or feature idea, and I&apos;ll help you create a comprehensive
         Product Requirements Document based on your selected template.
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
@@ -195,15 +199,21 @@ export function PRDChatDrawer({
   const [isTemplateModalOpen, setIsTemplateModalOpen] = React.useState(false);
   const [isEditTemplatesModalOpen, setIsEditTemplatesModalOpen] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
-  
+
   // State for overwrite/append dialog
   const [showApplyModeDialog, setShowApplyModeDialog] = React.useState(false);
   const [pendingContent, setPendingContent] = React.useState<string | null>(null);
+
+  // Generation phases state
+  const [generationSteps, setGenerationSteps] = React.useState<GenerationStep[]>(
+    createDefaultGenerationSteps()
+  );
 
   const {
     session,
     selectedProvider,
     selectedTemplate,
+    loadOrCreateSession,
     startNewSession,
     addUserMessage,
     addAssistantMessage,
@@ -233,12 +243,12 @@ export function PRDChatDrawer({
     }
   }, [customTemplates, selectedTemplate, setSelectedTemplate]);
 
-  // Initialize session when drawer opens
+  // Initialize or load session when drawer opens
   useEffect(() => {
-    if (open && !session) {
-      startNewSession(noteId);
+    if (open && noteId) {
+      loadOrCreateSession(noteId);
     }
-  }, [open, session, noteId, startNewSession]);
+  }, [open, noteId, loadOrCreateSession]);
 
   // Update current note content when it changes
   useEffect(() => {
@@ -262,9 +272,51 @@ export function PRDChatDrawer({
     const assistantMsg = addAssistantMessage('', undefined);
     updateAssistantMessage(assistantMsg.id, { isGenerating: true });
 
+    // Reset and start generation steps
+    const freshSteps = startGeneration(createDefaultGenerationSteps());
+    setGenerationSteps(freshSteps);
+
     setIsGenerating(true);
 
+    // Helper to advance steps with delays (simulates real progress)
+    const advanceStep = (stepIndex: number, detail?: string) => {
+      setGenerationSteps(prev => {
+        const updated = [...prev];
+        // Complete current step
+        if (stepIndex > 0 && updated[stepIndex - 1]) {
+          updated[stepIndex - 1] = { ...updated[stepIndex - 1], status: 'complete' as const };
+        }
+        // Activate next step
+        if (updated[stepIndex]) {
+          updated[stepIndex] = {
+            ...updated[stepIndex],
+            status: 'active' as const,
+            detail: detail || updated[stepIndex].detail
+          };
+        }
+        return updated;
+      });
+    };
+
     try {
+      // Step 1: Thinking (already active)
+      await new Promise(r => setTimeout(r, 500));
+
+      // Step 2: Analyzing
+      advanceStep(1, 'Examining product requirements and constraints');
+      await new Promise(r => setTimeout(r, 800));
+
+      // Step 3: Researching
+      advanceStep(2, 'Incorporating industry best practices');
+      await new Promise(r => setTimeout(r, 700));
+
+      // Step 4: Planning
+      advanceStep(3, `Using ${customTemplates.find(t => t.id === selectedTemplate)?.name || 'template'} structure`);
+      await new Promise(r => setTimeout(r, 600));
+
+      // Step 5: Generating
+      advanceStep(4, 'Creating comprehensive PRD content');
+
       // Generate PRD with AI
       const result = await generatePRDWithAI(
         message,
@@ -274,6 +326,9 @@ export function PRDChatDrawer({
         noteContent // Pass existing content for context/improvement
       );
 
+      // Complete all steps
+      setGenerationSteps(completeAllSteps(createDefaultGenerationSteps()));
+
       updateAssistantMessage(assistantMsg.id, {
         content: result.thinking || 'Here\'s your generated PRD:',
         generatedContent: result.content,
@@ -281,7 +336,7 @@ export function PRDChatDrawer({
       });
     } catch (error) {
       console.error('PRD generation failed:', error);
-      
+
       // Provide user-friendly error messages
       let errorMessage = 'Failed to generate PRD. Please try again.';
       if (error instanceof Error) {
@@ -295,11 +350,14 @@ export function PRDChatDrawer({
           errorMessage = error.message;
         }
       }
-      
+
       updateAssistantMessage(assistantMsg.id, {
         error: errorMessage,
         isGenerating: false,
       });
+
+      // Reset steps on error
+      setGenerationSteps(createDefaultGenerationSteps());
     } finally {
       setIsGenerating(false);
     }
@@ -362,8 +420,8 @@ export function PRDChatDrawer({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
-        <SheetContent 
-          side="right" 
+        <SheetContent
+          side="right"
           className="w-full sm:max-w-xl p-0 flex flex-col [&>button]:hidden"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -406,7 +464,7 @@ export function PRDChatDrawer({
           </SheetHeader>
 
           {/* Messages Area */}
-          <div 
+          <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto px-6 py-4"
           >
@@ -423,6 +481,7 @@ export function PRDChatDrawer({
                     onAddToNote={handleAddToNote}
                     onGenerateFeatures={onGenerateFeatures}
                     onGenerateTasks={onGenerateTasks}
+                    generationSteps={message.isGenerating ? generationSteps : undefined}
                   />
                 ))}
               </div>

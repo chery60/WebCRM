@@ -18,6 +18,7 @@ import {
   User,
   Map,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 import type { GeneratedFeature } from '@/types';
 import { cn } from '@/lib/utils';
@@ -117,11 +118,22 @@ export function FeaturePreviewCard({
                     </Badge>
                   )}
 
-                  {/* Roadmap Name */}
+                  {/* Roadmap Name (from prop) */}
                   {roadmapName && (
                     <Badge variant="outline" className="text-xs text-muted-foreground bg-muted/50">
                       <Map className="h-3 w-3 mr-1" />
                       {roadmapName}
+                    </Badge>
+                  )}
+
+                  {/* Added to Pipeline Indicator */}
+                  {feature.addedToPipeline && (
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Added{feature.addedToRoadmapName ? ` to ${feature.addedToRoadmapName}` : ''}
                     </Badge>
                   )}
                 </div>

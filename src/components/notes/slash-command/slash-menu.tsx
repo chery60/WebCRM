@@ -16,10 +16,6 @@ import {
   Table,
   Minus,
   Image,
-  Wand2,
-  MessageSquare,
-  CheckCircle,
-  Briefcase,
   FileTextIcon,
   Lightbulb,
   ListTodo,
@@ -32,7 +28,7 @@ export interface SlashCommand {
   id: string;
   name: string;
   description: string;
-  category: 'ai-prd' | 'ai-action' | 'format' | 'widget';
+  category: 'ai-prd' | 'format' | 'widget';
   icon: React.ReactNode;
   command: string;
 }
@@ -70,39 +66,6 @@ const commands: SlashCommand[] = [
     category: 'ai-prd',
     icon: <Target className="h-4 w-4" />,
     command: 'generate-section',
-  },
-  // AI Actions
-  {
-    id: 'continue',
-    name: 'Continue Writing',
-    description: 'AI continues from cursor',
-    category: 'ai-action',
-    icon: <Wand2 className="h-4 w-4" />,
-    command: 'continue',
-  },
-  {
-    id: 'grammar',
-    name: 'Fix Grammar',
-    description: 'Fix grammar and spelling',
-    category: 'ai-action',
-    icon: <CheckCircle className="h-4 w-4" />,
-    command: 'grammar',
-  },
-  {
-    id: 'professional',
-    name: 'Make Professional',
-    description: 'Make text more formal',
-    category: 'ai-action',
-    icon: <Briefcase className="h-4 w-4" />,
-    command: 'professional',
-  },
-  {
-    id: 'ask-ai',
-    name: 'Ask AI',
-    description: 'Ask AI anything',
-    category: 'ai-action',
-    icon: <MessageSquare className="h-4 w-4" />,
-    command: 'ask',
   },
   // Format
   {
@@ -222,7 +185,6 @@ const commands: SlashCommand[] = [
 
 const categoryLabels: Record<string, string> = {
   'ai-prd': '✨ PRD & Product',
-  'ai-action': 'AI Actions',
   format: 'Format',
   widget: 'Widgets',
 };
@@ -238,6 +200,7 @@ interface SlashMenuProps {
 
 export interface SlashMenuHandle {
   onKeyDown: (event: KeyboardEvent) => boolean;
+  menuHeight: number;
 }
 
 export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
@@ -262,6 +225,21 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
       },
       {}
     );
+
+    // Calculate total height of the menu based on filtered commands and categories
+    const menuHeight = (() => {
+      if (filteredCommands.length === 0) return 60; // "No commands found" height
+      
+      const ITEM_HEIGHT = 48; // .slash-command-item height (approx)
+      const CATEGORY_HEIGHT = 32; // .slash-command-category height (approx)
+      const PADDING = 16; // .slash-command-menu padding (0.5rem * 2) + ScrollArea buffer
+      
+      const categoriesCount = Object.keys(groupedCommands).length;
+      const itemsCount = filteredCommands.length;
+      
+      const calculatedHeight = (itemsCount * ITEM_HEIGHT) + (categoriesCount * CATEGORY_HEIGHT) + PADDING;
+      return Math.min(calculatedHeight, 320); // Cap at max-height
+    })();
 
     // Reset selection when query changes
     useEffect(() => {
@@ -308,6 +286,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(
 
     useImperativeHandle(ref, () => ({
       onKeyDown: handleKeyDown,
+      menuHeight,
     }));
 
     if (filteredCommands.length === 0) {

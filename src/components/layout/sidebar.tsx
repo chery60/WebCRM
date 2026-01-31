@@ -344,7 +344,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <Link href="/projects">
-            <div 
+            <div
               className={cn(
                 'flex items-center transition-colors w-full',
                 isPRDActive ? 'font-medium' : ''
@@ -374,7 +374,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <button className="w-full text-left">
-            <div 
+            <div
               className={cn(
                 'flex items-center transition-colors w-full',
                 isPRDActive && !isOpen ? 'font-medium' : ''
@@ -394,7 +394,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '8px', paddingTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}>
           {/* All PRDs link */}
           <Link
             href="/notes"
@@ -512,7 +512,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
 
                 {/* Expanded project content */}
                 {isExpanded && (
-                  <div className="flex flex-col" style={{ gap: '8px', paddingLeft: '20px', marginTop: '8px' }}>
+                  <div className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px' }}>
                     {/* PRDs list */}
                     {projectPRDs.map((prd) => {
                       const isPRDActive = pathname === `/notes/${prd.id}`;
@@ -793,8 +793,8 @@ function NavItemComponent({
       style={{
         height: '24px',
         fontSize: '16px',
-        color: isActive && !item.children 
-          ? 'var(--sidebar-text-primary)' 
+        color: isActive && !item.children
+          ? 'var(--sidebar-text-primary)'
           : 'var(--sidebar-text-secondary)',
         gap: '8px',
       }}
@@ -835,7 +835,7 @@ function NavItemComponent({
         <CollapsibleTrigger asChild>
           <button className="w-full text-left">{content}</button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '32px', paddingTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}>
           {item.children.map((child) => (
             <Link
               key={child.href}
@@ -894,8 +894,10 @@ export function Sidebar() {
       <aside
         className={cn(
           'flex flex-col transition-all duration-300 relative h-full',
-          isCollapsed ? 'w-[68px]' : 'w-[239px]'
-        )}
+          isCollapsed ? 'w-[68px]' : 'w-[239px]',
+          'border-r border-sidebar-border'
+        )
+        }
         style={{
           padding: '0px 0px 20px',
           gap: '2px',
@@ -906,11 +908,21 @@ export function Sidebar() {
           color: 'var(--sidebar-text-primary)',
           textAlign: 'start',
           backgroundColor: 'white',
-          borderRight: '1px solid var(--sidebar-separator)',
         }}
+
       >
         {/* Logo and collapse button */}
-        <div className="flex items-center justify-between border-b h-16" style={{ paddingLeft: '24px', paddingRight: '24px', borderColor: 'var(--sidebar-separator)' }}>
+        <div
+          className={cn(
+            "flex items-center border-b h-16",
+            isCollapsed ? "justify-center" : "justify-between"
+          )}
+          style={{
+            paddingLeft: isCollapsed ? '0' : '24px',
+            paddingRight: isCollapsed ? '0' : '24px',
+            borderColor: 'var(--sidebar-separator)'
+          }}
+        >
           <Link href="/" className="flex items-center gap-2">
             {isCollapsed ? (
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
@@ -943,25 +955,15 @@ export function Sidebar() {
               ))}
             </nav>
 
-            {/* Separator */}
-            {filteredDatabaseNavItems.length > 0 && (
-              <div 
-                className="shrink-0" 
-                style={{ 
-                  height: '1px', 
-                  margin: '0px 0px',
-                  backgroundColor: 'var(--sidebar-separator)'
-                }} 
-              />
-            )}
+
 
             {/* Database section */}
             {filteredDatabaseNavItems.length > 0 && (
               <div className="flex flex-col" style={{ gap: '8px' }}>
                 {!isCollapsed && (
-                  <div 
-                    className="shrink-0" 
-                    style={{ 
+                  <div
+                    className="shrink-0"
+                    style={{
                       height: '24px',
                       fontSize: '16px',
                       color: 'var(--sidebar-text-primary)',
@@ -984,15 +986,7 @@ export function Sidebar() {
               </div>
             )}
 
-            {/* Separator before bottom items */}
-            <div 
-              className="shrink-0" 
-              style={{ 
-                height: '1px', 
-                margin: '0px 0px',
-                backgroundColor: 'var(--sidebar-separator)'
-              }} 
-            />
+
 
             {/* Bottom items */}
             <nav className="flex flex-col" style={{ gap: '8px' }}>

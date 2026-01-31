@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useNote, useUpdateNote, useDeleteNote } from '@/lib/hooks/use-notes';
-import { useTags } from '@/lib/hooks/use-tags';
+import { useTags, useCreateTag } from '@/lib/hooks/use-tags';
 import { NoteEditor } from '@/components/notes/note-editor';
 import { TagBadge, getTagColor } from '@/components/shared/tag-badge';
 import { Button } from '@/components/ui/button';
@@ -38,9 +38,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye } from 'lucide-react';
+import { ArrowLeft, Trash2, Tag, FolderInput, FolderOpen, Loader2, Check, X, Plus, Code, Eye, MoreHorizontal, Copy, Download, Share2, Circle, Flag, Calendar, Users, Target } from 'lucide-react';
+import { NOTE_STATUSES, NOTE_PRIORITIES, NoteStatus, NotePriority } from '@/types';
 import { MoveToProjectDialog } from '@/components/notes/move-to-project-dialog';
 import { useProjects, useProject, useCreateProject } from '@/lib/hooks/use-projects';
+import { NoteMetadata } from '@/components/notes/note-metadata';
 import {
   Select,
   SelectContent,
@@ -48,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import Link from 'next/link';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
@@ -75,6 +78,14 @@ import type { TaskFormData } from '@/types';
 import { createTask as createTaskInDb } from '@/lib/db/repositories/supabase/tasks';
 import { tipTapToMarkdown, markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
 import { CanvasCard } from '@/components/notes/cards/canvas-card';
+import {
+  notifyCanvasNameChange,
+  registerCanvasDeletionSync,
+  unregisterCanvasDeletionSync,
+  notifyCanvasDeletion,
+  requestCanvasExternalDeletion,
+} from '@/components/notes/extensions/excalidraw-extension';
+import { CanvasDialog } from '@/components/notes/dialogs/canvas-dialog';
 import { ResourcesCard } from '@/components/notes/cards/resources-card';
 
 // View mode type for toggle between markup (raw markdown) and preview (rendered)
@@ -224,16 +235,25 @@ export default function NoteDetailPage() {
   const { mutate: updateNote, isPending: isSaving } = useUpdateNote();
   const deleteNote = useDeleteNote();
   const createProject = useCreateProject();
+  const createTag = useCreateTag();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>(undefined);
 
+  // PRD Metadata fields
+  const [status, setStatus] = useState<NoteStatus>('draft');
+  const [priority, setPriority] = useState<NotePriority | undefined>(undefined);
+  const [targetRelease, setTargetRelease] = useState<string>('');
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [stakeholders, setStakeholders] = useState<string[]>([]);
+
   // Fetch project instructions when projectId changes
   const { data: currentProject } = useProject(projectId);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagPopover, setShowTagPopover] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -249,6 +269,8 @@ export default function NoteDetailPage() {
   const canvasesRef = useRef<CanvasItem[]>([]);
   // Use a counter instead of boolean to ensure each change triggers debounce
   const [canvasChangeCount, setCanvasChangeCount] = useState(0);
+  // Track which canvas is open in dialog for expand functionality
+  const [openCanvasId, setOpenCanvasId] = useState<string | null>(null);
 
   // Destination dialogs state
   const [showFeatureDialog, setShowFeatureDialog] = useState(false);
@@ -300,6 +322,88 @@ export default function NoteDetailPage() {
     }
   }, [content]);
 
+  // Extract inline canvases from editor content and sync with Canvas widget
+  useEffect(() => {
+    if (!content || !isInitialized.current) return;
+
+    try {
+      const parsed = JSON.parse(content);
+      const inlineCanvases: CanvasItem[] = [];
+
+      // Recursively find all excalidraw nodes
+      const findExcalidrawNodes = (node: any) => {
+        if (node.type === 'excalidraw' && node.attrs?.data) {
+          const canvasData = node.attrs.data;
+          // Generate a stable ID based on content or use existing
+          const canvasId = canvasData.canvasId || `inline-canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const canvasName = canvasData.canvasName || 'Untitled Canvas';
+
+
+          inlineCanvases.push({
+            id: canvasId,
+            name: canvasName,
+            data: {
+              elements: canvasData.elements || [],
+              appState: canvasData.appState || { viewBackgroundColor: '#ffffff' },
+              files: canvasData.files || {},
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
+        if (node.content && Array.isArray(node.content)) {
+          node.content.forEach(findExcalidrawNodes);
+        }
+      };
+
+      findExcalidrawNodes(parsed);
+
+      // Merge inline canvases with existing canvases from widget
+      // Keep widget-only canvases and update/add inline canvases
+      const existingCanvases = canvasesRef.current;
+      const mergedCanvases = [...existingCanvases];
+
+      inlineCanvases.forEach(inlineCanvas => {
+        const existingIndex = mergedCanvases.findIndex(c => c.id === inlineCanvas.id);
+        if (existingIndex >= 0) {
+          const existingName = mergedCanvases[existingIndex].name;
+          const inlineName = inlineCanvas.name;
+
+          // Smart name resolution:
+          // 1. If the existing canvas has a non-default name AND the inline content has the default name,
+          //    preserve the existing name (user likely edited it via UI and content hasn't updated yet)
+          // 2. Otherwise, use the inline canvas name from the editor content as source of truth
+          const isExistingNameCustom = existingName !== 'Untitled Canvas' && existingName.trim() !== '';
+          const isInlineNameDefault = inlineName === 'Untitled Canvas' || !inlineName || inlineName.trim() === '';
+
+          // Preserve existing custom name if inline still has default
+          const finalName = (isExistingNameCustom && isInlineNameDefault) ? existingName : inlineName;
+
+          // Update existing canvas - sync data from editor, but preserve name if user edited it
+          mergedCanvases[existingIndex] = {
+            ...mergedCanvases[existingIndex],
+            name: finalName,
+            data: inlineCanvas.data,
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          // Add new inline canvas
+          mergedCanvases.push(inlineCanvas);
+        }
+      });
+
+      // Only update if there are actual changes
+      if (JSON.stringify(mergedCanvases) !== JSON.stringify(existingCanvases)) {
+        setCanvases(mergedCanvases);
+        canvasesRef.current = mergedCanvases;
+        setCanvasChangeCount(prev => prev + 1);
+      }
+    } catch (error) {
+      console.warn('Failed to extract inline canvases:', error);
+    }
+  }, [content]);
+
   // Canvas generation hook
   const {
     isGenerating: isCanvasGenerating,
@@ -319,8 +423,14 @@ export default function NoteDetailPage() {
     [generateDiagram]
   );
 
-  // Handle canvas array changes
+  // Handle canvas array changes - also detects and handles sidebar deletions
   const handleCanvasesChange = useCallback((newCanvases: CanvasItem[]) => {
+    // Detect if any canvases were deleted (in sidebar)
+    const currentCanvasIds = canvasesRef.current.map(c => c.id);
+    const newCanvasIds = newCanvases.map(c => c.id);
+    const deletedCanvasIds = currentCanvasIds.filter(id => !newCanvasIds.includes(id));
+
+    // Update state
     setCanvases(newCanvases);
     // Update ref immediately for auto-save to access
     canvasesRef.current = newCanvases;
@@ -330,11 +440,79 @@ export default function NoteDetailPage() {
     }
     // Trigger a debounced save by incrementing the counter
     setCanvasChangeCount(prev => prev + 1);
+
+    // For each deleted canvas, request the inline canvas node to delete itself
+    // This uses the external deletion registry which triggers TipTap's deleteNode()
+    deletedCanvasIds.forEach(canvasId => {
+      requestCanvasExternalDeletion(canvasId);
+    });
   }, []);
+
+  // Handle expanding inline canvas to dialog
+  const handleExpandInlineCanvas = useCallback((canvasId: string) => {
+    setOpenCanvasId(canvasId);
+  }, []);
+
+  // Handle canvas dialog close - save changes back to canvas array
+  const handleCanvasDialogSave = useCallback((canvasId: string, data: any) => {
+    const updatedCanvases = canvasesRef.current.map(c =>
+      c.id === canvasId
+        ? { ...c, data, updatedAt: new Date().toISOString() }
+        : c
+    );
+    handleCanvasesChange(updatedCanvases);
+  }, [handleCanvasesChange]);
+
+  // Handle canvas name change
+  const handleCanvasNameChange = useCallback((canvasId: string, name: string) => {
+    const updatedCanvases = canvasesRef.current.map(c =>
+      c.id === canvasId
+        ? { ...c, name, updatedAt: new Date().toISOString() }
+        : c
+    );
+    handleCanvasesChange(updatedCanvases);
+
+    // Also notify inline canvas to update its displayed name immediately
+    notifyCanvasNameChange(canvasId, name);
+  }, [handleCanvasesChange]);
+
+  // Handle inline canvas deletion - remove from sidebar
+  // This is called when an inline canvas is deleted via the editor
+  const handleInlineCanvasDeletion = useCallback((canvasId: string) => {
+    const updatedCanvases = canvasesRef.current.filter(c => c.id !== canvasId);
+    setCanvases(updatedCanvases);
+    canvasesRef.current = updatedCanvases;
+    if (currentValues.current) {
+      currentValues.current.canvases = updatedCanvases;
+    }
+    setCanvasChangeCount(prev => prev + 1);
+  }, []);
+
+
+
+  // Register deletion handlers for all canvases
+  useEffect(() => {
+    // Register a deletion handler for each canvas
+    const handlers: Map<string, (canvasId: string) => void> = new Map();
+
+    canvases.forEach(canvas => {
+      const handler = (canvasId: string) => {
+        handleInlineCanvasDeletion(canvasId);
+      };
+      handlers.set(canvas.id, handler);
+      registerCanvasDeletionSync(canvas.id, handler);
+    });
+
+    return () => {
+      // Cleanup: unregister all handlers
+      handlers.forEach((handler, canvasId) => {
+        unregisterCanvasDeletionSync(canvasId, handler);
+      });
+    };
+  }, [canvases, handleInlineCanvasDeletion]);
 
   // Track if we've initialized and last saved values to prevent save loops
   const isInitialized = useRef(false);
-  const [isNoteLoaded, setIsNoteLoaded] = useState(false); // State to trigger re-render when note loads
   const lastSaved = useRef({ title: '', content: '', tags: '', projectId: '', generatedFeatures: '[]', generatedTasks: '[]', canvasData: '' });
 
   // Keep refs for current state to access in unmount cleanup
@@ -350,6 +528,14 @@ export default function NoteDetailPage() {
       setContent(note.content);
       setTags(note.tags);
       setProjectId(note.projectId);
+
+      // Load PRD metadata fields
+      setStatus(note.status || 'draft');
+      setPriority(note.priority);
+      setTargetRelease(note.targetRelease || '');
+      setDueDate(note.dueDate ? new Date(note.dueDate) : undefined);
+      setStakeholders(note.stakeholders || []);
+
       // Load saved generated features and tasks
       if (note.generatedFeatures && note.generatedFeatures.length > 0) {
         setGeneratedFeatures(note.generatedFeatures);
@@ -373,14 +559,12 @@ export default function NoteDetailPage() {
         canvasData: note.canvasData || '',
       };
       isInitialized.current = true;
-      setIsNoteLoaded(true);
     }
   }, [note]);
 
   // Reset initialization when noteId changes
   useEffect(() => {
     isInitialized.current = false;
-    setIsNoteLoaded(false);
   }, [noteId]);
 
   // Debounce content changes for auto-save
@@ -388,6 +572,11 @@ export default function NoteDetailPage() {
   const debouncedTitle = useDebounce(title, 800);
   const debouncedTags = useDebounce(tags, 500);
   const debouncedProjectId = useDebounce(projectId, 500);
+  const debouncedStatus = useDebounce(status, 500);
+  const debouncedPriority = useDebounce(priority, 500);
+  const debouncedTargetRelease = useDebounce(targetRelease, 500);
+  const debouncedDueDate = useDebounce(dueDate, 500);
+  const debouncedStakeholders = useDebounce(stakeholders, 500);
   const debouncedGeneratedFeatures = useDebounce(generatedFeatures, 500);
   const debouncedGeneratedTasks = useDebounce(generatedTasks, 500);
   const debouncedCanvasChangeCount = useDebounce(canvasChangeCount, 1000); // Longer debounce for canvas
@@ -436,6 +625,11 @@ export default function NoteDetailPage() {
             content: debouncedContent,
             tags: debouncedTags,
             projectId: debouncedProjectId,
+            status: debouncedStatus,
+            priority: debouncedPriority,
+            targetRelease: debouncedTargetRelease,
+            dueDate: debouncedDueDate,
+            stakeholders: debouncedStakeholders,
             generatedFeatures: debouncedGeneratedFeatures,
             generatedTasks: debouncedGeneratedTasks,
             canvasData: canvasDataToSave,
@@ -448,7 +642,7 @@ export default function NoteDetailPage() {
         }
       );
     }
-  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasChangeCount, noteId, isLoading, updateNote]);
+  }, [debouncedTitle, debouncedContent, debouncedTags, debouncedProjectId, debouncedStatus, debouncedPriority, debouncedTargetRelease, debouncedDueDate, debouncedStakeholders, debouncedGeneratedFeatures, debouncedGeneratedTasks, debouncedCanvasChangeCount, noteId, isLoading, updateNote]);
 
   // Save on unmount / navigation
   useEffect(() => {
@@ -496,6 +690,37 @@ export default function NoteDetailPage() {
     }
     setShowTagPopover(false);
   }, [tags]);
+
+  const handleRemoveTag = useCallback((tagName: string) => {
+    setTags(tags.filter(t => t !== tagName));
+  }, [tags]);
+
+  const handleCreateTag = useCallback(async () => {
+    const trimmedName = newTagName.trim();
+    if (!trimmedName) return;
+
+    // Check if tag already exists
+    const existingTag = allTags.find(t => t.name.toLowerCase() === trimmedName.toLowerCase());
+    if (existingTag) {
+      // Just add the existing tag
+      handleAddTag(existingTag.name);
+    } else {
+      // Create a new tag
+      try {
+        const newTag = await createTag.mutateAsync({
+          name: trimmedName,
+          color: getTagColor(trimmedName),
+          category: 'custom'
+        });
+        if (newTag) {
+          handleAddTag(newTag.name);
+        }
+      } catch {
+        toast.error('Failed to create tag');
+      }
+    }
+    setNewTagName('');
+  }, [newTagName, allTags, handleAddTag, createTag]);
 
   // Handle creating a new project from the dropdown
   const handleCreateProject = useCallback(async () => {
@@ -577,23 +802,35 @@ export default function NoteDetailPage() {
         userAvatar: currentUser.avatar,
       };
 
+      // Get the roadmap name for the "Added to" badge
+      const targetRoadmap = roadmaps.find(r => r.id === roadmapId);
+      const roadmapName = targetRoadmap?.name || 'Pipeline';
+
       if (pendingFeatureAction === 'single' && pendingFeature) {
         await createFeatureFromGenerated(pendingFeature, featureOptions);
         toast.success(`Feature "${pendingFeature.title}" created in pipeline`);
-        setGeneratedFeatures(prev => prev.filter(f => f.id !== pendingFeature.id));
+        // Mark as added instead of removing - keeps it in notes with "Added" badge
+        setGeneratedFeatures(prev => prev.map(f =>
+          f.id === pendingFeature.id
+            ? { ...f, isSelected: false, addedToPipeline: true, addedToRoadmapName: roadmapName }
+            : f
+        ));
       } else if (pendingFeatureAction === 'bulk') {
         const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
         const selectedTasks = generatedTasks.filter(t => t.isSelected);
 
         let totalCreated = 0;
         let totalFailed = 0;
+        const addedFeatureIds: string[] = [];
+        const addedTaskIds: string[] = [];
 
         if (selectedFeatures.length > 0) {
           const featureResult = await createFeaturesFromGenerated(selectedFeatures, featureOptions);
           totalCreated += featureResult.totalCreated;
           totalFailed += featureResult.totalFailed;
           if (featureResult.totalCreated > 0) {
-            setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+            // Track which features were successfully added
+            selectedFeatures.forEach(f => addedFeatureIds.push(f.id));
           }
         }
 
@@ -613,8 +850,27 @@ export default function NoteDetailPage() {
           totalCreated += taskResult.totalCreated;
           totalFailed += taskResult.totalFailed;
           if (taskResult.totalCreated > 0) {
-            setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+            // Track which tasks were successfully added as features
+            selectedTasks.forEach(t => addedTaskIds.push(t.id));
           }
+        }
+
+        // Mark added features with "Added" badge and deselect
+        if (addedFeatureIds.length > 0) {
+          setGeneratedFeatures(prev => prev.map(f =>
+            addedFeatureIds.includes(f.id)
+              ? { ...f, isSelected: false, addedToPipeline: true, addedToRoadmapName: roadmapName }
+              : f
+          ));
+        }
+
+        // Mark added tasks with "Added" badge and deselect
+        if (addedTaskIds.length > 0) {
+          setGeneratedTasks(prev => prev.map(t =>
+            addedTaskIds.includes(t.id)
+              ? { ...t, isSelected: false, addedToProject: true, addedToProjectName: roadmapName }
+              : t
+          ));
         }
 
         if (totalCreated > 0) {
@@ -631,7 +887,7 @@ export default function NoteDetailPage() {
       setShowFeatureDialog(false);
       setPendingFeature(null);
     }
-  }, [pendingFeatureAction, pendingFeature, generatedFeatures, generatedTasks, currentUser]);
+  }, [pendingFeatureAction, pendingFeature, generatedFeatures, generatedTasks, currentUser, roadmaps]);
 
   // Confirm task creation with selected project
   const handleConfirmTaskCreation = useCallback(async (projectId: string | null, newProjectName?: string) => {
@@ -647,19 +903,30 @@ export default function NoteDetailPage() {
         setActiveTab(projectId);
       }
 
+      // Get the project name for the "Added to" badge
+      const targetProject = taskTabs.find(t => t.id === targetProjectId);
+      const projectName = newProjectName || targetProject?.name || 'Tasks';
+
       if (pendingTaskAction === 'single' && pendingTask) {
         await createTaskFromGenerated(pendingTask, {
           defaultStatus: 'planned',
           projectId: targetProjectId || undefined
         });
         toast.success(`Task "${pendingTask.title}" created`);
-        setGeneratedTasks(prev => prev.filter(t => t.id !== pendingTask.id));
+        // Mark as added instead of removing - keeps it in notes with "Added" badge
+        setGeneratedTasks(prev => prev.map(t =>
+          t.id === pendingTask.id
+            ? { ...t, isSelected: false, addedToProject: true, addedToProjectName: projectName }
+            : t
+        ));
       } else if (pendingTaskAction === 'bulk') {
         const selectedTasks = generatedTasks.filter(t => t.isSelected);
         const selectedFeatures = generatedFeatures.filter(f => f.isSelected);
 
         let totalCreated = 0;
         let totalFailed = 0;
+        const addedTaskIds: string[] = [];
+        const addedFeatureIds: string[] = [];
 
         if (selectedTasks.length > 0) {
           const taskResult = await createTasksFromGenerated(selectedTasks, {
@@ -669,7 +936,8 @@ export default function NoteDetailPage() {
           totalCreated += taskResult.totalCreated;
           totalFailed += taskResult.totalFailed;
           if (taskResult.totalCreated > 0) {
-            setGeneratedTasks(prev => prev.filter(t => !t.isSelected));
+            // Track which tasks were successfully added
+            selectedTasks.forEach(t => addedTaskIds.push(t.id));
           }
         }
 
@@ -691,8 +959,27 @@ export default function NoteDetailPage() {
           totalCreated += featureResult.totalCreated;
           totalFailed += featureResult.totalFailed;
           if (featureResult.totalCreated > 0) {
-            setGeneratedFeatures(prev => prev.filter(f => !f.isSelected));
+            // Track which features were successfully added as tasks
+            selectedFeatures.forEach(f => addedFeatureIds.push(f.id));
           }
+        }
+
+        // Mark added tasks with "Added" badge and deselect
+        if (addedTaskIds.length > 0) {
+          setGeneratedTasks(prev => prev.map(t =>
+            addedTaskIds.includes(t.id)
+              ? { ...t, isSelected: false, addedToProject: true, addedToProjectName: projectName }
+              : t
+          ));
+        }
+
+        // Mark added features with "Added" badge and deselect
+        if (addedFeatureIds.length > 0) {
+          setGeneratedFeatures(prev => prev.map(f =>
+            addedFeatureIds.includes(f.id)
+              ? { ...f, isSelected: false, addedToPipeline: true, addedToRoadmapName: projectName }
+              : f
+          ));
         }
 
         if (totalCreated > 0) {
@@ -709,7 +996,7 @@ export default function NoteDetailPage() {
       setShowTaskDialog(false);
       setPendingTask(null);
     }
-  }, [pendingTaskAction, pendingTask, generatedTasks, generatedFeatures, addTab, setActiveTab]);
+  }, [pendingTaskAction, pendingTask, generatedTasks, generatedFeatures, addTab, setActiveTab, taskTabs]);
 
   // Handler for creating a manual task from the drawer
   const handleCreateManualTask = useCallback(async (taskData: TaskFormData) => {
@@ -860,9 +1147,9 @@ export default function NoteDetailPage() {
       <div className="flex-1 overflow-auto">
         <div className="max-w-[1280px] mx-auto px-8 py-6">
           {/* 12-column grid layout */}
-          <div className="grid grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
             {/* Left Content Area - col-span-7 */}
-            <div className="col-span-7 flex flex-col gap-4">
+            <div className="col-span-1 xl:col-span-7 flex flex-col gap-4">
               {/* Back Navigation */}
               <div className="flex items-center justify-between">
                 <Link
@@ -888,13 +1175,13 @@ export default function NoteDetailPage() {
               </div>
 
               {/* Title and Meta Block */}
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 flex flex-col gap-0.5">
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Untitled Note"
-                    className="text-[42px] font-bold border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-note-text placeholder:text-note-text-muted leading-[52px] tracking-[-0.462px] shadow-none"
+                    className="text-[32px] md:text-[32px] font-bold border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-note-text placeholder:text-note-text-muted leading-[40px] tracking-[-0.3px] shadow-none"
                   />
                 </div>
 
@@ -902,7 +1189,7 @@ export default function NoteDetailPage() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-note-text-muted hover:text-note-text hover:bg-note-border rounded-md">
-                      <X className="h-4 w-4" />
+                      <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -923,9 +1210,18 @@ export default function NoteDetailPage() {
                       <FolderInput className="h-4 w-4 mr-2" />
                       Move to
                     </DropdownMenuItem>
-                    <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                    <DropdownMenuItem>Export</DropdownMenuItem>
-                    <DropdownMenuItem>Share</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Share
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
@@ -938,84 +1234,238 @@ export default function NoteDetailPage() {
                 </DropdownMenu>
               </div>
 
-              {/* Metadata row */}
-              <div className="flex flex-wrap items-center gap-2 text-sm text-note-text-muted">
-                <span>{format(new Date(note.createdAt), 'MMM d, yyyy')}</span>
-                <span>•</span>
-                <span>{format(new Date(note.updatedAt), 'h:mm a')}</span>
-                {/* Project Selector */}
-                <Select
-                  value={projectId || 'none'}
-                  onValueChange={(val) => {
-                    if (val === 'create-new') {
-                      setShowCreateProjectDialog(true);
-                    } else {
-                      setProjectId(val === 'none' ? undefined : val);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-auto py-0.5 px-2 text-xs font-medium bg-transparent border-0 shadow-none focus:ring-0 focus:ring-offset-0 text-note-text-muted hover:text-note-text data-[state=open]:text-note-text inline-flex items-center gap-1">
-                    <FolderOpen className="h-3 w-3" />
-                    <SelectValue placeholder="No Project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Project</SelectItem>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="create-new" className="text-primary">
-                      <span className="flex items-center gap-2">
-                        <Plus className="h-3 w-3" />
-                        Create New
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {tags.length > 0 && (
-                  <>
-                    <span>•</span>
-                    <div className="flex items-center gap-1.5">
-                      {tags.map((tag) => (
-                        <TagBadge
-                          key={tag}
-                          name={tag}
-                          color={getTagColor(tag)}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-                {/* Add Tag Button */}
-                <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-auto py-0 px-2 text-xs bg-transparent text-note-text-muted hover:text-note-text">
-                      <Tag className="h-3 w-3 mr-1" />
-                      Add Tag
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-48 p-2" align="start">
-                    <div className="space-y-1">
-                      {allTags
-                        .filter((t) => !tags.includes(t.name))
-                        .map((tag) => (
-                          <button
-                            key={tag.id}
-                            onClick={() => handleAddTag(tag.name)}
-                            className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
-                          >
-                            <TagBadge name={tag.name} color={tag.color} />
-                          </button>
+              {/* PRD Metadata Fields Section - Two column grid layout */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-0 py-4 border-b border-border/50">
+                {/* Left Column */}
+                <div className="space-y-3">
+                  {/* Status Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Circle className="h-4 w-4" />
+                      Status
+                    </label>
+                    <Select value={status} onValueChange={(val) => setStatus(val as NoteStatus)}>
+                      <SelectTrigger className="h-8 text-sm w-full border-0 bg-transparent shadow-none hover:bg-muted/50 focus:ring-0 px-2 -ml-2 justify-between">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {NOTE_STATUSES.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>
+                            <span className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${s.color}`} />
+                              {s.label}
+                            </span>
+                          </SelectItem>
                         ))}
-                      {allTags.filter((t) => !tags.includes(t.name)).length === 0 && (
-                        <p className="text-xs text-muted-foreground px-2 py-1">
-                          All tags added
-                        </p>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Due Date Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="h-4 w-4" />
+                      Due Date
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="h-8 text-sm justify-start font-normal px-2 -ml-2 w-full hover:bg-muted/50"
+                        >
+                          {dueDate ? format(dueDate, 'MMM d, yyyy') : <span className="text-muted-foreground">Empty</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={dueDate}
+                          onSelect={setDueDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Target Release Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Target className="h-4 w-4" />
+                      Target Release
+                    </label>
+                    <Input
+                      value={targetRelease}
+                      onChange={(e) => setTargetRelease(e.target.value)}
+                      placeholder="Empty"
+                      className="h-8 text-sm w-full border-0 bg-transparent shadow-none hover:bg-muted/50 focus:ring-0 focus-visible:ring-0 px-2 -ml-2"
+                    />
+                  </div>
+
+                  {/* Tags Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Tag className="h-4 w-4" />
+                      Tags
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap -ml-1 w-full">
+                      {tags.length > 0 ? (
+                        tags.map((tag) => (
+                          <TagBadge
+                            key={tag}
+                            name={tag}
+                            color={getTagColor(tag)}
+                            removable
+                            onRemove={() => handleRemoveTag(tag)}
+                          />
+                        ))
+                      ) : (
+                        <span className="text-sm text-muted-foreground ml-1">Empty</span>
                       )}
+                      <Popover open={showTagPopover} onOpenChange={(open) => {
+                        setShowTagPopover(open);
+                        if (!open) setNewTagName('');
+                      }}>
+                        <PopoverTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="start">
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <Input
+                                value={newTagName}
+                                onChange={(e) => setNewTagName(e.target.value)}
+                                placeholder="Create new tag..."
+                                className="h-8 text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleCreateTag();
+                                  }
+                                }}
+                              />
+                              <Button
+                                size="sm"
+                                className="h-8 px-2"
+                                onClick={handleCreateTag}
+                                disabled={!newTagName.trim() || createTag.isPending}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                            {allTags.filter((t) => !tags.includes(t.name)).length > 0 && (
+                              <div className="border-t pt-2">
+                                <p className="text-xs text-muted-foreground px-1 mb-1">Existing tags</p>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {allTags
+                                    .filter((t) => !tags.includes(t.name))
+                                    .map((tag) => (
+                                      <button
+                                        key={tag.id}
+                                        onClick={() => handleAddTag(tag.name)}
+                                        className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors"
+                                      >
+                                        <TagBadge name={tag.name} color={tag.color} />
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
-                  </PopoverContent>
-                </Popover>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-3 mt-3 md:mt-0">
+                  {/* Owner Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Owner
+                    </label>
+                    <div className="flex items-center gap-2 -ml-1 w-full">
+                      <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary shrink-0">
+                        {note.authorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </div>
+                      <span className="text-sm truncate">{note.authorName}</span>
+                    </div>
+                  </div>
+
+                  {/* Priority Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Flag className="h-4 w-4" />
+                      Priority
+                    </label>
+                    <Select value={priority || 'none'} onValueChange={(val) => setPriority(val === 'none' ? undefined : val as NotePriority)}>
+                      <SelectTrigger className="h-8 text-sm w-full border-0 bg-transparent shadow-none hover:bg-muted/50 focus:ring-0 px-2 -ml-2 justify-between">
+                        <SelectValue placeholder="Not set" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground">Not set</span>
+                        </SelectItem>
+                        {NOTE_PRIORITIES.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            <span className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${p.color}`} />
+                              {p.label}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Project Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <FolderOpen className="h-4 w-4" />
+                      Project
+                    </label>
+                    <Select
+                      value={projectId || 'none'}
+                      onValueChange={(val) => {
+                        if (val === 'create-new') {
+                          setShowCreateProjectDialog(true);
+                        } else {
+                          setProjectId(val === 'none' ? undefined : val);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-sm w-full border-0 bg-transparent shadow-none hover:bg-muted/50 focus:ring-0 px-2 -ml-2 justify-between">
+                        <SelectValue placeholder="No Project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Project</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="create-new" className="text-primary">
+                          <span className="flex items-center gap-2">
+                            <Plus className="h-3 w-3" />
+                            Create New
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Created Date Row */}
+                  <div className="grid grid-cols-[140px_180px] items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="h-4 w-4" />
+                      Created
+                    </label>
+                    <span className="text-sm -ml-1 w-full">{format(new Date(note.createdAt), 'MMM d, yyyy')}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Editor - conditionally render based on view mode */}
@@ -1026,10 +1476,12 @@ export default function NoteDetailPage() {
                     onChange={setContent}
                     placeholder="Start typing, or press '/' for commands..."
                     className="min-h-[400px] bg-white"
+                    noteId={noteId}
                     savedFeatures={generatedFeatures}
                     projectInstructions={currentProject?.instructions}
                     onFeaturesGenerated={handleFeaturesGenerated}
                     onTasksGenerated={handleTasksGenerated}
+                    onExpandCanvas={handleExpandInlineCanvas}
                   />
                 ) : (
                   /* Markup mode - show raw markdown in a textarea */
@@ -1061,31 +1513,31 @@ export default function NoteDetailPage() {
               </div>
 
               {/* Generated Items Section */}
-              <div className="mb-8">
-                <GeneratedItemsSection
-                  features={generatedFeatures}
-                  tasks={generatedTasks}
-                  onFeaturesChange={setGeneratedFeatures}
-                  onTasksChange={setGeneratedTasks}
-                  onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
-                  onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
-                  onOpenAITaskGeneration={handleOpenAITaskGeneration}
-                  onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
-                  onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
-                  onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
-                  alwaysShow={true}
-                />
-              </div>
+
             </div>
 
             {/* Right Sidebar - col-span-5 */}
-            <div className="col-span-5 pl-12">
-              <div className="space-y-6">
+            <div className="col-span-1 xl:col-span-5 pl-0 xl:pl-6">
+              <div className="space-y-6 sticky top-6">
                 {/* Canvas Card */}
-                {isNoteLoaded && (
-                  <CanvasCard
-                    canvases={canvases}
-                    onCanvasesChange={handleCanvasesChange}
+                <CanvasCard
+                  canvases={canvases}
+                  onCanvasesChange={handleCanvasesChange}
+                  prdContent={prdPlainText}
+                  productDescription={title}
+                  onGenerateContent={handleGenerateCanvasContent}
+                  isGenerating={isCanvasGenerating}
+                  generatingType={canvasGeneratingType}
+                />
+
+                {/* Canvas Dialog - for expanding inline canvases */}
+                {openCanvasId && (
+                  <CanvasDialog
+                    open={!!openCanvasId}
+                    onOpenChange={(open) => !open && setOpenCanvasId(null)}
+                    canvas={canvases.find(c => c.id === openCanvasId) || null}
+                    onSave={(data) => handleCanvasDialogSave(openCanvasId, data)}
+                    onCanvasNameChange={handleCanvasNameChange}
                     prdContent={prdPlainText}
                     productDescription={title}
                     onGenerateContent={handleGenerateCanvasContent}
@@ -1096,6 +1548,23 @@ export default function NoteDetailPage() {
 
                 {/* Resources Card - only shows if there are mermaid diagrams */}
                 <ResourcesCard content={content} />
+
+                {/* Generated Items Section */}
+                <div>
+                  <GeneratedItemsSection
+                    features={generatedFeatures}
+                    tasks={generatedTasks}
+                    onFeaturesChange={setGeneratedFeatures}
+                    onTasksChange={setGeneratedTasks}
+                    onOpenCreateTaskDrawer={handleOpenCreateTaskDrawer}
+                    onOpenCreateFeatureDrawer={handleOpenCreateFeatureDrawer}
+                    onOpenAITaskGeneration={handleOpenAITaskGeneration}
+                    onOpenAIFeatureGeneration={handleOpenAIFeatureGeneration}
+                    onOpenBulkTaskDialog={handleOpenBulkTaskDialog}
+                    onOpenBulkFeatureDialog={handleOpenBulkFeatureDialog}
+                    alwaysShow={true}
+                  />
+                </div>
               </div>
             </div>
           </div>

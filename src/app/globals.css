@@ -216,8 +216,8 @@
   outline: none;
   min-height: 300px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
-  font-size: 20px;
-  line-height: 32px;
+  font-size: 16px;
+  line-height: 26px;
   letter-spacing: -0.06px;
   color: var(--note-text);
   padding: 0;
@@ -298,22 +298,109 @@
   margin: 1.5rem 0;
 }
 
+/* Table wrapper with horizontal scroll */
+.tiptap .tableWrapper {
+  margin: 1rem 0;
+  overflow-x: auto;
+  max-width: 100%;
+  position: relative;
+}
+
 .tiptap table {
   border-collapse: collapse;
-  width: 100%;
-  margin: 1rem 0;
+  margin: 0;
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
 }
 
 .tiptap th,
 .tiptap td {
   border: 1px solid var(--border);
-  padding: 0.5rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
+  vertical-align: top;
+  position: relative;
+  min-width: 120px;
+  max-width: 400px;
+  box-sizing: border-box;
 }
 
 .tiptap th {
   background: var(--muted);
   font-weight: 600;
+}
+
+/* Selected cell highlight */
+.tiptap td.selectedCell,
+.tiptap th.selectedCell {
+  background: hsl(var(--primary) / 0.1);
+}
+
+/* Cell selection outline */
+.tiptap td.selectedCell::after,
+.tiptap th.selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid hsl(var(--primary) / 0.5);
+  pointer-events: none;
+}
+
+/* Column resize handle - shown when dragging */
+.tiptap .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: hsl(var(--primary));
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* Resize cursor when hovering over cell borders */
+.tiptap.resize-cursor,
+.tiptap .resize-cursor {
+  cursor: col-resize !important;
+}
+
+/* Ensure table cells allow resize interaction at borders */
+.tiptap table {
+  overflow: visible;
+}
+
+.tiptap th,
+.tiptap td {
+  overflow: visible;
+}
+
+/* Scrollbar styling for table wrapper - visible only on hover */
+.tiptap .tableWrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tiptap .tableWrapper::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.tiptap .tableWrapper::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.tiptap .tableWrapper:hover::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+.tiptap .tableWrapper:hover::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+.tiptap .tableWrapper:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
 }
 
 .tiptap img {
@@ -323,9 +410,9 @@
 }
 
 .tiptap h1 {
-  font-size: 42px;
+  font-size: 34px;
   font-weight: 700;
-  line-height: 52px;
+  line-height: 42px;
   letter-spacing: -0.462px;
   margin-top: 50px;
   margin-bottom: 32px;
@@ -333,9 +420,9 @@
 }
 
 .tiptap h2 {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
-  line-height: 40px;
+  line-height: 32px;
   letter-spacing: -0.3px;
   margin-top: 42px;
   margin-bottom: 24px;
@@ -343,9 +430,9 @@
 }
 
 .tiptap h3 {
-  font-size: 24px;
+  font-size: 19px;
   font-weight: 600;
-  line-height: 32px;
+  line-height: 26px;
   letter-spacing: -0.2px;
   margin-top: 32px;
   margin-bottom: 16px;
@@ -353,8 +440,8 @@
 }
 
 .tiptap p {
-  font-size: 20px;
-  line-height: 32px;
+  font-size: 16px;
+  line-height: 26px;
   letter-spacing: -0.06px;
   margin-top: 0;
   margin-bottom: 0;
@@ -538,6 +625,19 @@
   margin: 0 0.25rem;
 }
 
+/* Fix Excalidraw right-side toolbar (library, lock, pan icons) positioning */
+.excalidraw-embed-container .layer-ui__wrapper__top-right {
+  position: absolute !important;
+  right: 8px !important;
+  left: auto !important;
+  top: 8px !important;
+}
+
+.excalidraw-embed-container .layer-ui__wrapper__top-right .Island {
+  position: relative !important;
+}
+
+
 /* ============================================================================
    MERMAID DIAGRAM STYLES
    ============================================================================ */
@@ -568,6 +668,52 @@
 .mermaid-diagram .label,
 .mermaid-diagram text {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+/* Toast/Sonner Styles - Ensure description text is visible */
+[data-sonner-toast] [data-description] {
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 1 !important;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  margin-top: 0.25rem;
+}
+
+[data-sonner-toast][data-type="success"] [data-description] {
+  color: oklch(0.4 0.08 145) !important;
+}
+
+[data-sonner-toast][data-type="error"] [data-description] {
+  color: oklch(0.45 0.15 27) !important;
+}
+
+[data-sonner-toast][data-type="info"] [data-description] {
+  color: oklch(0.4 0.1 240) !important;
+}
+
+[data-sonner-toast][data-type="warning"] [data-description] {
+  color: oklch(0.5 0.15 85) !important;
+}
+
+/* Dark mode toast description colors */
+.dark [data-sonner-toast] [data-description] {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark [data-sonner-toast][data-type="success"] [data-description] {
+  color: oklch(0.7 0.12 145) !important;
+}
+
+.dark [data-sonner-toast][data-type="error"] [data-description] {
+  color: oklch(0.75 0.15 27) !important;
+}
+
+.dark [data-sonner-toast][data-type="info"] [data-description] {
+  color: oklch(0.7 0.1 240) !important;
+}
+
+.dark [data-sonner-toast][data-type="warning"] [data-description] {
+  color: oklch(0.75 0.15 85) !important;
 }
 
 /* Ensure mermaid diagrams scale properly in editor */

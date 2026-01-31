@@ -83,7 +83,7 @@ function PipelineItem({
   const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
   const [dragOverRoadmapId, setDragOverRoadmapId] = useState<string | null>(null);
-  
+
   const { data: roadmaps = [] } = useRoadmapsByPipeline(pipeline.id);
   const createRoadmap = useCreateRoadmap();
   const updateRoadmap = useUpdateRoadmap();
@@ -277,7 +277,7 @@ function PipelineItem({
           </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '20px', marginTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '24px', marginTop: '8px' }}>
           {roadmaps.map((roadmap) => {
             const isRoadmapActive =
               pathname === `/pipelines/${pipeline.id}` && currentRoadmapId === roadmap.id;
@@ -286,7 +286,7 @@ function PipelineItem({
             return (
               <ContextMenu key={roadmap.id}>
                 <ContextMenuTrigger asChild>
-                  <div 
+                  <div
                     className="group relative"
                     onDragOver={(e) => handleDragOver(e, roadmap.id)}
                     onDragLeave={handleDragLeave}
@@ -581,7 +581,7 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
             </div>
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '8px', paddingTop: '8px' }}>
+        <CollapsibleContent className="flex flex-col" style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}>
           {pipelines.map((pipeline) => (
             <PipelineItem
               key={pipeline.id}

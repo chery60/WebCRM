@@ -732,13 +732,14 @@ function extractJsonFromResponse(response: string): string {
  * This handles cases where AI generates unescaped newlines in text.
  */
 function fixJsonStringValues(jsonString: string): string {
-  // This regex finds string values and escapes unescaped newlines/tabs within them
+  // Escape unescaped control characters within JSON string values
   let result = '';
   let inString = false;
   let escapeNext = false;
   
   for (let i = 0; i < jsonString.length; i++) {
     const char = jsonString[i];
+    const charCode = char.charCodeAt(0);
     
     if (escapeNext) {
       result += char;
@@ -746,30 +747,40 @@ function fixJsonStringValues(jsonString: string): string {
       continue;
     }
     
-    if (char === '\\') {
+    if (char === '\\' && inString) {
       result += char;
-      if (inString) {
-        escapeNext = true;
-      }
+      escapeNext = true;
       continue;
     }
     
-    if (char === '"') {
+    if (char === '"' && !escapeNext) {
       result += char;
       inString = !inString;
       continue;
     }
     
-    if (inString) {
-      // Replace unescaped special characters inside strings
-      if (char === '\n') {
-        result += '\\n';
-      } else if (char === '\r') {
-        result += '\\r';
-      } else if (char === '\t') {
-        result += '\\t';
-      } else {
-        result += char;
+    // If we're inside a string, escape control characters
+    if (inString && charCode < 32) {
+      switch (char) {
+        case '\n':
+          result += '\\n';
+          break;
+        case '\r':
+          result += '\\r';
+          break;
+        case '\t':
+          result += '\\t';
+          break;
+        case '\b':
+          result += '\\b';
+          break;
+        case '\f':
+          result += '\\f';
+          break;
+        default:
+          // Escape other control characters as unicode
+          result += '\\u' + charCode.toString(16).padStart(4, '0');
+          break;
       }
     } else {
       result += char;

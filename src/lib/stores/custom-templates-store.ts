@@ -2,14 +2,24 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { 
-  CustomPRDTemplate, 
-  TemplateSection, 
+import type {
+  CustomPRDTemplate,
+  TemplateSection,
   TemplateCategory,
   TemplateVersion,
   TemplateExportFormat,
-  TemplateImportResult 
+  TemplateImportResult,
 } from '@/types';
+
+import { validateTemplate, sanitizeTemplate, autoFixTemplate } from '@/lib/utils/template-validator';
+import { isTemplateExportedTemplate, type TemplateExportedTemplate } from '@/lib/utils/template-export-types';
+import { 
+  getCustomTemplates,
+  createCustomTemplate,
+  updateCustomTemplate as updateCustomTemplateInSupabase,
+  deleteCustomTemplate as deleteCustomTemplateFromSupabase,
+} from '@/lib/db/repositories/supabase/custom-templates';
+import { USE_SUPABASE } from '@/lib/db/database';
 
 // ============================================================================
 // TYPES
@@ -22,13 +32,17 @@ export interface CustomTemplatesState {
   // Track if starter templates have been seeded
   hasSeededStarterTemplates: boolean;
   
+  // Sync state
+  isSyncing: boolean;
+  lastSyncedAt: Date | null;
+  
   // Actions
-  addTemplate: (template: Omit<CustomPRDTemplate, 'id' | 'createdAt' | 'updatedAt'>) => CustomPRDTemplate;
-  updateTemplate: (id: string, updates: Partial<Omit<CustomPRDTemplate, 'id' | 'createdAt'>>, changeDescription?: string) => void;
-  deleteTemplate: (id: string) => void;
+  addTemplate: (template: Omit<CustomPRDTemplate, 'id' | 'createdAt' | 'updatedAt'>, userId?: string) => CustomPRDTemplate;
+  updateTemplate: (id: string, updates: Partial<Omit<CustomPRDTemplate, 'id' | 'createdAt'>>, changeDescription?: string, userId?: string) => void;
+  deleteTemplate: (id: string, userId?: string) => void;
   getTemplate: (id: string) => CustomPRDTemplate | undefined;
   getTemplateContextPrompt: (id: string) => string;
-  duplicateTemplate: (id: string, newName: string) => CustomPRDTemplate | undefined;
+  duplicateTemplate: (id: string, newName: string, userId?: string) => CustomPRDTemplate | undefined;
   seedStarterTemplates: () => void;
   resetToStarterTemplates: () => void;
   
@@ -37,12 +51,16 @@ export interface CustomTemplatesState {
   
   // Version history
   getTemplateVersionHistory: (id: string) => TemplateVersion[];
-  restoreTemplateVersion: (templateId: string, versionId: string) => boolean;
+  restoreTemplateVersion: (templateId: string, versionId: string, userId?: string) => boolean;
   
   // Import/Export
   exportTemplates: (templateIds: string[]) => TemplateExportFormat;
   exportAllTemplates: () => TemplateExportFormat;
-  importTemplates: (data: TemplateExportFormat, overwriteExisting?: boolean) => TemplateImportResult;
+  importTemplates: (data: TemplateExportFormat, overwriteExisting?: boolean, userId?: string) => TemplateImportResult;
+  
+  // Supabase sync
+  syncFromSupabase: (userId: string) => Promise<void>;
+  syncToSupabase: (template: CustomPRDTemplate, userId: string, operation: 'create' | 'update' | 'delete') => Promise<void>;
 }
 
 // ============================================================================
@@ -78,22 +96,22 @@ export const STARTER_TEMPLATES: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt
 - Multi-tenant architecture considerations
 - SSO, RBAC, and enterprise authentication needs`,
     sections: [
-      { id: 'executive-summary', title: 'Executive Summary', order: 1 },
-      { id: 'business-context', title: 'Business Context & Market Opportunity', order: 2 },
-      { id: 'problem-statement', title: 'Problem Statement', order: 3 },
-      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4 },
-      { id: 'user-personas', title: 'User Personas & Buyer Personas', order: 5 },
-      { id: 'user-stories', title: 'User Stories & Use Cases', order: 6 },
-      { id: 'functional-requirements', title: 'Functional Requirements', order: 7 },
-      { id: 'non-functional-requirements', title: 'Non-Functional Requirements', order: 8 },
-      { id: 'integrations', title: 'Integrations & API Requirements', order: 9 },
-      { id: 'security-compliance', title: 'Security & Compliance', order: 10 },
-      { id: 'ux-considerations', title: 'UI/UX Considerations', order: 11 },
-      { id: 'pricing-packaging', title: 'Pricing & Packaging Impact', order: 12 },
-      { id: 'go-to-market', title: 'Go-to-Market Considerations', order: 13 },
-      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14 },
-      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15 },
-      { id: 'open-questions', title: 'Open Questions', order: 16 },
+      { id: 'executive-summary', title: 'Executive Summary', order: 1, description: 'High-level overview of the product, target market, and key benefits. Should be readable by executives in 2-3 minutes and include ROI expectations.' },
+      { id: 'business-context', title: 'Business Context & Market Opportunity', order: 2, description: 'Market analysis including TAM/SAM/SOM, competitive landscape, differentiation strategy, and strategic alignment with company goals.' },
+      { id: 'problem-statement', title: 'Problem Statement', order: 3, description: 'Clear articulation of the business problem from multiple stakeholder perspectives (end users, admins, buyers). Include quantified pain points and cost of inaction.' },
+      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4, description: 'Specific, measurable goals with target metrics. Include business KPIs (ARR, MRR, expansion revenue), user adoption metrics, and efficiency gains.' },
+      { id: 'user-personas', title: 'User Personas & Buyer Personas', order: 5, description: 'Detailed profiles of end users AND economic buyers. Include roles, responsibilities, pain points, goals, and decision-making criteria for enterprise purchases.' },
+      { id: 'user-stories', title: 'User Stories & Use Cases', order: 6, description: 'User stories for all personas using "As a [role], I want [feature] so that [benefit]" format. Include both individual user workflows and organizational use cases.' },
+      { id: 'functional-requirements', title: 'Functional Requirements', order: 7, description: 'Detailed feature specifications prioritized using MoSCoW framework (Must have, Should have, Could have, Won\'t have). Include acceptance criteria for each requirement.' },
+      { id: 'non-functional-requirements', title: 'Non-Functional Requirements', order: 8, description: 'Enterprise-grade performance requirements: uptime SLA (99.9%+), response times, scalability targets, data retention, backup/recovery, and compliance with enterprise standards.' },
+      { id: 'integrations', title: 'Integrations & API Requirements', order: 9, description: 'Required integrations with enterprise systems (SSO, HRIS, CRM, etc.). Include API specifications, authentication methods, data sync requirements, and webhook support.' },
+      { id: 'security-compliance', title: 'Security & Compliance', order: 10, description: 'Security requirements including data encryption (at rest and in transit), SOC2/ISO27001 compliance, GDPR/CCPA compliance, audit logs, and penetration testing requirements.' },
+      { id: 'ux-considerations', title: 'UI/UX Considerations', order: 11, description: 'Design principles for enterprise users: intuitive workflows, role-based customization, accessibility (WCAG 2.1 AA), mobile responsiveness, and bulk operations support.' },
+      { id: 'pricing-packaging', title: 'Pricing & Packaging Impact', order: 12, description: 'Impact on pricing tiers (Starter/Professional/Enterprise), feature gating strategy, usage-based pricing components, and upsell/cross-sell opportunities.' },
+      { id: 'go-to-market', title: 'Go-to-Market Considerations', order: 13, description: 'Launch strategy including sales enablement materials, marketing messaging, customer communication plan, beta program, and competitive positioning.' },
+      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14, description: 'Development phases with key milestones: Alpha (internal), Beta (customers), GA (general availability). Include dependencies and critical path items.' },
+      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15, description: 'Technical, business, and operational risks with likelihood/impact assessment. Include specific mitigation strategies and contingency plans.' },
+      { id: 'open-questions', title: 'Open Questions', order: 16, description: 'Unresolved questions that need stakeholder input. Specify decision owners, deadlines, and impact of not resolving.' },
     ],
   },
   {
@@ -118,22 +136,22 @@ export const STARTER_TEMPLATES: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt
 - App store optimization (ASO)
 - Privacy and data minimization`,
     sections: [
-      { id: 'executive-summary', title: 'Executive Summary', order: 1 },
-      { id: 'vision-opportunity', title: 'Vision & Market Opportunity', order: 2 },
-      { id: 'problem-statement', title: 'Problem Statement', order: 3 },
-      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4 },
-      { id: 'user-personas', title: 'User Personas', order: 5 },
-      { id: 'user-journey', title: 'User Journey & Experience', order: 6 },
-      { id: 'user-stories', title: 'User Stories', order: 7 },
-      { id: 'functional-requirements', title: 'Feature Requirements', order: 8 },
-      { id: 'engagement-retention', title: 'Engagement & Retention Strategy', order: 9 },
-      { id: 'ux-considerations', title: 'UI/UX & Design', order: 10 },
-      { id: 'non-functional-requirements', title: 'Performance & Quality', order: 11 },
-      { id: 'monetization', title: 'Monetization Strategy', order: 12 },
-      { id: 'growth-virality', title: 'Growth & Virality Loops', order: 13 },
-      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14 },
-      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15 },
-      { id: 'open-questions', title: 'Open Questions', order: 16 },
+      { id: 'executive-summary', title: 'Executive Summary', order: 1, description: 'Compelling overview of the app concept, target audience, and unique value proposition. Focus on the "why now" and market timing.' },
+      { id: 'vision-opportunity', title: 'Vision & Market Opportunity', order: 2, description: 'Long-term vision for the product and market opportunity analysis. Include addressable market size, user behavior trends, and competitor analysis.' },
+      { id: 'problem-statement', title: 'Problem Statement', order: 3, description: 'User-centric problem statement focusing on emotional pain points and daily frustrations. Support with user research, interviews, or surveys.' },
+      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4, description: 'Consumer app metrics: DAU/MAU ratio, retention curves (D1, D7, D30), session length, viral coefficient (K-factor), LTV/CAC ratio, and engagement scores.' },
+      { id: 'user-personas', title: 'User Personas', order: 5, description: 'Rich user personas including demographics, psychographics, behavioral patterns, motivations, tech-savviness, and social media habits.' },
+      { id: 'user-journey', title: 'User Journey & Experience', order: 6, description: 'End-to-end user journey from discovery to power user: awareness → acquisition → activation → retention → referral. Map emotional states at each stage.' },
+      { id: 'user-stories', title: 'User Stories', order: 7, description: 'User stories focusing on emotional benefits and delight moments. Use "As a [user], I want to [action] so I can [emotional benefit]" format.' },
+      { id: 'functional-requirements', title: 'Feature Requirements', order: 8, description: 'Core features for MVP and post-launch roadmap. Prioritize features that drive engagement and word-of-mouth. Include social features, personalization, and notification strategy.' },
+      { id: 'engagement-retention', title: 'Engagement & Retention Strategy', order: 9, description: 'Specific tactics to drive daily/weekly habits: streaks, achievements, social proof, FOMO triggers, personalized content, and push notification strategy.' },
+      { id: 'ux-considerations', title: 'UI/UX & Design', order: 10, description: 'Mobile-first design principles, intuitive navigation, delightful animations, accessibility, dark mode, and consistency with platform conventions (iOS/Android).' },
+      { id: 'non-functional-requirements', title: 'Performance & Quality', order: 11, description: 'App performance targets: launch time (<2s), smooth scrolling (60fps), offline capabilities, minimal battery drain, and crash-free rate (>99.5%).' },
+      { id: 'monetization', title: 'Monetization Strategy', order: 12, description: 'Revenue model: freemium, subscription tiers, in-app purchases, ads, or hybrid. Include pricing psychology, trial strategy, and conversion optimization tactics.' },
+      { id: 'growth-virality', title: 'Growth & Virality Loops', order: 13, description: 'Organic growth mechanisms: referral programs, social sharing features, network effects, viral content creation, and word-of-mouth triggers.' },
+      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14, description: 'Launch timeline: MVP features, beta testing with early adopters, soft launch in select markets, full launch, and post-launch feature releases.' },
+      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15, description: 'Consumer app risks: app store rejection, poor initial reviews, slow viral growth, user churn, and competition. Include mitigation plans.' },
+      { id: 'open-questions', title: 'Open Questions', order: 16, description: 'Outstanding questions requiring user research, A/B testing, or stakeholder decisions. Prioritize questions blocking MVP scope.' },
     ],
   },
   {
@@ -158,22 +176,22 @@ export const STARTER_TEMPLATES: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt
 - Take rate and monetization strategy
 - Liquidity and marketplace dynamics`,
     sections: [
-      { id: 'executive-summary', title: 'Executive Summary', order: 1 },
-      { id: 'platform-vision', title: 'Platform Vision & Strategy', order: 2 },
-      { id: 'problem-statement', title: 'Problem Statement', order: 3 },
-      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4 },
-      { id: 'stakeholder-personas', title: 'Multi-Sided Personas', order: 5 },
-      { id: 'value-exchange', title: 'Value Exchange & Network Effects', order: 6 },
-      { id: 'user-stories', title: 'User Stories (All Sides)', order: 7 },
-      { id: 'functional-requirements', title: 'Functional Requirements', order: 8 },
-      { id: 'platform-architecture', title: 'Platform Architecture', order: 9 },
-      { id: 'api-developer-experience', title: 'API & Developer Experience', order: 10 },
-      { id: 'trust-safety', title: 'Trust & Safety', order: 11 },
-      { id: 'governance', title: 'Platform Governance & Policies', order: 12 },
-      { id: 'non-functional-requirements', title: 'Scalability & Performance', order: 13 },
-      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14 },
-      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15 },
-      { id: 'open-questions', title: 'Open Questions', order: 16 },
+      { id: 'executive-summary', title: 'Executive Summary', order: 1, description: 'Overview of the platform, target markets (supply and demand sides), network effect strategy, and business model. Explain the chicken-and-egg solution.' },
+      { id: 'platform-vision', title: 'Platform Vision & Strategy', order: 2, description: 'Long-term vision for the ecosystem, market dynamics, platform strategy (aggregation vs. facilitation), and competitive moat from network effects.' },
+      { id: 'problem-statement', title: 'Problem Statement', order: 3, description: 'Problems on both sides of the marketplace. Explain current inefficiencies, transaction costs, lack of trust, or discovery challenges that the platform will solve.' },
+      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 4, description: 'Platform-specific metrics: supply/demand balance, GMV (Gross Merchandise Value), take rate, liquidity score, time-to-match, retention on both sides, and NPS per segment.' },
+      { id: 'stakeholder-personas', title: 'Multi-Sided Personas', order: 5, description: 'Detailed personas for ALL platform sides (supply, demand, and any third parties). Include motivations, pain points, success criteria, and behavioral patterns for each.' },
+      { id: 'value-exchange', title: 'Value Exchange & Network Effects', order: 6, description: 'How value flows between sides. Explain direct/indirect network effects, cross-side subsidies, and strategies to achieve critical mass on both sides simultaneously.' },
+      { id: 'user-stories', title: 'User Stories (All Sides)', order: 7, description: 'User stories for each side of the platform. Include discovery, matching, transaction, and post-transaction experiences. Address cold-start scenarios.' },
+      { id: 'functional-requirements', title: 'Functional Requirements', order: 8, description: 'Core platform features: onboarding flows, matching algorithm, search/discovery, messaging, transaction handling, payment processing, and feedback systems.' },
+      { id: 'platform-architecture', title: 'Platform Architecture', order: 9, description: 'Technical architecture supporting multi-tenancy, matching algorithms, real-time updates, scalability for both sides, and API-first design for extensibility.' },
+      { id: 'api-developer-experience', title: 'API & Developer Experience', order: 10, description: 'APIs for third-party integrations, developer documentation, sandbox environment, and strategies for building an ecosystem of complementary services.' },
+      { id: 'trust-safety', title: 'Trust & Safety', order: 11, description: 'Verification systems, fraud detection, dispute resolution, content moderation, rating/review integrity, and insurance or guarantees for transactions.' },
+      { id: 'governance', title: 'Platform Governance & Policies', order: 12, description: 'Platform rules, terms of service, content policies, pricing policies, quality standards, and mechanisms for enforcing compliance on both sides.' },
+      { id: 'non-functional-requirements', title: 'Scalability & Performance', order: 13, description: 'Scalability requirements for managing supply/demand imbalances, high-volume transactions, real-time matching, and geographic expansion strategies.' },
+      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 14, description: 'Launch strategy addressing chicken-and-egg: which side first, initial market focus, expansion timeline, and metrics-driven go/no-go decisions.' },
+      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 15, description: 'Platform-specific risks: supply/demand imbalance, disintermediation, regulatory challenges, trust issues, and competition from incumbents. Include mitigation plans.' },
+      { id: 'open-questions', title: 'Open Questions', order: 16, description: 'Critical unknowns: optimal take rate, minimum liquidity thresholds, geographic rollout sequence, and whether to prioritize supply or demand first.' },
     ],
   },
   {
@@ -200,23 +218,23 @@ export const STARTER_TEMPLATES: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt
 - Code samples and quickstart guides
 - Developer community and support`,
     sections: [
-      { id: 'executive-summary', title: 'Executive Summary', order: 1 },
-      { id: 'problem-statement', title: 'Problem Statement', order: 2 },
-      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 3 },
-      { id: 'developer-personas', title: 'Developer Personas', order: 4 },
-      { id: 'user-stories', title: 'Developer Use Cases', order: 5 },
-      { id: 'api-design', title: 'API Design & Specification', order: 6 },
-      { id: 'functional-requirements', title: 'Functional Requirements', order: 7 },
-      { id: 'sdk-libraries', title: 'SDKs & Client Libraries', order: 8 },
-      { id: 'documentation', title: 'Documentation Requirements', order: 9 },
-      { id: 'developer-experience', title: 'Developer Experience (DX)', order: 10 },
-      { id: 'non-functional-requirements', title: 'Performance & Reliability', order: 11 },
-      { id: 'security-authentication', title: 'Security & Authentication', order: 12 },
-      { id: 'rate-limiting-quotas', title: 'Rate Limiting & Quotas', order: 13 },
-      { id: 'versioning-deprecation', title: 'Versioning & Deprecation', order: 14 },
-      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 15 },
-      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 16 },
-      { id: 'open-questions', title: 'Open Questions', order: 17 },
+      { id: 'executive-summary', title: 'Executive Summary', order: 1, description: 'High-level overview of the API product, target developers, key capabilities, and differentiation from alternatives. Include developer adoption goals.' },
+      { id: 'problem-statement', title: 'Problem Statement', order: 2, description: 'Developer pain points and integration challenges the API solves. Include current workarounds, time-to-integration, and cost of building in-house.' },
+      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 3, description: 'Developer-focused metrics: time-to-first-hello-world, API calls/day, active integrations, SDK downloads, documentation page views, support ticket volume, and developer NPS.' },
+      { id: 'developer-personas', title: 'Developer Personas', order: 4, description: 'Detailed developer personas: frontend/backend/mobile/DevOps, experience levels, preferred languages/frameworks, learning styles, and integration decision criteria.' },
+      { id: 'user-stories', title: 'Developer Use Cases', order: 5, description: 'Common use cases and integration scenarios. Use "As a [developer type], I want to [integrate feature] so that [app capability]" format. Include code examples.' },
+      { id: 'api-design', title: 'API Design & Specification', order: 6, description: 'RESTful/GraphQL API design: endpoints, request/response schemas, HTTP methods, status codes, pagination, filtering, sorting. Include OpenAPI/Swagger spec.' },
+      { id: 'functional-requirements', title: 'Functional Requirements', order: 7, description: 'Core API capabilities, supported operations, data models, relationships, and business logic. Prioritize using MoSCoW framework.' },
+      { id: 'sdk-libraries', title: 'SDKs & Client Libraries', order: 8, description: 'Official SDKs for priority languages (Python, JavaScript, Java, Go, Ruby, PHP). Include installation methods, IDE autocomplete, and type definitions.' },
+      { id: 'documentation', title: 'Documentation Requirements', order: 9, description: 'Comprehensive docs: quickstart guide, API reference, tutorials, code samples, postman collections, interactive API explorer, migration guides, and changelog.' },
+      { id: 'developer-experience', title: 'Developer Experience (DX)', order: 10, description: 'Developer onboarding: signup flow, API key generation, sandbox environment, test data, webhooks testing, and time-to-first-successful-call optimization.' },
+      { id: 'non-functional-requirements', title: 'Performance & Reliability', order: 11, description: 'API SLAs: uptime (99.95%+), latency (p50, p95, p99), throughput, timeout policies, retry logic, circuit breakers, and status page.' },
+      { id: 'security-authentication', title: 'Security & Authentication', order: 12, description: 'Authentication methods (API keys, OAuth 2.0, JWT), authorization (scopes/permissions), encryption (TLS 1.3), secret rotation, and security best practices for developers.' },
+      { id: 'rate-limiting-quotas', title: 'Rate Limiting & Quotas', order: 13, description: 'Rate limiting strategy: requests per second/minute/day, quota tiers, burst allowances, 429 handling, rate limit headers, and upgrade paths.' },
+      { id: 'versioning-deprecation', title: 'Versioning & Deprecation', order: 14, description: 'API versioning strategy (URL/header/parameter), backward compatibility guarantees, deprecation policy with timelines, migration guides, and sunset notifications.' },
+      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 15, description: 'Development phases: Alpha (internal), Private Beta (select partners), Public Beta (open access), GA (production-ready), and post-launch API expansions.' },
+      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 16, description: 'API-specific risks: breaking changes, poor documentation, integration complexity, performance issues, security vulnerabilities. Include developer feedback loops.' },
+      { id: 'open-questions', title: 'Open Questions', order: 17, description: 'Unresolved design decisions: REST vs GraphQL, authentication method, pricing model (calls/features/seats), and which SDKs to prioritize.' },
     ],
   },
   {
@@ -241,21 +259,21 @@ export const STARTER_TEMPLATES: Omit<CustomPRDTemplate, 'createdAt' | 'updatedAt
 - Cost savings and efficiency metrics
 - Adoption and usage tracking`,
     sections: [
-      { id: 'executive-summary', title: 'Executive Summary', order: 1 },
-      { id: 'problem-statement', title: 'Problem Statement & Current State', order: 2 },
-      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 3 },
-      { id: 'user-personas', title: 'Internal User Personas', order: 4 },
-      { id: 'user-stories', title: 'User Stories & Workflows', order: 5 },
-      { id: 'functional-requirements', title: 'Functional Requirements', order: 6 },
-      { id: 'data-requirements', title: 'Data & Reporting Requirements', order: 7 },
-      { id: 'integration-requirements', title: 'Integration Requirements', order: 8 },
-      { id: 'ux-considerations', title: 'UI/UX Considerations', order: 9 },
-      { id: 'access-permissions', title: 'Access Control & Permissions', order: 10 },
-      { id: 'non-functional-requirements', title: 'Non-Functional Requirements', order: 11 },
-      { id: 'training-adoption', title: 'Training & Adoption Plan', order: 12 },
-      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 13 },
-      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 14 },
-      { id: 'open-questions', title: 'Open Questions', order: 15 },
+      { id: 'executive-summary', title: 'Executive Summary', order: 1, description: 'Overview of the internal tool, target users, business problem being solved, and expected efficiency gains or cost savings. Include ROI estimates.' },
+      { id: 'problem-statement', title: 'Problem Statement & Current State', order: 2, description: 'Current manual processes, inefficiencies, error rates, time waste, and frustrations. Include data on time spent, error frequency, and workaround complexity.' },
+      { id: 'goals-success-metrics', title: 'Goals & Success Metrics', order: 3, description: 'Efficiency metrics: time saved per task, error reduction %, user adoption rate, daily active users, tasks completed per day, and employee satisfaction scores.' },
+      { id: 'user-personas', title: 'Internal User Personas', order: 4, description: 'Internal user profiles: roles, responsibilities, technical proficiency, daily workflows, pain points, and success criteria. Include power users and casual users.' },
+      { id: 'user-stories', title: 'User Stories & Workflows', order: 5, description: 'Detailed workflows showing before/after scenarios. Use "As a [role], I want to [action] so that [business benefit]" format. Include frequency of each workflow.' },
+      { id: 'functional-requirements', title: 'Functional Requirements', order: 6, description: 'Core features prioritized by impact on efficiency. Focus on automation opportunities, batch operations, bulk imports/exports, and workflow optimization.' },
+      { id: 'data-requirements', title: 'Data & Reporting Requirements', order: 7, description: 'Data sources, data models, dashboards, reports, exports, analytics needs, and audit trail requirements. Include refresh frequency and data retention policies.' },
+      { id: 'integration-requirements', title: 'Integration Requirements', order: 8, description: 'Required integrations with internal systems: HR systems, databases, Slack/Teams, email, calendar, file storage, and other tools. Include SSO requirements.' },
+      { id: 'ux-considerations', title: 'UI/UX Considerations', order: 9, description: 'Design for internal users: efficient data entry, keyboard shortcuts, bulk actions, error prevention, quick access patterns, and minimal training requirements.' },
+      { id: 'access-permissions', title: 'Access Control & Permissions', order: 10, description: 'Role-based access control: user roles, permission levels, data visibility rules, department-based access, and admin capabilities. Include audit requirements.' },
+      { id: 'non-functional-requirements', title: 'Non-Functional Requirements', order: 11, description: 'Performance needs: page load times, data processing speed, concurrent users support, and reliability targets. Can be less strict than external products.' },
+      { id: 'training-adoption', title: 'Training & Adoption Plan', order: 12, description: 'Training strategy: documentation, video tutorials, office hours, champions program, rollout phases, and change management. Include success criteria for adoption.' },
+      { id: 'timeline-milestones', title: 'Timeline & Milestones', order: 13, description: 'Development phases: MVP with core workflows, pilot with select team, company-wide rollout, and post-launch iterations. Include feedback collection points.' },
+      { id: 'risks-mitigations', title: 'Risks & Mitigations', order: 14, description: 'Internal tool risks: low adoption, resistance to change, lack of training, competing priorities, and technical integration challenges. Include mitigation strategies.' },
+      { id: 'open-questions', title: 'Open Questions', order: 15, description: 'Outstanding questions: which departments first, manual migration vs automated, timeline constraints, and whether to build vs buy vs customize existing tools.' },
     ],
   },
   {
@@ -370,8 +388,94 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
     (set, get) => ({
       templates: [],
       hasSeededStarterTemplates: false,
+      isSyncing: false,
+      lastSyncedAt: null,
 
-      addTemplate: (templateData) => {
+      // Sync from Supabase - fetches all templates for the user
+      // Note: Fails silently if table doesn't exist or access is denied
+      syncFromSupabase: async (userId: string) => {
+        if (!USE_SUPABASE || !userId) return;
+        
+        set({ isSyncing: true });
+        try {
+          const supabaseTemplates = await getCustomTemplates(userId);
+          
+          if (supabaseTemplates && supabaseTemplates.length > 0) {
+            // Merge with local templates - Supabase takes precedence for existing IDs
+            const localTemplates = get().templates;
+            const supabaseIds = new Set(supabaseTemplates.map(t => t.id));
+            
+            // Keep local templates that don't exist in Supabase (might be offline changes)
+            const localOnlyTemplates = localTemplates.filter(t => !supabaseIds.has(t.id));
+            
+            set({
+              templates: [...supabaseTemplates, ...localOnlyTemplates],
+              lastSyncedAt: new Date(),
+            });
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[CustomTemplatesStore] Synced', supabaseTemplates.length, 'templates from Supabase');
+            }
+          }
+        } catch (error) {
+          // Silently fail - Supabase sync is optional, local storage is the primary store
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[CustomTemplatesStore] Supabase sync unavailable (table may not exist)');
+          }
+        } finally {
+          set({ isSyncing: false });
+        }
+      },
+
+      // Sync to Supabase - syncs a single template operation
+      // Note: Fails silently if table doesn't exist or access is denied
+      syncToSupabase: async (template: CustomPRDTemplate, userId: string, operation: 'create' | 'update' | 'delete') => {
+        if (!USE_SUPABASE || !userId) {
+          return; // Silently skip - no logging needed
+        }
+        
+        try {
+          switch (operation) {
+            case 'create':
+              const created = await createCustomTemplate({
+                ...template,
+              }, userId);
+              if (created && process.env.NODE_ENV === 'development') {
+                console.log('[CustomTemplatesStore] Created template in Supabase:', template.id);
+              }
+              break;
+            case 'update':
+              const updated = await updateCustomTemplateInSupabase(template.id, {
+                name: template.name,
+                description: template.description,
+                sections: template.sections,
+                contextPrompt: template.contextPrompt,
+                icon: template.icon,
+                color: template.color,
+                useCases: template.useCases,
+                category: template.category,
+                version: template.version,
+                versionHistory: template.versionHistory,
+              }, userId);
+              if (updated && process.env.NODE_ENV === 'development') {
+                console.log('[CustomTemplatesStore] Updated template in Supabase:', template.id);
+              }
+              break;
+            case 'delete':
+              const deleted = await deleteCustomTemplateFromSupabase(template.id, userId);
+              if (deleted && process.env.NODE_ENV === 'development') {
+                console.log('[CustomTemplatesStore] Deleted template from Supabase:', template.id);
+              }
+              break;
+          }
+        } catch (error) {
+          // Silently fail - local state is already updated, Supabase is just for persistence
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[CustomTemplatesStore] Supabase sync failed (table may not exist)');
+          }
+        }
+      },
+
+      addTemplate: (templateData, userId) => {
         const newTemplate: CustomPRDTemplate = {
           id: generateId(),
           name: templateData.name,
@@ -393,10 +497,17 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
           templates: [...state.templates, newTemplate],
         }));
 
+        // Sync to Supabase in background
+        if (userId) {
+          get().syncToSupabase(newTemplate, userId, 'create');
+        }
+
         return newTemplate;
       },
 
-      updateTemplate: (id, updates, changeDescription) => {
+      updateTemplate: (id, updates, changeDescription, userId) => {
+        let updatedTemplate: CustomPRDTemplate | null = null;
+        
         set((state) => ({
           templates: state.templates.map((template) => {
             if (template.id !== id) return template;
@@ -419,21 +530,35 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
             const existingHistory = template.versionHistory || [];
             const updatedHistory = [...existingHistory, newVersion].slice(-10);
             
-            return { 
+            updatedTemplate = { 
               ...template, 
               ...updates, 
               version: currentVersion + 1,
               versionHistory: updatedHistory,
               updatedAt: new Date() 
             };
+            
+            return updatedTemplate;
           }),
         }));
+
+        // Sync to Supabase in background
+        if (userId && updatedTemplate) {
+          get().syncToSupabase(updatedTemplate, userId, 'update');
+        }
       },
 
-      deleteTemplate: (id) => {
+      deleteTemplate: (id, userId) => {
+        const templateToDelete = get().templates.find(t => t.id === id);
+        
         set((state) => ({
           templates: state.templates.filter((template) => template.id !== id),
         }));
+
+        // Sync to Supabase in background
+        if (userId && templateToDelete) {
+          get().syncToSupabase(templateToDelete, userId, 'delete');
+        }
       },
 
       getTemplate: (id) => {
@@ -451,7 +576,7 @@ Adapt the format and depth to the specific needs of this product.
 Focus on the most relevant sections and be flexible with the structure.`;
       },
 
-      duplicateTemplate: (id, newName) => {
+      duplicateTemplate: (id, newName, userId) => {
         const original = get().templates.find((template) => template.id === id);
         if (!original) return undefined;
 
@@ -475,6 +600,11 @@ Focus on the most relevant sections and be flexible with the structure.`;
         set((state) => ({
           templates: [...state.templates, duplicated],
         }));
+
+        // Sync to Supabase in background
+        if (userId) {
+          get().syncToSupabase(duplicated, userId, 'create');
+        }
 
         return duplicated;
       },
@@ -507,7 +637,7 @@ Focus on the most relevant sections and be flexible with the structure.`;
         return template?.versionHistory || [];
       },
 
-      restoreTemplateVersion: (templateId, versionId) => {
+      restoreTemplateVersion: (templateId, versionId, userId) => {
         const template = get().templates.find((t) => t.id === templateId);
         if (!template) return false;
 
@@ -521,7 +651,7 @@ Focus on the most relevant sections and be flexible with the structure.`;
           sections: version.sections.map(s => ({ ...s })),
           contextPrompt: version.contextPrompt,
           category: version.category, // Restore category from version history
-        }, `Restored from version ${version.version}`);
+        }, `Restored from version ${version.version}`, userId);
 
         return true;
       },
@@ -547,7 +677,7 @@ Focus on the most relevant sections and be flexible with the structure.`;
         };
       },
 
-      importTemplates: (data, overwriteExisting = false) => {
+      importTemplates: (data, overwriteExisting = false, userId) => {
         const result: TemplateImportResult = {
           success: true,
           imported: 0,
@@ -556,9 +686,9 @@ Focus on the most relevant sections and be flexible with the structure.`;
         };
 
         // Validate format version
-        if (data.formatVersion !== '1.0') {
+        if (data?.formatVersion !== '1.0') {
           result.success = false;
-          result.errors.push(`Unsupported format version: ${data.formatVersion}`);
+          result.errors.push(`Unsupported format version: ${String((data as unknown as { formatVersion?: unknown })?.formatVersion)}`);
           return result;
         }
 
@@ -568,70 +698,105 @@ Focus on the most relevant sections and be flexible with the structure.`;
           return result;
         }
 
-        const existingTemplates = get().templates;
+        const now = new Date();
+        const existingTemplates = [...get().templates];
         const newTemplates: CustomPRDTemplate[] = [];
 
-        for (const importedTemplate of data.templates) {
+        for (const rawImported of data.templates as unknown[]) {
           try {
-            // Validate required fields
-            if (!importedTemplate.name || !importedTemplate.sections) {
-              result.errors.push(`Skipped template: missing required fields`);
+            // Normalize + validate
+            if (!isTemplateExportedTemplate(rawImported)) {
+              result.errors.push('Skipped template: invalid template shape');
               result.skipped++;
               continue;
             }
 
-            // Check if template with same ID exists
-            const existingIndex = existingTemplates.findIndex((t) => t.id === importedTemplate.id);
-            
+            const raw = rawImported as TemplateExportedTemplate;
+            const sanitized = sanitizeTemplate(raw);
+            const validation = validateTemplate(sanitized);
+            if (!validation.valid) {
+              result.errors.push(`Skipped template "${raw.name ?? 'Unnamed'}": ${validation.errors.join('; ')}`);
+              result.skipped++;
+              continue;
+            }
+
+            // Build a proper template object
+            const base: CustomPRDTemplate = autoFixTemplate({
+              id: raw.id || generateId(),
+              name: sanitized.name || 'Untitled Template',
+              description: sanitized.description || '',
+              sections: (sanitized.sections || []) as TemplateSection[],
+              contextPrompt: sanitized.contextPrompt,
+              icon: raw.icon,
+              color: raw.color,
+              useCases: raw.useCases,
+              category: raw.category || 'custom',
+              isStarterTemplate: false,
+              version: 1,
+              versionHistory: [],
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            const existingIndex = existingTemplates.findIndex((t) => t.id === base.id);
+
             if (existingIndex >= 0) {
+              const existing = existingTemplates[existingIndex];
+
               if (overwriteExisting) {
-                // Update existing template
-                const existing = existingTemplates[existingIndex];
-                existingTemplates[existingIndex] = {
-                  ...existing,
-                  ...importedTemplate,
-                  isStarterTemplate: false, // Imported templates are never starter templates
-                  version: (existing.version || 1) + 1,
-                  updatedAt: new Date(),
-                };
+                // Use updateTemplate to preserve version history behavior
+                get().updateTemplate(
+                  existing.id,
+                  {
+                    name: base.name,
+                    description: base.description,
+                    sections: base.sections,
+                    contextPrompt: base.contextPrompt,
+                    icon: base.icon,
+                    color: base.color,
+                    useCases: base.useCases,
+                    category: base.category,
+                    isStarterTemplate: false,
+                  },
+                  'Imported (overwrite)'
+                );
+
                 result.imported++;
               } else {
-                // Create as new with different ID
                 newTemplates.push({
-                  ...importedTemplate,
+                  ...base,
                   id: generateId(),
-                  name: `${importedTemplate.name} (Imported)`,
-                  isStarterTemplate: false,
-                  version: 1,
-                  versionHistory: [],
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
+                  name: `${base.name} (Imported)`,
+                  createdAt: now,
+                  updatedAt: now,
                 });
                 result.imported++;
               }
             } else {
-              // Add as new template
-              newTemplates.push({
-                ...importedTemplate,
-                id: importedTemplate.id || generateId(),
-                isStarterTemplate: false,
-                version: 1,
-                versionHistory: [],
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              });
+              newTemplates.push(base);
               result.imported++;
             }
           } catch (error) {
-            result.errors.push(`Failed to import template "${importedTemplate.name}": ${error}`);
+            const name = isTemplateExportedTemplate(rawImported) ? rawImported.name : 'Unnamed';
+            result.errors.push(`Failed to import template "${name}": ${error instanceof Error ? error.message : String(error)}`);
             result.skipped++;
           }
         }
 
-        // Update store
-        set({
-          templates: [...existingTemplates, ...newTemplates],
-        });
+        // If overwriteExisting was true, updateTemplate already updated the store; we only need to append new templates.
+        if (newTemplates.length > 0) {
+          set((state) => ({
+            templates: [...state.templates, ...newTemplates],
+          }));
+        }
+
+        // If we had any skips/errors, surface them but still return success if at least one template imported.
+        if (result.imported === 0) {
+          result.success = false;
+          if (result.errors.length === 0) {
+            result.errors.push('No templates were imported');
+          }
+        }
 
         return result;
       },
@@ -641,6 +806,8 @@ Focus on the most relevant sections and be flexible with the structure.`;
       partialize: (state) => ({
         templates: state.templates,
         hasSeededStarterTemplates: state.hasSeededStarterTemplates,
+        lastSyncedAt: state.lastSyncedAt,
+        // Exclude isSyncing from persistence
       }),
     }
   )

@@ -42,9 +42,29 @@ function MermaidNodeView({ node, updateAttributes, selected }: MermaidNodeViewPr
 
   const { code, title } = node.attrs;
 
+  // Update editCode when node.attrs.code changes (external updates)
+  const [prevCode, setPrevCode] = useState(code);
+  if (prevCode !== code && !isEditing) {
+    setPrevCode(code);
+    setEditCode(code);
+  }
+
   const handleSave = useCallback(() => {
-    updateAttributes({ code: editCode });
-    setIsEditing(false);
+    // Validate before saving
+    import('@/lib/utils/mermaid-validator').then(({ validateMermaidDiagram }) => {
+      const validation = validateMermaidDiagram(editCode);
+      
+      if (!validation.valid) {
+        // Show error but still allow saving (user may want to fix later)
+        console.warn('Mermaid validation warning:', validation.error);
+        // Could show a toast here if desired
+      }
+      
+      // Use sanitized code if available, otherwise use original
+      const codeToSave = validation.sanitizedCode || editCode;
+      updateAttributes({ code: codeToSave });
+      setIsEditing(false);
+    });
   }, [editCode, updateAttributes]);
 
   const handleCancel = useCallback(() => {
@@ -52,8 +72,9 @@ function MermaidNodeView({ node, updateAttributes, selected }: MermaidNodeViewPr
     setIsEditing(false);
   }, [code]);
 
-  const handleError = useCallback(() => {
+  const handleError = useCallback((error: Error) => {
     setHasError(true);
+    console.error('Mermaid render error:', error);
   }, []);
 
   const handleRender = useCallback(() => {
@@ -265,7 +286,7 @@ export const MermaidExtension = Node.create<MermaidOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(MermaidNodeView);
+    return ReactNodeViewRenderer(MermaidNodeView as any);
   },
 
   addCommands() {

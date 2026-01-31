@@ -68,17 +68,38 @@ async function generateSectionWithAI(
   const sectionTitle = section?.title || 'Section';
   const sectionDescription = section?.description || '';
 
+  // Build comprehensive guidance with template context and section details
+  const templateName = template?.name || 'Custom Template';
+  const templateDescription = template?.description || '';
+  
+  const guidance = `## Section to Generate
+**Section Title:** ${sectionTitle}
+${sectionDescription ? `**Section Purpose:** ${sectionDescription}` : ''}
+
+## Template Context
+**Template:** ${templateName}
+${templateDescription ? `**Template Description:** ${templateDescription}` : ''}
+${template?.contextPrompt ? `**Additional Context:** ${template.contextPrompt}` : ''}
+
+## Content Requirements
+Generate comprehensive content for this section that includes:
+- **Detailed explanations** with specific examples
+- **Tables** where comparisons or structured data would be helpful
+- **Mermaid diagrams** (flowcharts, sequence diagrams) if the section involves processes or flows
+- **Bullet lists** for key points, requirements, or acceptance criteria
+- **User stories** in the format "As a [user], I want [feature] so that [benefit]" where applicable
+
+## User Request
+${prompt}
+
+Generate content specifically for the "${sectionTitle}" section based on the above context. Make it comprehensive, well-structured, and include visual elements (tables, diagrams) where they add value.`;
+
   // Use the PRD generator to create section content
-  // We pass the user prompt as description and include section context
   const result = await prdGenerator.generateSection({
     sectionId: sectionId,
     description: prompt,
     existingContent: existingContent,
-    guidance: `Section to generate: "${sectionTitle}"
-${sectionDescription ? `\nSection purpose: ${sectionDescription}` : ''}
-${template?.contextPrompt ? `\nTemplate context: ${template.contextPrompt}` : ''}
-
-Generate content specifically for this section based on the user's input. Make it comprehensive and well-structured.`,
+    guidance: guidance,
     provider: provider || undefined,
   });
   
@@ -156,6 +177,7 @@ export function SectionChatDrawer({
     selectedProvider,
     selectedTemplate,
     selectedSection,
+    loadOrCreateSession,
     startNewSession,
     addUserMessage,
     addAssistantMessage,
@@ -191,12 +213,12 @@ export function SectionChatDrawer({
     }
   }, [customTemplates, selectedTemplate, setSelectedTemplate]);
 
-  // Initialize session when drawer opens
+  // Initialize or load session when drawer opens
   useEffect(() => {
-    if (open && !session) {
-      startNewSession(noteId);
+    if (open && noteId) {
+      loadOrCreateSession(noteId);
     }
-  }, [open, session, noteId, startNewSession]);
+  }, [open, noteId, loadOrCreateSession]);
 
   // Update current note content when it changes
   useEffect(() => {

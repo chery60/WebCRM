@@ -137,6 +137,9 @@ export function CanvasCard({
             handleCanvasDataChange(openCanvasId, data);
           }
         }}
+        onCanvasNameChange={(canvasId, name) => {
+          handleRenameCanvas(canvasId, name);
+        }}
         prdContent={prdContent}
         productDescription={productDescription}
         onGenerateContent={onGenerateContent}

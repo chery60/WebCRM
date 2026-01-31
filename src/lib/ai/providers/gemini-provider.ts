@@ -48,8 +48,8 @@ export class GeminiProvider implements AIServiceProvider {
 
   constructor(config: GeminiConfig) {
     this.apiKey = config.apiKey;
-    // Map standard names to latest versions to ensure availability
-    let model = config.model || 'gemini-1.5-flash';
+    // Use gemini-2.5-flash as default (stable, best price-performance)
+    let model = config.model || 'gemini-2.5-flash';
 
     this.model = model;
     this.webSearchEnabled = config.webSearchEnabled ?? true; // Default to enabled for Gemini
@@ -86,10 +86,12 @@ export class GeminiProvider implements AIServiceProvider {
     // Use standard model IDs
     let modelToUse = request.model || this.model;
 
-
-
-    // Fallback model as requested
-    const fallbackModel = 'gemini-2.5-flash-preview-09-2025';
+    // Fallback models (in order of preference) - try Gemini 3 Flash first, then older stable models
+    const fallbackModels = [
+      'gemini-3-flash-preview',  // Newest, might have quota
+      'gemini-2.5-flash-preview-09-2025', // Preview with latest features
+      'gemini-1.5-pro',          // Stable fallback
+    ];
 
     // Build the user content with system instruction prepended (since systemInstruction field is not always supported)
     let fullUserContent = '';
@@ -108,14 +110,21 @@ export class GeminiProvider implements AIServiceProvider {
 
     // Determine if web search should be used for this request
     const shouldUseWebSearch = this.shouldEnableWebSearch(request);
-    
-    const generate = async (model: string) => {
+
+    const generate = async (model: string, retryCount = 0): Promise<GeminiResponse> => {
+      const maxRetries = 3;
+      const baseDelay = 1000; // 1 second
+
       // Build the request body
+      // Respect custom options from request, with fallbacks to type-based defaults
+      const temperature = request.options?.temperature ?? this.getTemperature(request.type);
+      const maxOutputTokens = request.options?.maxTokens ?? this.getMaxTokens(request.type);
+      
       const requestBody: Record<string, unknown> = {
         contents: finalContents,
         generationConfig: {
-          temperature: this.getTemperature(request.type),
-          maxOutputTokens: this.getMaxTokens(request.type),
+          temperature,
+          maxOutputTokens,
           topP: 0.95,
           topK: 40,
         },
@@ -130,27 +139,56 @@ export class GeminiProvider implements AIServiceProvider {
       // Add Google Search Grounding tool when enabled for PRD-related generation
       if (shouldUseWebSearch) {
         requestBody.tools = [{
-          googleSearchRetrieval: {}
+          google_search: {}
         }];
       }
 
-      const response = await fetch(
-        `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          const errorMessage = error.error?.message || 'Gemini API request failed';
+
+          // Check if this is a retryable error (overload, rate limit, server error)
+          const isRetryable =
+            errorMessage.toLowerCase().includes('overload') ||
+            errorMessage.toLowerCase().includes('quota') ||
+            errorMessage.toLowerCase().includes('rate limit') ||
+            response.status === 429 ||
+            response.status === 503 ||
+            response.status >= 500;
+
+          if (isRetryable && retryCount < maxRetries) {
+            const delay = baseDelay * Math.pow(2, retryCount) + Math.random() * 1000;
+            console.warn(`Gemini API error (${errorMessage}), retrying in ${Math.round(delay)}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return generate(model, retryCount + 1);
+          }
+
+          throw new Error(errorMessage);
         }
-      );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Gemini API request failed');
+        return await response.json();
+      } catch (error: any) {
+        // Network errors or other fetch failures
+        if (error.name === 'TypeError' && retryCount < maxRetries) {
+          const delay = baseDelay * Math.pow(2, retryCount) + Math.random() * 1000;
+          console.warn(`Network error, retrying in ${Math.round(delay)}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return generate(model, retryCount + 1);
+        }
+        throw error;
       }
-
-      return await response.json();
     };
 
     try {
@@ -158,16 +196,29 @@ export class GeminiProvider implements AIServiceProvider {
         const data = await generate(modelToUse);
         return this.parseResponse(data, modelToUse);
       } catch (error: any) {
-        // If the primary model fails (and it wasn't already the fallback), try the fallback
-        if (modelToUse !== fallbackModel && (
-          error.message.includes('not found') ||
-          error.message.includes('Quota exceeded') ||
-          error.message.includes('overloaded') ||
-          error.message.includes('503')
-        )) {
-          console.warn(`Gemini model ${modelToUse} failed (${error.message}), retrying with ${fallbackModel}...`);
-          const data = await generate(fallbackModel);
-          return this.parseResponse(data, fallbackModel);
+        // If the primary model fails, try fallback models in order
+        const errorMessage = error.message?.toLowerCase() || '';
+        const isRetryableError =
+          errorMessage.includes('not found') ||
+          errorMessage.includes('quota') ||
+          errorMessage.includes('overload') ||
+          errorMessage.includes('503') ||
+          errorMessage.includes('rate limit') ||
+          errorMessage.includes('not supported');
+
+        if (isRetryableError) {
+          for (const fallbackModel of fallbackModels) {
+            if (modelToUse === fallbackModel) continue;
+
+            try {
+              console.warn(`Gemini model ${modelToUse} failed (${error.message}), trying ${fallbackModel}...`);
+              const data = await generate(fallbackModel);
+              return this.parseResponse(data, fallbackModel);
+            } catch (fallbackError: any) {
+              console.warn(`Fallback model ${fallbackModel} also failed:`, fallbackError.message);
+              continue;
+            }
+          }
         }
         throw error;
       }

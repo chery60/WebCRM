@@ -18,6 +18,7 @@ import {
   Flag,
   FolderKanban,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 import type { GeneratedTask } from '@/types';
 import { cn } from '@/lib/utils';
@@ -135,11 +136,22 @@ export function TaskPreviewCard({
                     </span>
                   </div>
 
-                  {/* Project Name */}
+                  {/* Project Name (from prop) */}
                   {projectName && (
                     <Badge variant="outline" className="text-xs text-muted-foreground bg-muted/50">
                       <FolderKanban className="h-3 w-3 mr-1" />
                       {projectName}
+                    </Badge>
+                  )}
+
+                  {/* Added to Project Indicator */}
+                  {task.addedToProject && (
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Added{task.addedToProjectName ? ` to ${task.addedToProjectName}` : ''}
                     </Badge>
                   )}
                 </div>

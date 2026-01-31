@@ -7,11 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -73,9 +75,19 @@ import {
   Code,
   Wrench,
   Filter,
+  Sparkles,
+  Shuffle,
+  FileEdit,
+  Loader2,
 } from 'lucide-react';
 import { useCustomTemplatesStore, AVAILABLE_SECTIONS, DEFAULT_TEMPLATE_SECTIONS } from '@/lib/stores/custom-templates-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import type { CustomPRDTemplate, TemplateSection, TemplateCategory, TemplateExportFormat, TEMPLATE_CATEGORIES } from '@/types';
+import type { TemplateExportedTemplate } from '@/lib/utils/template-export-types';
+import { isTemplateExportedTemplate } from '@/lib/utils/template-export-types';
+import { generateNewSections, rearrangeSections, addDescriptionsToSections } from '@/lib/ai/services/template-section-generator';
+import { toast } from 'sonner';
+import { validateTemplate, sanitizeTemplate } from '@/lib/utils/template-validator';
 
 // Mode for the right panel
 type EditorMode = 'edit' | 'create';
@@ -118,9 +130,12 @@ export function EditTemplatesModal({
     exportTemplates,
     exportAllTemplates,
     importTemplates,
-    getTemplateVersionHistory,
     restoreTemplateVersion,
+    syncFromSupabase,
   } = useCustomTemplatesStore();
+  
+  const { currentUser } = useAuthStore();
+  const userId = currentUser?.id;
   
   // Editor mode: 'edit' for editing existing, 'create' for new template
   const [mode, setMode] = useState<EditorMode>('edit');
@@ -158,14 +173,37 @@ export function EditTemplatesModal({
   
   // Import result state
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Import review dialog
+  const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<TemplateExportFormat | null>(null);
+  const [importOverwriteExisting, setImportOverwriteExisting] = useState(false);
+  const [importValidationSummary, setImportValidationSummary] = useState<{ validCount: number; invalidCount: number; errors: string[]; warnings: string[] } | null>(null);
+
+  // Version restore confirmation
+  const [pendingRestoreVersionId, setPendingRestoreVersionId] = useState<string | null>(null);
+  const [selectedHistoryVersionId, setSelectedHistoryVersionId] = useState<string | null>(null);
+
+  // Change note for version history
+  const [changeNote, setChangeNote] = useState('');
   
   // Drag and drop state for sections
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
   const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
+  
+  // AI assistance state
+  const [isAIGenerating, setIsAIGenerating] = useState(false);
 
   // Get the selected template
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+
+  // Sync from Supabase when modal opens
+  useEffect(() => {
+    if (open && userId) {
+      syncFromSupabase(userId);
+    }
+  }, [open, userId, syncFromSupabase]);
 
   // Reset form when modal opens or closes
   useEffect(() => {
@@ -191,31 +229,39 @@ export function EditTemplatesModal({
 
   // Handle switching to create mode
   const handleCreateNew = () => {
-    setMode('create');
-    setSelectedTemplateId(null);
-    setName('');
-    setDescription('');
-    setCategory('custom');
-    // Include default descriptions from AVAILABLE_SECTIONS
-    setSections(DEFAULT_TEMPLATE_SECTIONS.map((s, idx) => {
-      const availableSection = AVAILABLE_SECTIONS.find(as => as.id === s.id);
-      return { 
-        ...s, 
-        order: idx + 1,
-        description: availableSection?.description || ''
-      };
-    }));
+    // Create an "Untitled Template" immediately and add it to the store
+    const newTemplate = addTemplate({
+      name: 'Untitled Template',
+      description: '',
+      sections: DEFAULT_TEMPLATE_SECTIONS.map((s, idx) => {
+        const availableSection = AVAILABLE_SECTIONS.find(as => as.id === s.id);
+        return { 
+          ...s, 
+          order: idx + 1,
+          description: availableSection?.description || ''
+        };
+      }),
+      category: 'custom',
+    }, userId);
+    
+    // Switch to edit mode with the new template selected
+    setMode('edit');
+    setSelectedTemplateId(newTemplate.id);
+    setName(newTemplate.name);
+    setDescription(newTemplate.description);
+    setSections([...newTemplate.sections]);
+    setCategory(newTemplate.category || 'custom');
     setErrors({});
     setExpandedSections(new Set());
     setShowVersionHistory(false);
-    setHasChanges(true); // Mark as having changes since it's a new template
+    setHasChanges(false);
   };
 
   // Handle duplicating a template
   const handleDuplicateTemplate = (template: CustomPRDTemplate, e: React.MouseEvent) => {
     e.stopPropagation();
     const duplicatedName = `${template.name} (Copy)`;
-    const duplicated = duplicateTemplate(template.id, duplicatedName);
+    const duplicated = duplicateTemplate(template.id, duplicatedName, userId);
     if (duplicated) {
       setMode('edit');
       setSelectedTemplateId(duplicated.id);
@@ -238,11 +284,13 @@ export function EditTemplatesModal({
       setErrors({});
       setHasChanges(false);
       setShowVersionHistory(false);
+      setChangeNote(''); // Reset change note when switching templates
     } else {
       setName('');
       setDescription('');
       setSections([]);
       setCategory('custom');
+      setChangeNote('');
     }
   }, [selectedTemplate, mode]);
 
@@ -275,10 +323,11 @@ export function EditTemplatesModal({
 
   // Handle import file selection
   const handleImportClick = () => {
+    // We still use the hidden file input, but the actual import happens after review.
     fileInputRef.current?.click();
   };
 
-  // Handle file import
+  // Handle file import (opens review dialog)
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -287,49 +336,84 @@ export function EditTemplatesModal({
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const data = JSON.parse(content) as TemplateExportFormat;
-        const result = importTemplates(data, false);
-        
-        if (result.success) {
-          setImportResult({
-            success: true,
-            message: `Successfully imported ${result.imported} template(s)${result.skipped > 0 ? `, ${result.skipped} skipped` : ''}.`,
-          });
-        } else {
+        const data = JSON.parse(content) as unknown as TemplateExportFormat;
+
+        if (data?.formatVersion !== '1.0' || !Array.isArray(data.templates)) {
           setImportResult({
             success: false,
-            message: result.errors.join(', '),
+            message: 'Invalid file format. Expected a Venture template export (formatVersion 1.0).',
           });
+          return;
         }
+
+        // Pre-validate so users can make an informed decision
+        let validCount = 0;
+        let invalidCount = 0;
+        const errors: string[] = [];
+        const warnings: string[] = [];
+
+        for (const t of data.templates as unknown[]) {
+          if (!isTemplateExportedTemplate(t)) {
+            invalidCount++;
+            errors.push('Unnamed: Invalid template shape');
+            continue;
+          }
+          const sanitized = sanitizeTemplate(t);
+          const validation = validateTemplate(sanitized);
+          if (validation.valid) {
+            validCount++;
+            warnings.push(...validation.warnings.map(w => `${sanitized.name ?? 'Unnamed'}: ${w}`));
+          } else {
+            invalidCount++;
+            errors.push(...validation.errors.map(err => `${sanitized.name ?? 'Unnamed'}: ${err}`));
+          }
+        }
+
+        setImportPreview(data);
+        setImportValidationSummary({ validCount, invalidCount, errors, warnings });
+        setImportOverwriteExisting(false);
+        setImportReviewOpen(true);
       } catch {
         setImportResult({
           success: false,
-          message: 'Invalid file format. Please select a valid template export file.',
+          message: 'Invalid JSON. Please select a valid template export file.',
         });
       }
     };
     reader.readAsText(file);
-    
+
     // Reset file input
     event.target.value = '';
   };
 
-  // Handle restore version
+  // Handle restore version (with confirmation)
   const handleRestoreVersion = (versionId: string) => {
-    if (selectedTemplateId) {
-      const success = restoreTemplateVersion(selectedTemplateId, versionId);
-      if (success) {
-        setShowVersionHistory(false);
-        // Reload template data
-        const updated = templates.find(t => t.id === selectedTemplateId);
-        if (updated) {
-          setName(updated.name);
-          setDescription(updated.description || '');
-          setSections([...updated.sections]);
-          setCategory(updated.category || 'custom');
-        }
+    setPendingRestoreVersionId(versionId);
+  };
+
+  const confirmRestoreVersion = () => {
+    if (!selectedTemplateId || !pendingRestoreVersionId) return;
+
+    const success = restoreTemplateVersion(selectedTemplateId, pendingRestoreVersionId, userId);
+    if (success) {
+      toast.success('Template restored', {
+        description: 'A new version was created from the selected snapshot.',
+      });
+      setShowVersionHistory(false);
+      setSelectedHistoryVersionId(null);
+
+      const updated = templates.find(t => t.id === selectedTemplateId);
+      if (updated) {
+        setName(updated.name);
+        setDescription(updated.description || '');
+        setSections([...updated.sections]);
+        setCategory(updated.category || 'custom');
       }
+    } else {
+      toast.error('Failed to restore version');
     }
+
+    setPendingRestoreVersionId(null);
   };
 
   // Track changes
@@ -518,7 +602,7 @@ export function EditTemplatesModal({
 
     if (mode === 'create') {
       // Create new template
-      const newTemplate = addTemplate(templateData);
+      const newTemplate = addTemplate(templateData, userId);
       onTemplateUpdated?.(newTemplate);
       
       // Switch to edit mode with the new template selected
@@ -526,12 +610,22 @@ export function EditTemplatesModal({
       setSelectedTemplateId(newTemplate.id);
       setHasChanges(false);
     } else if (selectedTemplate) {
-      // Update existing template with change description
-      updateTemplate(selectedTemplate.id, templateData, 'Manual update');
+      // Only create version history if there are actual changes
+      const hasActualChanges = 
+        name.trim() !== selectedTemplate.name ||
+        description.trim() !== (selectedTemplate.description || '') ||
+        JSON.stringify(sections.map((s, idx) => ({ ...s, order: idx + 1 }))) !== JSON.stringify(selectedTemplate.sections) ||
+        category !== (selectedTemplate.category || 'custom');
       
-      const updatedTemplate = { ...selectedTemplate, ...templateData, updatedAt: new Date() };
-      onTemplateUpdated?.(updatedTemplate);
+      if (hasActualChanges) {
+        // Update existing template with change description (syncs to Supabase)
+        updateTemplate(selectedTemplate.id, templateData, changeNote.trim() || 'Manual update', userId);
+        
+        const updatedTemplate = { ...selectedTemplate, ...templateData, updatedAt: new Date() };
+        onTemplateUpdated?.(updatedTemplate);
+      }
       setHasChanges(false);
+      setChangeNote('');
     }
   };
 
@@ -543,7 +637,7 @@ export function EditTemplatesModal({
 
   const handleConfirmDelete = () => {
     if (templateToDelete) {
-      deleteTemplate(templateToDelete.id);
+      deleteTemplate(templateToDelete.id, userId);
       
       // If we deleted the selected template, select another one
       if (selectedTemplateId === templateToDelete.id) {
@@ -557,6 +651,177 @@ export function EditTemplatesModal({
 
   // Sort sections by order for display
   const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+
+  // AI-powered section management handlers
+  const handleAIGenerateNew = async () => {
+    if (!name.trim() || sections.length === 0) {
+      toast.error('Please add a template name and at least one section first');
+      return;
+    }
+
+    setIsAIGenerating(true);
+    const loadingToast = toast.loading('Generating new sections...');
+    
+    try {
+      console.log('[EditTemplatesModal] Starting new section generation');
+      
+      const result = await generateNewSections({
+        templateName: name,
+        templateDescription: description,
+        existingSections: sections,
+        count: 3,
+      });
+
+      console.log('[EditTemplatesModal] Generated sections:', result.sections.length);
+
+      // Add new sections to the template
+      const maxOrder = sections.length > 0 ? Math.max(...sections.map(s => s.order)) : 0;
+      const newSectionsWithOrder = result.sections.map((s, idx) => ({
+        ...s,
+        order: maxOrder + idx + 1,
+      }));
+
+      setSections([...sections, ...newSectionsWithOrder]);
+      
+      toast.dismiss(loadingToast);
+      toast.success(`Generated ${result.sections.length} new section${result.sections.length > 1 ? 's' : ''}`, {
+        description: result.reasoning,
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[EditTemplatesModal] Failed to generate sections:', error);
+      toast.dismiss(loadingToast);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Failed to generate new sections', {
+        description: `${errorMessage}. Please try again or check your AI provider settings.`,
+        duration: 7000,
+      });
+    } finally {
+      setIsAIGenerating(false);
+    }
+  };
+
+  const handleAIRearrange = async () => {
+    if (sections.length < 2) {
+      toast.error('Need at least 2 sections to rearrange');
+      return;
+    }
+
+    setIsAIGenerating(true);
+    const loadingToast = toast.loading('Rearranging sections...');
+    
+    try {
+      console.log('[EditTemplatesModal] Starting section rearrangement');
+      
+      const result = await rearrangeSections({
+        templateName: name,
+        templateDescription: description,
+        sections,
+      });
+
+      console.log('[EditTemplatesModal] Rearranged sections:', result.sections.length);
+
+      setSections(result.sections);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Sections rearranged logically', {
+        description: result.reasoning,
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[EditTemplatesModal] Failed to rearrange sections:', error);
+      toast.dismiss(loadingToast);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Failed to rearrange sections', {
+        description: `${errorMessage}. Please try again or check your AI provider settings.`,
+        duration: 7000,
+      });
+    } finally {
+      setIsAIGenerating(false);
+    }
+  };
+
+  const handleAIAddDescriptions = async () => {
+    const sectionsNeedingDescriptions = sections.filter(
+      s => !s.description || s.description.trim() === ''
+    );
+
+    if (sectionsNeedingDescriptions.length === 0) {
+      toast.info('All sections already have descriptions');
+      return;
+    }
+
+    setIsAIGenerating(true);
+    
+    // Show loading toast
+    const loadingToast = toast.loading(
+      `Generating descriptions for ${sectionsNeedingDescriptions.length} section${sectionsNeedingDescriptions.length > 1 ? 's' : ''}...`
+    );
+    
+    try {
+      console.log('[EditTemplatesModal] Starting AI description generation');
+      console.log('[EditTemplatesModal] Template:', { name, description });
+      console.log('[EditTemplatesModal] Sections needing descriptions:', sectionsNeedingDescriptions.map(s => s.title));
+      
+      const result = await addDescriptionsToSections({
+        templateName: name,
+        templateDescription: description,
+        sections,
+      });
+
+      console.log('[EditTemplatesModal] AI generation successful');
+      console.log('[EditTemplatesModal] Updated sections:', result.sections.length);
+      
+      setSections(result.sections);
+      
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+      
+      toast.success(`Added descriptions to ${sectionsNeedingDescriptions.length} section${sectionsNeedingDescriptions.length > 1 ? 's' : ''}`, {
+        description: result.reasoning,
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[EditTemplatesModal] Failed to add descriptions:', error);
+      
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+      
+      // Show detailed error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Failed to generate descriptions', {
+        description: `${errorMessage}. Please try again or check your AI provider settings.`,
+        duration: 7000,
+      });
+    } finally {
+      setIsAIGenerating(false);
+    }
+  };
+
+  const selectedVersion = selectedTemplate?.versionHistory?.find(v => v.id === selectedHistoryVersionId) || null;
+
+  const applyImport = () => {
+    if (!importPreview) return;
+
+    const result = importTemplates(importPreview, importOverwriteExisting, userId);
+
+    if (result.success) {
+      setImportResult({
+        success: true,
+        message: `Successfully imported ${result.imported} template(s)${result.skipped > 0 ? `, ${result.skipped} skipped` : ''}.`,
+      });
+      setImportReviewOpen(false);
+      setImportPreview(null);
+      setImportValidationSummary(null);
+    } else {
+      setImportResult({
+        success: false,
+        message: result.errors.join(', '),
+      });
+    }
+  };
 
   return (
     <>
@@ -626,6 +891,106 @@ export function EditTemplatesModal({
               </div>
             )}
           </DialogHeader>
+
+          {/* Import review dialog */}
+          <Dialog open={importReviewOpen} onOpenChange={setImportReviewOpen}>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Import Templates</DialogTitle>
+                <DialogDescription>
+                  Review what you’re importing. We’ll validate and safely merge these templates into your workspace.
+                </DialogDescription>
+              </DialogHeader>
+
+              {importPreview && importValidationSummary ? (
+                <div className="space-y-4">
+                  <div className="rounded-md border p-3 bg-muted/20">
+                    <div className="text-sm font-medium">File summary</div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Templates: {importPreview.templates.length} · Valid: {importValidationSummary.validCount} · Invalid: {importValidationSummary.invalidCount}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      checked={importOverwriteExisting}
+                      onCheckedChange={(v) => setImportOverwriteExisting(Boolean(v))}
+                      id="import-overwrite"
+                    />
+                    <Label htmlFor="import-overwrite" className="text-sm leading-5">
+                      Overwrite existing templates when IDs match (recommended only if you trust the source)
+                    </Label>
+                  </div>
+
+                  {importValidationSummary.invalidCount > 0 && (
+                    <div className="rounded-md border border-destructive/30 p-3">
+                      <div className="text-sm font-medium text-destructive">Some templates will be skipped</div>
+                      <ul className="mt-2 text-xs text-muted-foreground space-y-1 max-h-28 overflow-auto">
+                        {importValidationSummary.errors.slice(0, 8).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                        {importValidationSummary.errors.length > 8 && (
+                          <li>…and {importValidationSummary.errors.length - 8} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {importValidationSummary.warnings.length > 0 && (
+                    <div className="rounded-md border p-3">
+                      <div className="text-sm font-medium">Quality warnings</div>
+                      <ul className="mt-2 text-xs text-muted-foreground space-y-1 max-h-28 overflow-auto">
+                        {importValidationSummary.warnings.slice(0, 8).map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                        {importValidationSummary.warnings.length > 8 && (
+                          <li>…and {importValidationSummary.warnings.length - 8} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="rounded-md border p-3">
+                    <div className="text-sm font-medium">Templates</div>
+                    <div className="mt-2 grid gap-2 max-h-40 overflow-auto">
+                      {(importPreview.templates as unknown[]).map((t) => {
+                        const tpl: TemplateExportedTemplate | null = isTemplateExportedTemplate(t) ? t : null;
+                        if (!tpl) {
+                          return (
+                            <div key={'invalid-template-entry'} className="flex items-center justify-between rounded-md bg-destructive/10 px-3 py-2">
+                              <div className="text-sm text-destructive">Invalid template entry</div>
+                            </div>
+                          );
+                        }
+                        return (
+                        <div key={tpl.id || tpl.name} className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{tpl.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">Sections: {Array.isArray(tpl.sections) ? tpl.sections.length : 0}</div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px]">
+                            {tpl.category || 'custom'}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No import file selected.</div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setImportReviewOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={applyImport} disabled={!importPreview || (importValidationSummary?.validCount ?? 0) === 0}>
+                  Import
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {templates.length === 0 && mode !== 'create' ? (
             <div className="flex-1 flex items-center justify-center p-12">
@@ -832,6 +1197,7 @@ export function EditTemplatesModal({
                                   </div>
                                 </SelectItem>
                               ))}
+                              {/* Note: Custom categories can be added via Supabase in future */}
                             </SelectContent>
                           </Select>
                         </div>
@@ -849,37 +1215,93 @@ export function EditTemplatesModal({
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
-                              onClick={() => setShowVersionHistory(false)}
+                              onClick={() => {
+                                setShowVersionHistory(false);
+                                setSelectedHistoryVersionId(null);
+                              }}
                             >
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <div className="space-y-1 max-h-[150px] overflow-y-auto">
-                            {[...selectedTemplate.versionHistory].reverse().map((version) => (
-                              <div key={version.id} className="flex items-center justify-between p-2 rounded bg-background text-sm">
-                                <div>
-                                  <span className="font-medium">v{version.version}</span>
-                                  <span className="text-muted-foreground ml-2">
-                                    {new Date(version.createdAt).toLocaleDateString()}
-                                  </span>
-                                  {version.changeDescription && (
-                                    <span className="text-muted-foreground ml-2 text-xs">
-                                      — {version.changeDescription}
-                                    </span>
+
+                          <div className="space-y-1 max-h-[160px] overflow-y-auto">
+                            {[...selectedTemplate.versionHistory].reverse().map((version) => {
+                              const isSelected = selectedHistoryVersionId === version.id;
+                              return (
+                                <div
+                                  key={version.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  className={cn(
+                                    "w-full text-left flex items-center justify-between p-2 rounded bg-background text-sm border transition-colors cursor-pointer",
+                                    isSelected ? "border-primary" : "border-transparent hover:border-border"
                                   )}
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleRestoreVersion(version.id)}
+                                  onClick={() => setSelectedHistoryVersionId(version.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      setSelectedHistoryVersionId(version.id);
+                                    }
+                                  }}
                                 >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Restore
-                                </Button>
-                              </div>
-                            ))}
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">v{version.version}</span>
+                                      <span className="text-muted-foreground text-xs">
+                                        {new Date(version.createdAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    {version.changeDescription && (
+                                      <div className="text-muted-foreground text-xs truncate">
+                                        {version.changeDescription}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {version.sections?.length ?? 0} sections
+                                    </Badge>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRestoreVersion(version.id);
+                                      }}
+                                    >
+                                      <RotateCcw className="h-3 w-3 mr-1" />
+                                      Restore
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
+
+                          {selectedVersion && (
+                            <div className="rounded-md border bg-background p-3">
+                              <div className="text-sm font-medium">Preview v{selectedVersion.version}</div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Category: {selectedVersion.category || 'custom'} · Sections: {selectedVersion.sections.length}
+                              </div>
+                              {selectedVersion.description && (
+                                <div className="text-sm mt-2 whitespace-pre-wrap">{selectedVersion.description}</div>
+                              )}
+                              <div className="mt-3">
+                                <div className="text-xs font-medium text-muted-foreground mb-1">Section order</div>
+                                <ol className="list-decimal pl-4 text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-auto">
+                                  {selectedVersion.sections
+                                    .slice()
+                                    .sort((a, b) => a.order - b.order)
+                                    .map((s) => (
+                                      <li key={s.id} className="truncate">{s.title}</li>
+                                    ))}
+                                </ol>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -911,9 +1333,67 @@ export function EditTemplatesModal({
                               </Tooltip>
                             </TooltipProvider>
                           </div>
-                          {errors.sections && (
-                            <p className="text-xs text-destructive">{errors.sections}</p>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {errors.sections && (
+                              <p className="text-xs text-destructive">{errors.sections}</p>
+                            )}
+                            {/* AI Assistance Button */}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 gap-1.5"
+                                  disabled={isAIGenerating}
+                                >
+                                  {isAIGenerating ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                  )}
+                                  AI
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuItem
+                                  onClick={handleAIGenerateNew}
+                                  disabled={isAIGenerating || !name.trim() || sections.length === 0}
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  <div className="flex flex-col">
+                                    <span>Generate New Sections</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Add 3 relevant sections
+                                    </span>
+                                  </div>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={handleAIRearrange}
+                                  disabled={isAIGenerating || sections.length < 2}
+                                >
+                                  <Shuffle className="h-4 w-4 mr-2" />
+                                  <div className="flex flex-col">
+                                    <span>Rearrange Sections</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Organize logically
+                                    </span>
+                                  </div>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={handleAIAddDescriptions}
+                                  disabled={isAIGenerating || sections.length === 0}
+                                >
+                                  <FileEdit className="h-4 w-4 mr-2" />
+                                  <div className="flex flex-col">
+                                    <span>Add Descriptions</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Fill empty descriptions
+                                    </span>
+                                  </div>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                         
                         <div className="border rounded-md min-h-[200px] max-h-[320px] overflow-hidden">
@@ -1090,8 +1570,8 @@ export function EditTemplatesModal({
           )}
 
           {/* Footer - spans entire modal width */}
-          <div className="border-t p-4 flex items-center justify-between bg-background rounded-b-lg">
-            <div className="text-sm text-muted-foreground">
+          <div className="border-t p-4 flex items-center justify-between gap-4 bg-background rounded-b-lg">
+            <div className="text-sm text-muted-foreground flex-shrink-0">
               {mode === 'create' ? (
                 <span className="text-primary">Creating new template</span>
               ) : hasChanges ? (
@@ -1100,14 +1580,29 @@ export function EditTemplatesModal({
                 <span>No changes</span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex-1 min-w-0">
+              {mode === 'edit' && hasChanges && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="template-change-note" className="text-xs text-muted-foreground whitespace-nowrap">
+                    Change note
+                  </Label>
+                  <Input
+                    id="template-change-note"
+                    value={changeNote}
+                    onChange={(e) => setChangeNote(e.target.value)}
+                    placeholder="e.g., Added Risks section + improved descriptions"
+                    className="h-8"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={mode === 'edit' && !hasChanges}
-              >
+              <Button onClick={handleSave} disabled={isAIGenerating || (mode === 'edit' && !hasChanges)}>
                 <Check className="h-4 w-4 mr-1" />
                 {mode === 'create' ? 'Create Template' : 'Save Changes'}
               </Button>
@@ -1117,6 +1612,22 @@ export function EditTemplatesModal({
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
+      {/* Restore version confirmation */}
+      <AlertDialog open={pendingRestoreVersionId !== null} onOpenChange={(open) => { if (!open) setPendingRestoreVersionId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this version?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will restore the selected snapshot and create a new version so you can undo the restore if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingRestoreVersionId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRestoreVersion}>Restore Version</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -16,7 +16,6 @@ import {
   Send, 
   Sparkles, 
   Plus,
-  ChevronUp,
   FileText,
   Pencil,
 } from 'lucide-react';
@@ -173,7 +172,6 @@ export function PRDChatInput({
             <SelectValue placeholder="Select AI Model">
               {selectedProvider && AI_MODELS.find(m => m.value === selectedProvider)?.label}
             </SelectValue>
-            <ChevronUp className="h-3 w-3 opacity-50" />
           </SelectTrigger>
           <SelectContent>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
@@ -202,7 +200,6 @@ export function PRDChatInput({
             <SelectValue placeholder="Select Template">
               {getTemplateDisplayName(selectedTemplate)}
             </SelectValue>
-            <ChevronUp className="h-3 w-3 opacity-50" />
           </SelectTrigger>
           <SelectContent>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">

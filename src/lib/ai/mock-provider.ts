@@ -267,7 +267,101 @@ Implement a streamlined solution that addresses the core user needs.
     return `I would like to bring to your attention the following matter:\n\n${prompt}\n\nPlease do not hesitate to reach out should you require any additional information or clarification regarding this matter.\n\nBest regards`;
   },
 
-  ask: (prompt) => {
+  ask: (prompt, context) => {
+    // Check if this is a structured JSON request based on the context
+    if (context && context.includes('Always respond with valid JSON only')) {
+      console.log('[MockAIProvider] Generating structured JSON response');
+      console.log('[MockAIProvider] Prompt preview:', prompt.substring(0, 200));
+      
+      // Try to detect what type of JSON structure is expected
+      if (prompt.includes('Add Descriptions') || prompt.includes('Sections Needing Descriptions')) {
+        // Template section descriptions request
+        console.log('[MockAIProvider] Detected: Description generation request');
+        const sectionMatches = prompt.match(/- (.+?)(?=\n|$)/g) || [];
+        const sections = sectionMatches.map(match => match.replace(/^- /, '').trim());
+        
+        console.log('[MockAIProvider] Extracted sections:', sections);
+        
+        // Generate clean descriptions without newlines
+        const descriptions = sections.map(title => ({
+          title,
+          description: `Provide detailed information about ${title.toLowerCase()}, including key considerations, requirements, and implementation guidelines.`
+        }));
+        
+        const response = {
+          descriptions,
+          reasoning: 'Generated descriptions based on section titles and template context.'
+        };
+        
+        // Return compact JSON to avoid parsing issues
+        const jsonString = JSON.stringify(response);
+        console.log('[MockAIProvider] Generated JSON length:', jsonString.length);
+        return jsonString;
+      }
+      
+      if (prompt.includes('Generate') && prompt.includes('new, relevant sections')) {
+        // New sections generation request
+        console.log('[MockAIProvider] Detected: New sections generation request');
+        const response = {
+          sections: [
+            {
+              title: 'Security & Compliance',
+              description: 'Document security requirements, data protection measures, and compliance considerations.'
+            },
+            {
+              title: 'Performance Requirements',
+              description: 'Define performance benchmarks, load capacity, and response time expectations.'
+            },
+            {
+              title: 'Integration Points',
+              description: 'Identify third-party integrations, APIs, and external system dependencies.'
+            }
+          ],
+          reasoning: 'These sections complement the template by covering critical technical and operational aspects.'
+        };
+        
+        return JSON.stringify(response);
+      }
+      
+      if (prompt.includes('Rearrange') && prompt.includes('logical order')) {
+        // Section rearrangement request - extract sections from prompt
+        console.log('[MockAIProvider] Detected: Section rearrangement request');
+        const sectionMatches = prompt.match(/\d+\.\s+(.+?)(?:\s+-\s+(.+?))?(?=\n|$)/g) || [];
+        const sections = sectionMatches.map((match, idx) => {
+          const titleMatch = match.match(/\d+\.\s+(.+?)(?:\s+-\s+(.+?))?$/);
+          const title = titleMatch ? titleMatch[1].trim() : `Section ${idx + 1}`;
+          const description = titleMatch && titleMatch[2] ? titleMatch[2].trim() : '';
+          const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+          
+          return {
+            id,
+            title,
+            description,
+            order: idx + 1
+          };
+        });
+        
+        const response = {
+          sections,
+          reasoning: 'Sections arranged in logical order following PRD best practices.'
+        };
+        
+        console.log('[MockAIProvider] Generated sections:', sections.length);
+        return JSON.stringify(response);
+      }
+      
+      // Generic JSON response for other structured requests
+      console.log('[MockAIProvider] Generating generic JSON response');
+      const response = {
+        result: 'success',
+        data: prompt.substring(0, 100),
+        message: 'This is a mock response for a structured JSON request.'
+      };
+      
+      return JSON.stringify(response);
+    }
+    
+    // Default text response for non-JSON requests
     return `Based on your question, here's what I can help you with:\n\n${prompt}\n\nThis is a complex topic that requires careful consideration. I recommend breaking it down into smaller, manageable components and addressing each one systematically.\n\nWould you like me to elaborate on any specific aspect?`;
   },
 };

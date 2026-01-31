@@ -440,6 +440,208 @@ Return ONLY the JSON array of tasks.`;
   // PRIVATE HELPERS
   // ============================================================================
 
+  /**
+   * Sanitize control characters within JSON string values.
+   * This handles cases where AI returns JSON with unescaped newlines, tabs, etc. inside strings.
+   */
+  private sanitizeJsonString(jsonStr: string): string {
+    let result = '';
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
+      const charCode = char.charCodeAt(0);
+      
+      if (escapeNext) {
+        result += char;
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\' && inString) {
+        result += char;
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        result += char;
+        continue;
+      }
+      
+      // If we're inside a string, escape control characters
+      if (inString && charCode < 32) {
+        switch (char) {
+          case '\n':
+            result += '\\n';
+            break;
+          case '\r':
+            result += '\\r';
+            break;
+          case '\t':
+            result += '\\t';
+            break;
+          case '\b':
+            result += '\\b';
+            break;
+          case '\f':
+            result += '\\f';
+            break;
+          default:
+            result += '\\u' + charCode.toString(16).padStart(4, '0');
+            break;
+        }
+      } else {
+        result += char;
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Repair truncated JSON by closing open strings, objects, and arrays.
+   * This handles cases where AI response is cut off mid-JSON.
+   */
+  private repairTruncatedJson(jsonStr: string): string {
+    let repaired = jsonStr.trim();
+    
+    // Remove trailing commas before attempting repair
+    repaired = repaired.replace(/,\s*$/, '');
+    
+    // Track state through the JSON
+    let inString = false;
+    let escapeNext = false;
+    const bracketStack: string[] = [];
+    
+    for (let i = 0; i < repaired.length; i++) {
+      const char = repaired[i];
+      
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\' && inString) {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '[' || char === '{') {
+          bracketStack.push(char);
+        } else if (char === ']') {
+          if (bracketStack.length > 0 && bracketStack[bracketStack.length - 1] === '[') {
+            bracketStack.pop();
+          }
+        } else if (char === '}') {
+          if (bracketStack.length > 0 && bracketStack[bracketStack.length - 1] === '{') {
+            bracketStack.pop();
+          }
+        }
+      }
+    }
+    
+    // If we're still inside a string, close it
+    if (inString) {
+      // Try to find a good cutoff point (last complete word or sentence)
+      const lastGoodCutoff = Math.max(
+        repaired.lastIndexOf('. '),
+        repaired.lastIndexOf(', '),
+        repaired.lastIndexOf(' ')
+      );
+      
+      if (lastGoodCutoff > repaired.length - 100 && lastGoodCutoff > 0) {
+        repaired = repaired.substring(0, lastGoodCutoff);
+      }
+      
+      // Remove any trailing incomplete escape sequences
+      repaired = repaired.replace(/\\+$/, '');
+      repaired += '"';
+    }
+    
+    // Remove any trailing commas after closing the string
+    repaired = repaired.replace(/,\s*$/, '');
+    
+    // Close any unclosed brackets/braces in reverse order
+    while (bracketStack.length > 0) {
+      const openBracket = bracketStack.pop();
+      if (openBracket === '[') {
+        repaired += ']';
+      } else if (openBracket === '{') {
+        repaired += '}';
+      }
+    }
+    
+    return repaired;
+  }
+
+  /**
+   * Extract complete JSON objects from a potentially truncated array.
+   * Returns as many complete objects as possible.
+   */
+  private extractCompleteObjects(jsonStr: string): string {
+    const arrayStart = jsonStr.indexOf('[');
+    if (arrayStart === -1) return jsonStr;
+    
+    let result = '[';
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let objectStart = -1;
+    const completeObjects: string[] = [];
+    
+    for (let i = arrayStart + 1; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
+      
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\' && inString) {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') {
+          if (depth === 0) {
+            objectStart = i;
+          }
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0 && objectStart !== -1) {
+            // Found a complete object
+            const objectStr = jsonStr.substring(objectStart, i + 1);
+            completeObjects.push(objectStr);
+            objectStart = -1;
+          }
+        }
+      }
+    }
+    
+    if (completeObjects.length > 0) {
+      result += completeObjects.join(',') + ']';
+      return result;
+    }
+    
+    return jsonStr;
+  }
+
   private parseTasks(content: string): Omit<GeneratedTask, 'id' | 'featureId' | 'isSelected'>[] {
     try {
       // Handle empty or whitespace-only content
@@ -456,32 +658,18 @@ Return ONLY the JSON array of tasks.`;
         jsonContent = jsonMatch[1].trim();
       }
 
-      // Try to find JSON array in the content - use balanced bracket matching
+      // Try to find JSON array in the content
       const arrayStart = jsonContent.indexOf('[');
       if (arrayStart !== -1) {
-        // Find the matching closing bracket
-        let depth = 0;
-        let arrayEnd = -1;
-        for (let i = arrayStart; i < jsonContent.length; i++) {
-          if (jsonContent[i] === '[') depth++;
-          if (jsonContent[i] === ']') {
-            depth--;
-            if (depth === 0) {
-              arrayEnd = i;
-              break;
-            }
-          }
-        }
-        
-        if (arrayEnd !== -1) {
-          jsonContent = jsonContent.substring(arrayStart, arrayEnd + 1);
-        }
+        jsonContent = jsonContent.substring(arrayStart);
       }
 
       // Handle case where content might be a JSON object with a tasks array
       if (jsonContent.startsWith('{')) {
         try {
-          const obj = JSON.parse(jsonContent);
+          const sanitized = this.sanitizeJsonString(jsonContent);
+          const repaired = this.repairTruncatedJson(sanitized);
+          const obj = JSON.parse(repaired);
           if (obj.tasks && Array.isArray(obj.tasks)) {
             jsonContent = JSON.stringify(obj.tasks);
           }
@@ -490,13 +678,55 @@ Return ONLY the JSON array of tasks.`;
         }
       }
 
-      const parsed = JSON.parse(jsonContent);
+      // Remove trailing commas
+      jsonContent = jsonContent.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+      // Sanitize control characters
+      jsonContent = this.sanitizeJsonString(jsonContent);
+
+      // Try parsing strategies in order of complexity
+      const parseStrategies = [
+        // Strategy 1: Direct parse after sanitization
+        () => JSON.parse(jsonContent),
+        
+        // Strategy 2: Repair truncated JSON then parse
+        () => JSON.parse(this.repairTruncatedJson(jsonContent)),
+        
+        // Strategy 3: Extract only complete objects from truncated array
+        () => JSON.parse(this.extractCompleteObjects(jsonContent)),
+        
+        // Strategy 4: Repair after extracting complete objects
+        () => JSON.parse(this.repairTruncatedJson(this.extractCompleteObjects(jsonContent))),
+      ];
+
+      let parsed: unknown = null;
+      let lastError: Error | null = null;
+
+      for (let i = 0; i < parseStrategies.length; i++) {
+        try {
+          parsed = parseStrategies[i]();
+          console.log(`[TaskGenerator] Parse strategy ${i + 1} succeeded`);
+          break;
+        } catch (e) {
+          lastError = e as Error;
+          console.log(`[TaskGenerator] Parse strategy ${i + 1} failed:`, (e as Error).message);
+        }
+      }
+
+      if (parsed === null) {
+        console.error('[TaskGenerator] All parse strategies failed:', lastError?.message);
+        console.error('[TaskGenerator] Content preview:', content.substring(0, 500));
+        return [];
+      }
       
       if (Array.isArray(parsed)) {
         // Filter out null/undefined items and normalize each task
-        return parsed
+        const tasks = parsed
           .filter(item => item != null && typeof item === 'object')
           .map(item => this.normalizeTask(item));
+        
+        console.log(`[TaskGenerator] Successfully parsed ${tasks.length} tasks`);
+        return tasks;
       }
       
       if (typeof parsed === 'object' && parsed !== null) {
@@ -505,8 +735,8 @@ Return ONLY the JSON array of tasks.`;
 
       return [];
     } catch (error) {
-      console.error('Failed to parse tasks:', error);
-      console.error('Content was:', content);
+      console.error('[TaskGenerator] Unexpected error in parseTasks:', error);
+      console.error('[TaskGenerator] Content preview:', content.substring(0, 500));
       return [];
     }
   }

@@ -9,14 +9,13 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
   SelectSeparator,
 } from '@/components/ui/select';
 import { 
   Send, 
   Sparkles, 
   Plus,
-  ChevronUp,
+  ChevronDown,
   FileText,
   Pencil,
   LayoutList,
@@ -206,18 +205,18 @@ export function SectionChatInput({
       </div>
 
       {/* Dropdowns row */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2">
         {/* AI Model Selector */}
         <Select
           value={selectedProvider || undefined}
           onValueChange={(value) => onProviderChange(value as AIProviderType)}
         >
-          <SelectTrigger className="w-auto h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5">
-            <Sparkles className="h-3 w-3 text-primary" />
-            <SelectValue placeholder="Select AI Model">
-              {selectedProvider && AI_MODELS.find(m => m.value === selectedProvider)?.label}
-            </SelectValue>
-            <ChevronUp className="h-3 w-3 opacity-50" />
+          <SelectTrigger className="h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5 max-w-[140px] [&>svg:last-child]:hidden">
+            <Sparkles className="h-3 w-3 text-primary shrink-0" />
+            <span className="truncate">
+              {selectedProvider ? AI_MODELS.find(m => m.value === selectedProvider)?.label : 'Select AI'}
+            </span>
+            <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
           <SelectContent>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
@@ -241,12 +240,12 @@ export function SectionChatInput({
           value={selectedTemplate}
           onValueChange={handleTemplateSelect}
         >
-          <SelectTrigger className="w-auto h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5">
-            <FileText className="h-3 w-3 text-primary" />
-            <SelectValue placeholder="Select Template">
+          <SelectTrigger className="h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5 max-w-[160px] [&>svg:last-child]:hidden">
+            <FileText className="h-3 w-3 text-primary shrink-0" />
+            <span className="truncate">
               {getTemplateDisplayName(selectedTemplate)}
-            </SelectValue>
-            <ChevronUp className="h-3 w-3 opacity-50" />
+            </span>
+            <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
           <SelectContent>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
@@ -310,12 +309,12 @@ export function SectionChatInput({
           onValueChange={onSectionChange}
           disabled={sortedSections.length === 0}
         >
-          <SelectTrigger className="w-auto h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5">
-            <LayoutList className="h-3 w-3 text-primary" />
-            <SelectValue placeholder="Select Section">
+          <SelectTrigger className="h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5 max-w-[160px] [&>svg:last-child]:hidden">
+            <LayoutList className="h-3 w-3 text-primary shrink-0" />
+            <span className="truncate">
               {getSectionDisplayName(selectedSection)}
-            </SelectValue>
-            <ChevronUp className="h-3 w-3 opacity-50" />
+            </span>
+            <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
           <SelectContent>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">

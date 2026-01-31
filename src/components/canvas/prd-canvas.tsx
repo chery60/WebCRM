@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHand
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Maximize2,
   Minimize2,
@@ -30,6 +31,10 @@ import {
   FileText,
   FolderOpen,
   Keyboard,
+  Menu,
+  X,
+  MessageSquare,
+  Library,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -49,6 +54,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 // Use generic types for Excalidraw to avoid import issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,6 +148,14 @@ export interface PRDCanvasProps {
   isGenerating?: boolean;
   /** Current generation type */
   generatingType?: CanvasGenerationType | null;
+  /** Canvas name for full-page mode */
+  canvasName?: string;
+  /** Callback when canvas name changes */
+  onCanvasNameChange?: (name: string) => void;
+  /** Callback to minimize/close full-page view */
+  onMinimize?: () => void;
+  /** Whether in full-page mode (from dialog) */
+  isFullPage?: boolean;
 }
 
 export interface PRDCanvasRef {
@@ -382,6 +401,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     onGenerateContent,
     isGenerating = false,
     generatingType = null,
+    canvasName,
+    onCanvasNameChange,
+    onMinimize,
+    isFullPage = false,
   },
   ref
 ) {
@@ -393,10 +416,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   const [hasContent, setHasContent] = useState(false);
   const [annotations, setAnnotations] = useState<CanvasAnnotation[]>(initialData?.annotations || []);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Library drawer state
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   // Use ref for excalidrawAPI to avoid re-renders when it changes
   const excalidrawAPIRef = useRef<any>(null);
-  
+
   // Store pending elements to add when Excalidraw mounts (for when generation happens while collapsed)
   const pendingElementsRef = useRef<ExcalidrawElement[] | null>(null);
 
@@ -475,32 +500,32 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // Stable callback for excalidraw API
   const handleExcalidrawAPI = useCallback((api: any) => {
     excalidrawAPIRef.current = api;
-    
+
     // Apply any pending elements that were generated while collapsed
     if (api && pendingElementsRef.current && pendingElementsRef.current.length > 0) {
       const pendingCount = pendingElementsRef.current.length;
-      
+
       // Small delay to ensure Excalidraw is fully initialized
       setTimeout(() => {
         if (excalidrawAPIRef.current && pendingElementsRef.current) {
           const currentElements = excalidrawAPIRef.current.getSceneElements();
           const newElements = [...currentElements, ...pendingElementsRef.current];
-          
+
           excalidrawAPIRef.current.updateScene({
             elements: newElements,
             commitToHistory: true,
           });
-          
+
           // Scroll to content
           setTimeout(() => {
             if (excalidrawAPIRef.current) {
               excalidrawAPIRef.current.scrollToContent();
             }
           }, 50);
-          
+
           // Clear pending elements
           pendingElementsRef.current = null;
-          
+
           // Trigger onChange
           onChange?.({
             elements: newElements,
@@ -508,7 +533,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
             files: excalidrawAPIRef.current.getFiles(),
             annotations: annotationsRef.current,
           });
-          
+
           if (process.env.NODE_ENV === 'development') {
             console.log(`[PRDCanvas] Applied ${pendingCount} pending elements`);
           }
@@ -534,7 +559,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
   // Track if we're in the middle of a generation to prevent intermediate onChange calls from overwriting
   const isGeneratingRef = useRef(false);
-  
+
   // Handle canvas changes - use refs to avoid infinite loops and unnecessary re-renders
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
@@ -655,10 +680,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
     try {
       // Get existing elements to pass to generator for proper positioning
-      const existingElements = excalidrawAPIRef.current 
-        ? excalidrawAPIRef.current.getSceneElements() 
+      const existingElements = excalidrawAPIRef.current
+        ? excalidrawAPIRef.current.getSceneElements()
         : (initialData?.elements || []);
-      
+
       const result = await onGenerateContent(type, existingElements);
 
       // Validate result
@@ -687,7 +712,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
 
       // Filter out any invalid elements before adding to canvas
-      const validElements = result.elements.filter((el: any) => 
+      const validElements = result.elements.filter((el: any) =>
         el && typeof el === 'object' && el.type && el.id
       );
 
@@ -700,7 +725,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
 
       setHasContent(true);
-      
+
       if (excalidrawAPIRef.current) {
         // Excalidraw is mounted - add elements directly
         const currentElements = excalidrawAPIRef.current.getSceneElements();
@@ -725,13 +750,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         // before we call onChange. This prevents race conditions with Excalidraw's internal state.
         setTimeout(() => {
           // Re-fetch elements from Excalidraw to ensure we have the latest state
-          const finalElements = excalidrawAPIRef.current 
-            ? excalidrawAPIRef.current.getSceneElements() 
+          const finalElements = excalidrawAPIRef.current
+            ? excalidrawAPIRef.current.getSceneElements()
             : newElements;
-          
+
           // Clear the generation flag BEFORE calling onChange so the callback can process normally
           isGeneratingRef.current = false;
-          
+
           onChange?.({
             elements: finalElements as any[],
             appState: excalidrawAPIRef.current?.getAppState() || { viewBackgroundColor: '#ffffff' },
@@ -746,7 +771,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       } else {
         // Excalidraw not mounted (collapsed view) - store elements as pending
         pendingElementsRef.current = validElements;
-        
+
         // Expand to mount Excalidraw - the handleExcalidrawAPI callback will apply the pending elements
         setIsCollapsed(false);
 
@@ -771,10 +796,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     } catch (error) {
       // Clear the generation flag on error
       isGeneratingRef.current = false;
-      
+
       // Log error in development, but don't crash in production
       console.error('[PRDCanvas] Error during generation:', error instanceof Error ? error.message : error);
-      
+
       // Could emit an event or call an error callback here for user notification
       // For now, we silently fail and let the parent component handle loading state
     }
@@ -811,7 +836,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       setHasContent(true);
     }
     setIsCollapsed(false);
-    
+
     // Trigger onChange to persist template changes
     onChange?.({
       elements: newElements,
@@ -826,7 +851,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     if (!excalidrawAPIRef.current) return;
     excalidrawAPIRef.current.updateScene({ elements: [], commitToHistory: true });
     setHasContent(false);
-    
+
     // Trigger onChange to persist the cleared state
     onChange?.({
       elements: [],
@@ -941,7 +966,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // Track the initial data reference for comparison
   // We use a ref to store the "committed" initial data to avoid re-processing on every render
   const initialDataRef = useRef<CanvasData | undefined>(initialData);
-  
+
   // Memoize initial data for Excalidraw
   // IMPORTANT: We include initialData in dependencies because PRDCanvas only mounts AFTER
   // the parent has loaded data (due to isNoteLoaded check). The parent uses a key prop
@@ -954,10 +979,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       viewBackgroundColor: '#ffffff',
       collaborators: new Map(),
     };
-    
+
     // Use the current initialData prop value
     const dataToUse = initialData;
-    
+
     if (!dataToUse) {
       if (process.env.NODE_ENV === 'development') {
         console.log('[PRDCanvas] excalidrawInitialData: No initial data provided');
@@ -970,11 +995,11 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
 
     // Safely extract elements, filtering out any invalid entries
     const rawElements = Array.isArray(dataToUse.elements) ? dataToUse.elements : [];
-    
+
     if (process.env.NODE_ENV === 'development') {
       console.log('[PRDCanvas] excalidrawInitialData: Processing', rawElements.length, 'elements');
     }
-    
+
     // Normalize linear elements (arrows, lines) to prevent "Linear element is not normalized" error
     // This ensures all required properties like lastCommittedPoint are present
     // Also filter out any null/undefined elements that could cause issues
@@ -994,10 +1019,10 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
               return [0, 0];
             });
           }
-          
+
           // Calculate lastCommittedPoint (required for normalization)
           const lastCommittedPoint = points[points.length - 1];
-          
+
           return {
             ...el,
             points,
@@ -1008,15 +1033,15 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         }
         return el;
       });
-    
+
     // Safely extract appState, ensuring it's an object
-    const rawAppState = dataToUse.appState && typeof dataToUse.appState === 'object' 
-      ? dataToUse.appState 
+    const rawAppState = dataToUse.appState && typeof dataToUse.appState === 'object'
+      ? dataToUse.appState
       : {};
-    
+
     // Update the ref with the processed data
     initialDataRef.current = dataToUse;
-    
+
     return {
       elements: normalizedElements,
       appState: {
@@ -1150,128 +1175,210 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     );
   }
 
-  // Header component - reused in both views
-  const CanvasHeader = ({ inFullscreen = false }: { inFullscreen?: boolean }) => (
-    <div className="flex items-center justify-between px-0 py-2 mb-4 flex-shrink-0">
-      <div className="flex items-center gap-2">
-        <Layers className="h-4 w-4 text-note-text-muted" />
-        <span className="font-medium text-sm text-note-text">
-          PRD Canvas{inFullscreen ? ' - Fullscreen' : ''}
-        </span>
-      </div>
-      <div className="flex items-center gap-1">
-        {/* AI Generate Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isGenerating}
-              className="gap-2"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {isGenerating ? 'Generating...' : 'AI Generate'}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
-            <CategorizedMenuItems
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              generatingType={generatingType}
-            />
-          </DropdownMenuContent>
-        </DropdownMenu>
+  // Header component - completely redesigned for full-page mode
+  const CanvasHeader = ({ inFullPage = false }: { inFullPage?: boolean }) => {
+    // Determine display name
+    const displayName = canvasName || 'PRD Canvas';
 
-        {/* Templates Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Templates
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
-              <DropdownMenuItem
-                key={template.id}
-                onClick={() => handleLoadTemplate(template.id)}
-                className="flex items-center gap-3"
+    // State for inline editing canvas name
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editName, setEditName] = useState(displayName);
+    const nameInputRef = useRef<HTMLInputElement>(null);
+
+    // Update local state when canvasName prop changes
+    useEffect(() => {
+      setEditName(canvasName || 'PRD Canvas');
+    }, [canvasName]);
+
+    // Focus input when editing starts
+    useEffect(() => {
+      if (isEditingName && nameInputRef.current) {
+        nameInputRef.current.focus();
+        nameInputRef.current.select();
+      }
+    }, [isEditingName]);
+
+    // Handle name save
+    const handleSaveName = useCallback(() => {
+      const trimmedName = editName.trim();
+      if (trimmedName && trimmedName !== displayName && onCanvasNameChange) {
+        onCanvasNameChange(trimmedName);
+      }
+      setIsEditingName(false);
+    }, [editName, displayName, onCanvasNameChange]);
+
+    // Handle name key down
+    const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSaveName();
+      } else if (e.key === 'Escape') {
+        setEditName(displayName);
+        setIsEditingName(false);
+      }
+    }, [handleSaveName, displayName]);
+
+    return (
+      <div className={cn(
+        "flex items-center justify-between border-b bg-white dark:bg-zinc-900 flex-shrink-0",
+        inFullPage ? "px-6 py-3" : "px-0 py-2 mb-4"
+      )}>
+        {/* Left side: Canvas name with icon - editable like Google Docs */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Layers className="h-5 w-5 text-muted-foreground shrink-0" />
+            {isEditingName ? (
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={handleNameKeyDown}
+                className="font-semibold text-base bg-transparent focus:outline-none min-w-0 flex-1 px-1"
+                placeholder="Canvas name"
+              />
+            ) : (
+              <span
+                className={cn(
+                  "font-semibold text-base truncate",
+                  "cursor-text hover:bg-muted/30 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+                )}
+                onClick={() => {
+                  setIsEditingName(true);
+                }}
+                title={displayName}
               >
-                <span className="text-lg">{template.thumbnail}</span>
-                <div>
-                  <div className="font-medium text-sm">{template.name}</div>
-                  <div className="text-xs text-muted-foreground">{template.description}</div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleClearCanvas} className="text-destructive">
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear Canvas
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                {displayName}
+              </span>
+            )}
+          </div>
+        </div>
 
-        {/* Comments/Annotations */}
-        <CanvasAnnotations
-          annotations={annotations}
-          onAddAnnotation={handleAddAnnotation}
-          onUpdateAnnotation={handleUpdateAnnotation}
-          onDeleteAnnotation={handleDeleteAnnotation}
-          onAddReply={handleAddReply}
-          currentUser={currentUser}
-        />
+        {/* Right side: All action buttons */}
+        <div className="flex items-center gap-1">
+          {/* AI Generate Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isGenerating}
+                className="gap-2"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {isGenerating ? 'Generating...' : 'AI Generate'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
+              <CategorizedMenuItems
+                onGenerate={handleGenerate}
+                isGenerating={isGenerating}
+                generatingType={generatingType}
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        {/* Collaboration Presence */}
-        <CanvasPresence />
+          {/* Templates Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <FolderOpen className="h-4 w-4" />
+                Templates
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
+                <DropdownMenuItem
+                  key={template.id}
+                  onClick={() => handleLoadTemplate(template.id)}
+                  className="flex items-start gap-3 py-2"
+                >
+                  <span className="text-lg">{template.thumbnail}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">{template.name}</div>
+                    <div className="text-xs text-muted-foreground">{template.description}</div>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Download className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleExportPNG}>
-              Export as PNG
-              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportSVG}>
-              Export as SVG
-              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
-        <KeyboardShortcutsHelp />
-
-        {inFullscreen ? (
+          {/* Comments */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setIsFullscreen(false)}
-                >
-                  <Minimize2 className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MessageSquare className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <span>Exit Fullscreen</span>
-                <kbd className="ml-2 text-xs">Esc</kbd>
-              </TooltipContent>
+              <TooltipContent>Comments</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        ) : (
-          <>
+
+          {/* Collaboration Presence - Only you indicator */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Users className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Only you</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Export</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportPNG}>
+                Export as PNG
+                <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportSVG}>
+                Export as SVG
+                <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Keyboard shortcuts help */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Keyboard className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Keyboard Shortcuts</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Minimize/Expand button */}
+          {inFullPage ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1279,69 +1386,130 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => setIsFullscreen(true)}
+                    onClick={onMinimize}
                   >
-                    <Maximize2 className="h-4 w-4" />
+                    <Minimize2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <span>Fullscreen</span>
-                  <kbd className="ml-2 text-xs">⇧⌘F</kbd>
-                </TooltipContent>
+                <TooltipContent>Minimize</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          ) : (
+            <>
+              {!isFullscreen && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsFullscreen(true)}
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Fullscreen</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {isFullscreen && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsFullscreen(false)}
+                      >
+                        <Minimize2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Exit Fullscreen</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </>
+          )}
 
-            {allowCollapse && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setIsCollapsed(true)}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <span>Collapse</span>
-                    <kbd className="ml-2 text-xs">Esc</kbd>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </>
-        )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
-  // Expanded view - SINGLE container that changes style based on fullscreen
-  // This ensures Excalidraw component stays mounted and doesn't lose state
+  // Expanded view - Different rendering based on mode
   return (
-    <div
-      ref={containerRef}
-      className={
-        isFullscreen
-          ? 'fixed inset-0 z-50 bg-note-bg flex flex-col'
-          : 'bg-transparent overflow-hidden isolate'
-      }
-      style={isFullscreen ? undefined : { contain: 'layout paint' }}
-      data-prd-canvas
-    >
-      {/* Header - always rendered, just with different props */}
-      <CanvasHeader inFullscreen={isFullscreen} />
+    <>
+      {/* Library Drawer - for templates */}
+      <Sheet open={isLibraryOpen} onOpenChange={setIsLibraryOpen}>
+        <SheetContent side="right" className="w-[400px] sm:w-[540px]">
+          <SheetHeader>
+            <SheetTitle>Canvas Library</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <h3 className="font-semibold text-sm">Quick Start Templates</h3>
+            <div className="grid gap-3">
+              {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => {
+                    handleLoadTemplate(template.id);
+                    setIsLibraryOpen(false);
+                  }}
+                  className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left"
+                >
+                  <span className="text-2xl">{template.thumbnail}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">{template.name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{template.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="pt-4 border-t">
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  handleClearCanvas();
+                  setIsLibraryOpen(false);
+                }}
+                className="w-full"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Canvas
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      {/* Canvas container - height changes based on fullscreen */}
-      <div 
-        className={isFullscreen ? 'flex-1 relative' : 'h-[350px] relative'}
-        style={{ isolation: 'isolate' }}
+      {/* Main canvas container */}
+      <div
+        ref={containerRef}
+        className={cn(
+          isFullPage || isFullscreen
+            ? 'fixed inset-0 z-50 bg-background flex flex-col'
+            : 'bg-transparent overflow-hidden isolate'
+        )}
+        style={isFullPage || isFullscreen ? undefined : { contain: 'layout paint' }}
+        data-prd-canvas
       >
-        {CanvasContent}
-        <CollaboratorCursors />
+        {/* Header - passes inFullPage prop */}
+        <CanvasHeader inFullPage={isFullPage} />
+
+        {/* Canvas container - full height in full-page/fullscreen modes */}
+        <div
+          className={cn(
+            isFullPage || isFullscreen ? 'flex-1 relative' : 'h-[350px] relative'
+          )}
+          style={{ isolation: 'isolate' }}
+        >
+          {CanvasContent}
+          <CollaboratorCursors />
+        </div>
       </div>
-    </div>
+    </>
   );
 });
 
