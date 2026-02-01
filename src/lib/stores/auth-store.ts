@@ -8,6 +8,7 @@ import { db } from '@/lib/db/dexie';
 import { User } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { employeesRepository } from '@/lib/db/repositories/supabase/employees';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 
 interface AuthState {
     currentUser: User | null;
@@ -17,7 +18,7 @@ interface AuthState {
 
     // Actions
     login: (email: string, password: string) => Promise<void>;
-    signup: (userData: Omit<User, 'id'>) => Promise<void>;
+    signup: (userData: Omit<User, 'id'>) => Promise<{ requiresEmailConfirmation: boolean }>; 
     logout: () => Promise<void>;
     updateProfile: (data: Partial<User>) => Promise<void>;
     setHasHydrated: (state: boolean) => void;
@@ -157,6 +158,10 @@ export const useAuthStore = create<AuthState>()(
                         });
 
                         if (error) {
+                            // Check for user already registered error
+                            if (error.message.includes('already registered') || error.message.includes('already exists')) {
+                                throw new Error('This email is already registered. Please sign in instead.');
+                            }
                             throw new Error(error.message);
                         }
 
@@ -164,45 +169,70 @@ export const useAuthStore = create<AuthState>()(
                             throw new Error('Signup failed');
                         }
 
-                        // Create user profile in users table
-                        const { error: profileError } = await supabase
+                        // Check if user profile already exists before creating
+                        const { data: existingProfile } = await supabase
                             .from('users')
-                            .upsert({
+                            .select('id')
+                            .eq('id', data.user.id)
+                            .single();
+
+                        // Only create profile if it doesn't exist
+                        if (!existingProfile) {
+                            const { error: profileError } = await supabase
+                                .from('users')
+                                .insert({
+                                    id: data.user.id,
+                                    name: userData.name,
+                                    email: userData.email,
+                                    avatar: userData.avatar,
+                                    role: userData.role || 'member',
+                                });
+
+                            if (profileError) {
+                                // Check for duplicate key violation (error code 23505)
+                                if (profileError.code === '23505') {
+                                    console.warn('User profile already exists, skipping creation');
+                                } else {
+                                    console.error('Error creating user profile:', profileError);
+                                    console.error('Error details:', JSON.stringify(profileError, null, 2));
+                                    // Don't throw here - profile creation is not critical for signup
+                                }
+                            }
+                        }
+
+                        const requiresEmailConfirmation = !data.session;
+
+                        if (data.session) {
+                            const user: User = {
                                 id: data.user.id,
-                                name: userData.name,
-                                email: userData.email,
-                                avatar: userData.avatar,
-                                role: userData.role || 'member',
-                            });
+                                ...userData,
+                            };
 
-                        if (profileError) {
-                            console.error('Error creating user profile:', profileError);
-                            console.error('Error details:', JSON.stringify(profileError, null, 2));
+                            set({ currentUser: user, isAuthenticated: true });
+                        } else {
+                            set({ currentUser: null, isAuthenticated: false });
                         }
 
-                        const user: User = {
-                            id: data.user.id,
-                            ...userData,
-                        };
-
-                        set({ currentUser: user, isAuthenticated: true });
-                    } else {
-                        // Dexie fallback
-                        await delay(1000);
-
-                        const existingUser = await db.users.where('email').equals(userData.email).first();
-                        if (existingUser) {
-                            throw new Error('User already exists');
-                        }
-
-                        const newUser: User = {
-                            id: uuidv4(),
-                            ...userData,
-                        };
-
-                        await db.users.add(newUser);
-                        set({ currentUser: newUser, isAuthenticated: true });
+                        return { requiresEmailConfirmation };
                     }
+
+                    // Dexie fallback
+                    await delay(1000);
+
+                    const existingUser = await db.users.where('email').equals(userData.email).first();
+                    if (existingUser) {
+                        throw new Error('This email is already registered. Please sign in instead.');
+                    }
+
+                    const newUser: User = {
+                        id: uuidv4(),
+                        ...userData,
+                    };
+
+                    await db.users.add(newUser);
+                    set({ currentUser: newUser, isAuthenticated: true });
+
+                    return { requiresEmailConfirmation: false };
                 } finally {
                     set({ isLoading: false });
                 }
@@ -215,6 +245,7 @@ export const useAuthStore = create<AuthState>()(
                         await supabase.auth.signOut();
                     }
                 }
+                useWorkspaceStore.getState().resetWorkspaceState();
                 set({ currentUser: null, isAuthenticated: false });
             },
 

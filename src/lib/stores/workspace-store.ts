@@ -29,6 +29,7 @@ interface WorkspaceStore {
     addMember: (workspaceId: string, userId: string, role: 'owner' | 'admin' | 'member' | 'viewer', invitedBy?: string) => Promise<WorkspaceMembership>;
     removeMember: (membershipId: string) => Promise<void>;
     updateMemberRole: (membershipId: string, role: 'admin' | 'member' | 'viewer') => Promise<void>;
+    resetWorkspaceState: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>()(
@@ -48,12 +49,17 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
                         // Use Supabase repository
                         const workspaces = await supabaseWorkspacesRepository.getUserWorkspaces(userId);
                         const memberships = await supabaseWorkspacesRepository.getUserMemberships(userId);
+                        const currentWorkspace = get().currentWorkspace;
+                        const currentWorkspaceValid = currentWorkspace
+                            ? workspaces.some(workspace => workspace.id === currentWorkspace.id)
+                            : false;
 
                         set({ userWorkspaces: workspaces, memberships });
 
-                        // Set current workspace if not set
-                        if (!get().currentWorkspace && workspaces.length > 0) {
+                        if (workspaces.length > 0 && !currentWorkspaceValid) {
                             set({ currentWorkspace: workspaces[0] });
+                        } else if (workspaces.length === 0) {
+                            set({ currentWorkspace: null });
                         }
                     } else {
                         // Use Dexie (local storage)
@@ -70,10 +76,17 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
                             .and(w => !w.isDeleted)
                             .toArray();
 
+                        const currentWorkspace = get().currentWorkspace;
+                        const currentWorkspaceValid = currentWorkspace
+                            ? workspaces.some(workspace => workspace.id === currentWorkspace.id)
+                            : false;
+
                         set({ userWorkspaces: workspaces, memberships });
 
-                        if (!get().currentWorkspace && workspaces.length > 0) {
+                        if (workspaces.length > 0 && !currentWorkspaceValid) {
                             set({ currentWorkspace: workspaces[0] });
+                        } else if (workspaces.length === 0) {
+                            set({ currentWorkspace: null });
                         }
                     }
                 } catch (error) {
@@ -364,6 +377,10 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
                     console.error('Failed to update member role:', error);
                     throw error;
                 }
+            },
+
+            resetWorkspaceState: () => {
+                set({ currentWorkspace: null, userWorkspaces: [], memberships: [] });
             },
         }),
         {

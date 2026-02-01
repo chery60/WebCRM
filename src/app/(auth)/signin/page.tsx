@@ -16,8 +16,10 @@ function SignInContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const invitationToken = searchParams?.get('invitation');
+    const signInMessage = searchParams?.get('message');
+    const prefillEmail = searchParams?.get('email');
 
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(prefillEmail ? decodeURIComponent(prefillEmail) : '');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
@@ -76,6 +78,12 @@ function SignInContent() {
                     {error && (
                         <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 rounded-md">
                             {error}
+                        </div>
+                    )}
+
+                    {signInMessage === 'check-email' && (
+                        <div className="mb-4 p-3 text-sm text-green-600 bg-green-50 rounded-md">
+                            We sent a verification link to your email. Please verify to continue.
                         </div>
                     )}
 

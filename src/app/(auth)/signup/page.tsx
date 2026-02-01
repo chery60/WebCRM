@@ -42,12 +42,17 @@ function SignUpContent() {
         }
 
         try {
-            await signup({
+            const { requiresEmailConfirmation } = await signup({
                 name: `${firstName} ${lastName}`,
                 email,
                 password,
                 role: 'member'
             });
+
+            if (requiresEmailConfirmation) {
+                router.push(`/signin?message=check-email&email=${encodeURIComponent(email)}`);
+                return;
+            }
 
             // If user was invited, redirect to accept the invitation
             if (invitationToken) {
