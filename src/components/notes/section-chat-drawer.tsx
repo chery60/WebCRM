@@ -341,8 +341,27 @@ export function SectionChatDrawer({
       <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
         <SheetContent 
           side="right" 
-          className="w-full sm:max-w-xl p-0 flex flex-col [&>button]:hidden"
-          onInteractOutside={(e) => e.preventDefault()}
+          className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden [&>button]:hidden"
+          onInteractOutside={(e) => {
+            // Allow interactions with Select dropdowns and Dialog modals (they render in portals)
+            const target = e.target as HTMLElement;
+            if (
+              target.closest('[role="listbox"]') || 
+              target.closest('[data-radix-select-content]') ||
+              target.closest('[data-radix-select-viewport]') ||
+              target.closest('[data-slot="select-content"]') ||
+              target.closest('[data-radix-popper-content-wrapper]') ||
+              target.closest('[data-radix-dialog-content]') ||
+              target.closest('[data-slot="dialog-content"]') ||
+              target.closest('[role="dialog"]')
+            ) {
+              // This is a dropdown or modal - allow the interaction (don't call preventDefault)
+              // By returning WITHOUT preventDefault, the click goes through normally
+              return;
+            }
+            // For all other outside clicks, prevent closing the drawer
+            e.preventDefault();
+          }}
         >
           {/* Header */}
           <SheetHeader className="px-6 py-4 border-b border-border">
@@ -385,7 +404,7 @@ export function SectionChatDrawer({
           {/* Messages Area */}
           <div 
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-6 py-4"
+            className="flex-1 overflow-y-auto px-6 py-4 min-h-0"
           >
             {messages.length === 0 ? (
               <WelcomeMessage 

@@ -67,14 +67,11 @@ This thinking process makes your reasoning transparent and builds stakeholder co
 ## Mermaid Diagrams
 When diagrams would help clarify the PRD, generate valid Mermaid syntax. Wrap diagrams in \`\`\`mermaid code blocks.
 
-Supported diagram types:
+Supported diagram types (RESTRICTED to prevent parsing errors):
 - **flowchart**: For user flows, processes, decision trees
 - **sequenceDiagram**: For system interactions, API flows
-- **erDiagram**: For data models, entity relationships
-- **gantt**: For timelines, project phases
-- **stateDiagram-v2**: For state machines, status flows
-- **pie**: For distribution, composition breakdowns
-- **journey**: For user journey mapping`;
+
+NOTE: Other diagram types (erDiagram, gantt, stateDiagram, pie, journey) are disabled due to frequent parsing errors.`;
 
 // ============================================================================
 // STRUCTURED PRD SECTIONS
@@ -320,11 +317,11 @@ After your thinking analysis, generate the PRD following this structure:
   - Comparison tables (current vs proposed)
   - Requirements with acceptance criteria
   - Timeline/milestone summaries
-- Use **Mermaid diagrams** for:
+- Use **Mermaid diagrams** for (ONLY these types):
   - User flows (\`\`\`mermaid flowchart TD ... \`\`\`)
   - System interactions (\`\`\`mermaid sequenceDiagram ... \`\`\`)
-  - State machines (\`\`\`mermaid stateDiagram-v2 ... \`\`\`)
-  - Entity relationships (\`\`\`mermaid erDiagram ... \`\`\`)
+  
+  DO NOT use: stateDiagram, erDiagram, gantt, pie, or journey diagrams (disabled due to parsing errors)
 - Use **bullet lists** for:
   - User stories (As a [user], I want [feature] so that [benefit])
   - Acceptance criteria
@@ -334,6 +331,8 @@ After your thinking analysis, generate the PRD following this structure:
 // MERMAID GENERATION HELPERS
 // ============================================================================
 
+// RESTRICTED: Only flowchart and sequenceDiagram examples
+// Other types removed to prevent AI from generating error-prone diagrams
 export const MERMAID_SYNTAX_EXAMPLES: Record<string, string> = {
   flowchart: `\`\`\`mermaid
 flowchart TD
@@ -357,72 +356,6 @@ sequenceDiagram
     D-->>S: Return Data
     S-->>A: Response
     A-->>U: Update UI
-\`\`\``,
-
-  erDiagram: `\`\`\`mermaid
-erDiagram
-    USER ||--o{ ORDER : places
-    USER {
-        string id PK
-        string email
-        string name
-    }
-    ORDER ||--|{ ITEM : contains
-    ORDER {
-        string id PK
-        string userId FK
-        date createdAt
-    }
-    ITEM {
-        string id PK
-        string orderId FK
-        string productId FK
-        int quantity
-    }
-\`\`\``,
-
-  gantt: `\`\`\`mermaid
-gantt
-    title Project Timeline
-    dateFormat YYYY-MM-DD
-    section Phase 1
-        Design           :a1, 2024-01-01, 2w
-        Development      :a2, after a1, 4w
-    section Phase 2
-        Testing          :b1, after a2, 2w
-        Launch           :milestone, after b1, 0d
-\`\`\``,
-
-  stateDiagram: `\`\`\`mermaid
-stateDiagram-v2
-    [*] --> Draft
-    Draft --> InReview: Submit
-    InReview --> Approved: Approve
-    InReview --> Draft: Request Changes
-    Approved --> Published: Publish
-    Published --> [*]
-\`\`\``,
-
-  journey: `\`\`\`mermaid
-journey
-    title User Journey
-    section Discovery
-        Find product: 3: User
-        Read reviews: 4: User
-    section Purchase
-        Add to cart: 5: User
-        Checkout: 4: User
-    section Post-Purchase
-        Track order: 3: User
-        Receive item: 5: User
-\`\`\``,
-
-  pie: `\`\`\`mermaid
-pie showData
-    title Distribution
-    "Category A" : 45
-    "Category B" : 30
-    "Category C" : 25
 \`\`\``,
 };
 

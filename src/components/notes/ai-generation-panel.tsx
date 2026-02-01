@@ -33,6 +33,7 @@ import {
   Brain,
   Wand2,
   ChevronRight,
+  Send,
 } from 'lucide-react';
 import { useAIService } from '@/lib/ai/use-ai-service';
 import { useAISettingsStore, getProviderDisplayName, type AIProviderType } from '@/lib/stores/ai-settings-store';
@@ -47,7 +48,7 @@ import { cn } from '@/lib/utils';
 // TYPES
 // ============================================================================
 
-export type GenerationMode = 
+export type GenerationMode =
   | 'generate-prd'
   | 'prd-template'
   | 'generate-features'
@@ -113,7 +114,7 @@ export function AIGenerationPanel({
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'preview'>('input');
-  
+
   // Key to force re-mount of content when panel opens
   const [resetKey, setResetKey] = useState(0);
 
@@ -121,7 +122,7 @@ export function AIGenerationPanel({
   const { availableProviders, activeProvider, hasProvider } = useAIService();
   const { providers } = useAISettingsStore();
   const { templates, seedStarterTemplates } = useCustomTemplatesStore();
-  
+
   // Seed starter templates on first load
   useEffect(() => {
     seedStarterTemplates();
@@ -132,15 +133,15 @@ export function AIGenerationPanel({
 
   // Track previous open state to detect when panel opens
   const prevOpenRef = useRef(false);
-  
+
   // Reset state when panel opens (only on transition from closed to open)
   // IMPORTANT: Only depend on `open` to avoid false triggers from other state changes
   useEffect(() => {
     const wasOpened = open && !prevOpenRef.current;
     const wasClosed = !open && prevOpenRef.current;
-    
+
     console.log('[AIGenerationPanel] useEffect triggered - open:', open, 'prevOpen:', prevOpenRef.current, 'wasOpened:', wasOpened);
-    
+
     if (wasOpened) {
       console.log('[AIGenerationPanel] Panel opened, resetting state to input step');
       // Reset all state to initial values
@@ -152,10 +153,22 @@ export function AIGenerationPanel({
       setError(null);
       setResetKey(prev => prev + 1);
     }
-    
+
     // Update ref after checking (important: this must come after the check)
     prevOpenRef.current = open;
   }, [open]); // Only depend on `open` - other dependencies caused false triggers
+
+  // Ref for auto-resizing textarea
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea when prompt changes (only for chat mode)
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea && (mode === 'generate-features' || mode === 'generate-tasks')) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [prompt, mode]);
 
   // Safety check: if we're in preview step but have no content to show, go back to input
   useEffect(() => {
@@ -239,7 +252,7 @@ export function AIGenerationPanel({
     console.log('[AIGenerationPanel] effectiveProvider:', effectiveProvider);
     console.log('[AIGenerationPanel] mode:', mode);
     console.log('[AIGenerationPanel] prompt:', prompt);
-    
+
     // Note: We allow generation even without a configured provider because
     // the Mock AI provider will be used as a fallback for testing/demo purposes
     if (!hasProvider) {
@@ -294,7 +307,7 @@ export function AIGenerationPanel({
           // For tasks, first check if we have saved features, then try to generate new ones,
           // and finally fall back to direct PRD-based generation
           let features: GeneratedFeature[] = [];
-          
+
           // Use saved features if available
           if (savedFeatures.length > 0) {
             features = savedFeatures;
@@ -313,7 +326,7 @@ export function AIGenerationPanel({
           }
 
           const allTasks: GeneratedTask[] = [];
-          
+
           if (features.length > 0) {
             // Generate tasks for each feature (limit to top 3 features)
             for (const feature of features.slice(0, 3)) {
@@ -332,7 +345,7 @@ export function AIGenerationPanel({
               }
             }
           }
-          
+
           // Fallback: If no tasks generated from features, generate directly from PRD
           if (allTasks.length === 0) {
             try {
@@ -345,7 +358,7 @@ export function AIGenerationPanel({
               console.error('Direct task generation also failed:', directError);
             }
           }
-          
+
           if (allTasks.length === 0) {
             setError('Could not generate tasks from the content. Please try adding more detail to your PRD or try again.');
             return;
@@ -382,7 +395,7 @@ export function AIGenerationPanel({
     } catch (err) {
       console.error('Generation failed:', err);
       const errorMessage = err instanceof Error ? err.message : 'Generation failed. Please try again.';
-      
+
       // Provide more user-friendly error messages for common issues
       if (errorMessage.includes('not found') || errorMessage.includes('not supported')) {
         setError(`Model not available. Please go to Settings > Apps and select a different model for your provider, then try again.`);
@@ -414,7 +427,7 @@ export function AIGenerationPanel({
       onTasksGenerated(generatedTasks.filter(t => t.isSelected));
     }
     handleClose();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedContent, generatedFeatures, generatedTasks, onPRDGenerated, onFeaturesGenerated, onTasksGenerated]);
 
   // Handle close and reset
@@ -458,241 +471,365 @@ export function AIGenerationPanel({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div key={resetKey} className="px-6 py-4 space-y-6">
-            {step === 'input' ? (
-              <>
-                {/* Provider Selector */}
-                {availableProviders.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>AI Provider</Label>
-                    <Select
-                      value={effectiveProvider}
-                      onValueChange={(v) => setSelectedProvider(v as AIProviderType)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableProviders.map(({ type, name }) => (
-                          <SelectItem key={type} value={type}>
-                            <div className="flex items-center gap-2">
-                              <ProviderIcon provider={type} />
-                              <span>{name}</span>
-                              {type === activeProvider && (
-                                <Badge variant="secondary" className="ml-2 text-xs">Active</Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* No Provider Info */}
-                {!hasProvider && (
-                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <strong>Using Demo Mode (Mock AI).</strong> For real AI generation, go to{' '}
-                      <a href="/settings/apps" className="underline">Settings → Apps</a> to add your API key.
-                    </p>
-                  </div>
-                )}
-
-                {/* Template Selector */}
-                {config.showTemplateSelector && (
-                  <div className="space-y-2">
-                    <Label>Template Type</Label>
-                    <Select
-                      value={selectedTemplateId}
-                      onValueChange={(v) => setSelectedTemplateId(v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {templates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            <div>
-                              <div className="font-medium">{template.name}</div>
-                              <div className="text-xs text-muted-foreground">{template.description}</div>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Content Preview (if requires content) */}
-                {config.requiresContent && currentContent && (
-                  <div className="space-y-2">
-                    <Label>Current Content</Label>
-                    <div className="bg-muted/50 rounded-lg p-3 max-h-32 overflow-auto">
-                      <p className="text-sm text-muted-foreground line-clamp-6">
-                        {currentContent.substring(0, 500)}
-                        {currentContent.length > 500 && '...'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Prompt Input */}
-                <div className="space-y-2">
-                  <Label>{config.promptLabel}</Label>
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder={config.promptPlaceholder}
-                    rows={4}
-                    className="resize-none"
-                  />
+          <div key={resetKey} className="h-full flex flex-col">
+            {step === 'input' && (mode === 'generate-features' || mode === 'generate-tasks') ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-muted-foreground">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                  {mode === 'generate-features' ? (
+                    <Lightbulb className="h-8 w-8 text-primary" />
+                  ) : (
+                    <ListTodo className="h-8 w-8 text-primary" />
+                  )}
                 </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {mode === 'generate-features' ? 'Generate Features with AI' : 'Generate Tasks with AI'}
+                </h3>
+                <p className="max-w-sm mx-auto mb-8">
+                  {mode === 'generate-features'
+                    ? "Describe any specific focus or requirements, and we'll extract detailed features from your PRD."
+                    : "Describe your team context or preferences, and we'll break down features into actionable tasks."}
+                </p>
 
-                {/* Error */}
-                {error && (
-                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                    <p className="text-sm text-destructive">{error}</p>
-                  </div>
-                )}
-              </>
+                {/* Suggestions */}
+                <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                  {(mode === 'generate-features' ? [
+                    "Focus on MVP features",
+                    "Prioritize admin capabilities",
+                    "Include mobile-specific features"
+                  ] : [
+                    "Small team of 3 developers",
+                    "Using React and Node.js",
+                    "Sprint duration: 2 weeks"
+                  ]).map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-full transition-colors"
+                      onClick={() => setPrompt(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : (
-              /* Preview Step */
-              <>
-                {/* Generated PRD Content */}
-                {generatedContent && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Generated Content</Label>
-                      <Badge variant="outline" className="text-xs">
-                        {effectiveProvider ? getProviderDisplayName(effectiveProvider) : 'AI'}
-                      </Badge>
-                    </div>
-                    <div className="bg-muted/30 rounded-lg p-4 max-h-[400px] overflow-auto">
-                      <pre className="text-sm whitespace-pre-wrap font-sans">
-                        {generatedContent}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-
-                {/* Generated Features */}
-                {generatedFeatures.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Generated Features ({generatedFeatures.filter(f => f.isSelected).length} selected)</Label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setGeneratedFeatures(prev => prev.map(f => ({ ...f, isSelected: true })))}
-                      >
-                        Select All
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      {generatedFeatures.map((feature) => (
-                        <div
-                          key={feature.id}
-                          className={cn(
-                            'border rounded-lg p-3 cursor-pointer transition-colors',
-                            feature.isSelected
-                              ? 'border-primary bg-primary/5'
-                              : 'border-input hover:border-muted-foreground/50'
-                          )}
-                          onClick={() => toggleFeatureSelection(feature.id)}
+              <div className="px-6 py-4 space-y-6">
+                {step === 'input' ? (
+                  <>
+                    {/* Provider Selector */}
+                    {availableProviders.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>AI Provider</Label>
+                        <Select
+                          value={effectiveProvider}
+                          onValueChange={(v) => setSelectedProvider(v as AIProviderType)}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className={cn(
-                              'w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5',
-                              feature.isSelected
-                                ? 'bg-primary border-primary text-primary-foreground'
-                                : 'border-muted-foreground/30'
-                            )}>
-                              {feature.isSelected && <Check className="h-3 w-3" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{feature.title}</span>
-                                <Badge variant="outline" className={cn(
-                                  'text-xs',
-                                  feature.priority === 'urgent' && 'border-red-500 text-red-500',
-                                  feature.priority === 'high' && 'border-orange-500 text-orange-500',
-                                  feature.priority === 'medium' && 'border-yellow-500 text-yellow-500',
-                                  feature.priority === 'low' && 'border-gray-500 text-gray-500'
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableProviders.map(({ type, name }) => (
+                              <SelectItem key={type} value={type}>
+                                <div className="flex items-center gap-2">
+                                  <ProviderIcon provider={type} />
+                                  <span>{name}</span>
+                                  {type === activeProvider && (
+                                    <Badge variant="secondary" className="ml-2 text-xs">Active</Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* No Provider Info */}
+                    {!hasProvider && (
+                      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          <strong>Using Demo Mode (Mock AI).</strong> For real AI generation, go to{' '}
+                          <a href="/settings/apps" className="underline">Settings → Apps</a> to add your API key.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Template Selector */}
+                    {config.showTemplateSelector && (
+                      <div className="space-y-2">
+                        <Label>Template Type</Label>
+                        <Select
+                          value={selectedTemplateId}
+                          onValueChange={(v) => setSelectedTemplateId(v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a template" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {templates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                <div>
+                                  <div className="font-medium">{template.name}</div>
+                                  <div className="text-xs text-muted-foreground">{template.description}</div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Content Preview (if requires content) */}
+                    {config.requiresContent && currentContent && (
+                      <div className="space-y-2">
+                        <Label>Current Content</Label>
+                        <div className="bg-muted/50 rounded-lg p-3 max-h-32 overflow-auto">
+                          <p className="text-sm text-muted-foreground line-clamp-6">
+                            {currentContent.substring(0, 500)}
+                            {currentContent.length > 500 && '...'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Prompt Input */}
+                    <div className="space-y-2">
+                      <Label>{config.promptLabel}</Label>
+                      <Textarea
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder={config.promptPlaceholder}
+                        rows={4}
+                        className="resize-none"
+                      />
+                    </div>
+
+                    {/* Error */}
+                    {error && (
+                      <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                        <p className="text-sm text-destructive">{error}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Preview Step */
+                  <>
+                    {/* Generated PRD Content */}
+                    {generatedContent && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Generated Content</Label>
+                          <Badge variant="outline" className="text-xs">
+                            {effectiveProvider ? getProviderDisplayName(effectiveProvider) : 'AI'}
+                          </Badge>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-4 max-h-[400px] overflow-auto">
+                          <pre className="text-sm whitespace-pre-wrap font-sans">
+                            {generatedContent}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generated Features */}
+                    {generatedFeatures.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Generated Features ({generatedFeatures.filter(f => f.isSelected).length} selected)</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setGeneratedFeatures(prev => prev.map(f => ({ ...f, isSelected: true })))}
+                          >
+                            Select All
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {generatedFeatures.map((feature) => (
+                            <div
+                              key={feature.id}
+                              className={cn(
+                                'border rounded-lg p-3 cursor-pointer transition-colors',
+                                feature.isSelected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-input hover:border-muted-foreground/50'
+                              )}
+                              onClick={() => toggleFeatureSelection(feature.id)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={cn(
+                                  'w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5',
+                                  feature.isSelected
+                                    ? 'bg-primary border-primary text-primary-foreground'
+                                    : 'border-muted-foreground/30'
                                 )}>
-                                  {feature.priority}
-                                </Badge>
-                                <Badge variant="secondary" className="text-xs">{feature.phase}</Badge>
+                                  {feature.isSelected && <Check className="h-3 w-3" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{feature.title}</span>
+                                    <Badge variant="outline" className={cn(
+                                      'text-xs',
+                                      feature.priority === 'urgent' && 'border-red-500 text-red-500',
+                                      feature.priority === 'high' && 'border-orange-500 text-orange-500',
+                                      feature.priority === 'medium' && 'border-yellow-500 text-yellow-500',
+                                      feature.priority === 'low' && 'border-gray-500 text-gray-500'
+                                    )}>
+                                      {feature.priority}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs">{feature.phase}</Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {feature.description}
+                                  </p>
+                                </div>
                               </div>
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {feature.description}
-                              </p>
                             </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    )}
 
-                {/* Generated Tasks */}
-                {generatedTasks.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Generated Tasks ({generatedTasks.filter(t => t.isSelected).length} selected)</Label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setGeneratedTasks(prev => prev.map(t => ({ ...t, isSelected: true })))}
-                      >
-                        Select All
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      {generatedTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={cn(
-                            'border rounded-lg p-3 cursor-pointer transition-colors',
-                            task.isSelected
-                              ? 'border-primary bg-primary/5'
-                              : 'border-input hover:border-muted-foreground/50'
-                          )}
-                          onClick={() => toggleTaskSelection(task.id)}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className={cn(
-                              'w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5',
-                              task.isSelected
-                                ? 'bg-primary border-primary text-primary-foreground'
-                                : 'border-muted-foreground/30'
-                            )}>
-                              {task.isSelected && <Check className="h-3 w-3" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium">{task.title}</span>
-                                <Badge variant="secondary" className="text-xs">{task.role}</Badge>
-                                <Badge variant="outline" className="text-xs">{task.estimatedHours}h</Badge>
-                              </div>
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {task.description}
-                              </p>
-                            </div>
-                          </div>
+                    {/* Generated Tasks */}
+                    {generatedTasks.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Generated Tasks ({generatedTasks.filter(t => t.isSelected).length} selected)</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setGeneratedTasks(prev => prev.map(t => ({ ...t, isSelected: true })))}
+                          >
+                            Select All
+                          </Button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                        <div className="space-y-2">
+                          {generatedTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className={cn(
+                                'border rounded-lg p-3 cursor-pointer transition-colors',
+                                task.isSelected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-input hover:border-muted-foreground/50'
+                              )}
+                              onClick={() => toggleTaskSelection(task.id)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={cn(
+                                  'w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5',
+                                  task.isSelected
+                                    ? 'bg-primary border-primary text-primary-foreground'
+                                    : 'border-muted-foreground/30'
+                                )}>
+                                  {task.isSelected && <Check className="h-3 w-3" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium">{task.title}</span>
+                                    <Badge variant="secondary" className="text-xs">{task.role}</Badge>
+                                    <Badge variant="outline" className="text-xs">{task.estimatedHours}h</Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {task.description}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t shrink-0 flex justify-between gap-3 bg-background">
-          {step === 'input' ? (
+        <div className={cn(
+          "px-6 py-4 border-t shrink-0 bg-background",
+          // Use different layout for chat mode (input step for features and tasks) vs standard mode
+          step === 'input' && (mode === 'generate-features' || mode === 'generate-tasks') ? "" : "flex justify-between gap-3"
+        )}>
+          {step === 'input' && (mode === 'generate-features' || mode === 'generate-tasks') ? (
+            <div className="space-y-3">
+              {/* Error in chat mode */}
+              {error && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-2">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+
+              {/* Chat Input Area */}
+              <div className="relative flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <Textarea
+                    ref={textareaRef}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (prompt.trim() && !isGenerating) {
+                          handleGenerate();
+                        }
+                      }
+                    }}
+                    placeholder={config.promptPlaceholder}
+                    disabled={isGenerating}
+                    className={cn(
+                      "min-h-[44px] max-h-[200px] resize-none pr-12",
+                      "bg-muted/50 border-muted-foreground/20",
+                      "focus:bg-background focus:border-primary/50",
+                      "placeholder:text-muted-foreground/60"
+                    )}
+                    rows={1}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className={cn(
+                      "absolute right-2 bottom-2 h-8 w-8",
+                      prompt.trim() ? "text-primary hover:text-primary" : "text-muted-foreground"
+                    )}
+                    onClick={handleGenerate}
+                    disabled={!prompt.trim() || isGenerating}
+                  >
+                    {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Provider Selection Row */}
+              {availableProviders.length > 0 && (
+                <div className="flex items-center">
+                  <Select
+                    value={effectiveProvider}
+                    onValueChange={(v) => setSelectedProvider(v as AIProviderType)}
+                  >
+                    <SelectTrigger className="w-auto h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5">
+                      <Sparkles className="h-3 w-3 text-primary" />
+                      <SelectValue placeholder="Select AI Model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        AI Model
+                      </div>
+                      {availableProviders.map(({ type, name }) => (
+                        <SelectItem key={type} value={type} className="text-sm">
+                          <div className="flex items-center gap-2">
+                            <ProviderIcon provider={type} />
+                            <span>{name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          ) : step === 'input' ? (
             <>
               <Button variant="outline" onClick={handleClose}>
                 Cancel

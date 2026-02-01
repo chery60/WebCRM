@@ -63,14 +63,17 @@ export function useDeletePipeline() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      // First delete all roadmaps (which will cascade to feature requests)
-      const roadmaps = await roadmapsRepository.getByPipelineId(id);
-      for (const roadmap of roadmaps) {
-        await featureRequestsRepository.deleteByRoadmapId(roadmap.id);
-        await roadmapsRepository.delete(roadmap.id);
+      try {
+        // Repository now handles cascading delete via RPC
+        const result = await pipelinesRepository.delete(id);
+        if (!result) {
+          throw new Error('Failed to delete pipeline');
+        }
+        return result;
+      } catch (error) {
+        console.error('Error in delete pipeline mutation:', error);
+        throw error;
       }
-      // Then delete the pipeline
-      return pipelinesRepository.delete(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pipelineKeys.lists() });

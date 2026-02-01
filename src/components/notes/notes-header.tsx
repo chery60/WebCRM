@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -51,7 +52,6 @@ export function NotesHeader({ projectId, projectName, isEmpty = false }: NotesHe
   const createProject = useCreateProject();
   const [isCreating, setIsCreating] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [projectNameInput, setProjectNameInput] = useState('');
 
   // Create a new PRD immediately and redirect to it
   const handleCreatePRD = async () => {
@@ -94,30 +94,6 @@ export function NotesHeader({ projectId, projectName, isEmpty = false }: NotesHe
       }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to create PRD');
-      setIsCreating(false);
-    }
-  };
-
-  // Create a new project
-  const handleCreateProject = async () => {
-    if (!projectNameInput.trim() || !currentWorkspace) {
-      toast.error('Please enter a project name');
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      await createProject.mutateAsync({
-        name: projectNameInput.trim(),
-        workspaceId: currentWorkspace.id,
-      });
-
-      toast.success('Project created successfully');
-      setIsProjectDialogOpen(false);
-      setProjectNameInput('');
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to create project');
-    } finally {
       setIsCreating(false);
     }
   };
@@ -276,47 +252,10 @@ export function NotesHeader({ projectId, projectName, isEmpty = false }: NotesHe
       </div>
 
       {/* Create Project Dialog */}
-      <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
-            <DialogDescription>
-              Projects help you organize related PRDs together.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="project-name">Project Name</Label>
-              <Input
-                id="project-name"
-                placeholder="Enter project name"
-                value={projectNameInput}
-                onChange={(e) => setProjectNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isCreating) {
-                    handleCreateProject();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsProjectDialogOpen(false)}
-              disabled={isCreating}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateProject}
-              disabled={isCreating || !projectNameInput.trim()}
-            >
-              {isCreating ? 'Creating...' : 'Create Project'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateProjectDialog
+        open={isProjectDialogOpen}
+        onOpenChange={setIsProjectDialogOpen}
+      />
     </div>
   );
 }

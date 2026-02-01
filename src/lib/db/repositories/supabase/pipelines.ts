@@ -21,7 +21,7 @@ function rowToPipeline(row: any): Pipeline {
 async function getCurrentUserId(): Promise<string | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  
+
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id || null;
 }
@@ -130,19 +130,16 @@ export const pipelinesRepository = {
     return rowToPipeline(updatedData);
   },
 
-  // Soft delete a pipeline
+  // Soft delete a pipeline using RPC (handles cascading delete securely)
   async delete(id: string): Promise<boolean> {
     const supabase = getSupabaseClient();
     if (!supabase) return false;
 
-    const { error } = await supabase
-      .from('pipelines')
-      .update({ is_deleted: true })
-      .eq('id', id);
+    const { error } = await supabase.rpc('delete_pipeline', { target_pipeline_id: id });
 
     if (error) {
       console.error('Error deleting pipeline:', error);
-      return false;
+      throw new Error(`Failed to delete pipeline: ${error.message}`);
     }
 
     return true;

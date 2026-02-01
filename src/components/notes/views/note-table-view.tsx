@@ -307,8 +307,14 @@ export function NoteTableView({ notes, isLoading, projectId, projectsMap }: Note
                 <TableCell>
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <FolderOpen className="h-3.5 w-3.5" />
-                    <span className="truncate max-w-[120px]">
-                      {note.projectId && projectsMap?.get(note.projectId) || 'No Project'}
+                    <span className={cn(
+                      "truncate max-w-[120px]",
+                      note.projectId && !projectsMap?.get(note.projectId) && "text-yellow-600 dark:text-yellow-500"
+                    )}>
+                      {note.projectId 
+                        ? projectsMap?.get(note.projectId) || '⚠️ Inaccessible Project'
+                        : 'No Project'
+                      }
                     </span>
                   </div>
                 </TableCell>

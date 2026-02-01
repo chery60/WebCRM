@@ -73,6 +73,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { MoreHorizontal, Pencil, Trash2, Folder } from 'lucide-react';
 import { toast } from 'sonner';
+import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
 import type { Project } from '@/types';
 
 interface NavItem {
@@ -128,8 +129,6 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
   const [isOpen, setIsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectInstructions, setNewProjectInstructions] = useState('');
   const [creatingPRDForProject, setCreatingPRDForProject] = useState<string | null>(null);
 
   // Rename dialog state
@@ -262,16 +261,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
     lastProcessedPathnameRef.current = pathname;
   }, [pathname, allPRDs]);
 
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
-    const newProject = await createProject.mutateAsync({
-      name: newProjectName.trim(),
-      instructions: newProjectInstructions.trim() || undefined,
-    });
-    setNewProjectName('');
-    setNewProjectInstructions('');
-    setShowCreateDialog(false);
-    toast.success('Project created');
+  const handleCreateProject = (newProject: Project) => {
     // Auto-expand the new project
     if (newProject?.id) {
       setExpandedProjects(prev => new Set(prev).add(newProject.id));
@@ -614,105 +604,11 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       </Collapsible>
 
       {/* Create Project Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={(open) => {
-        setShowCreateDialog(open);
-        if (!open) {
-          setNewProjectName('');
-          setNewProjectInstructions('');
-        }
-      }}>
-        <DialogContent
-          className="!w-[680px] !h-[560px] !max-w-none !p-0"
-          style={{
-            backgroundColor: 'rgb(248, 248, 247)',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            borderRadius: '20px',
-            color: 'rgb(52, 50, 45)',
-            fontSize: '16px',
-            lineHeight: '24px',
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <div className="flex flex-col h-full p-6">
-            <DialogHeader className="flex flex-col items-center text-center pb-4 flex-shrink-0">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-muted/50">
-                <Folder className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <DialogTitle className="text-xl" style={{ color: 'rgb(52, 50, 45)' }}>Create project</DialogTitle>
-            </DialogHeader>
-
-            <div className="flex-1 space-y-4 py-2 overflow-y-auto">
-              {/* Project Name */}
-              <div className="space-y-2">
-                <Label htmlFor="projectName" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
-                  Project name
-                </Label>
-                <Input
-                  id="projectName"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="Enter the name"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleCreateProject();
-                    }
-                  }}
-                  style={{
-                    fontSize: '16px',
-                    lineHeight: '24px',
-                    color: 'rgb(52, 50, 45)',
-                  }}
-                />
-              </div>
-
-              {/* Instructions */}
-              <div className="space-y-2">
-                <Label htmlFor="projectInstructions" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
-                  Instructions <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Textarea
-                  id="projectInstructions"
-                  value={newProjectInstructions}
-                  onChange={(e) => setNewProjectInstructions(e.target.value)}
-                  placeholder='e.g. "Focus on Python best practices", "Maintain a professional tone", or "Always provide sources for important conclusions".'
-                  className="min-h-[120px] resize-none bg-muted/30"
-                  style={{
-                    fontSize: '16px',
-                    lineHeight: '24px',
-                    color: 'rgb(52, 50, 45)',
-                  }}
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setShowCreateDialog(false)}
-                className="flex-1 sm:flex-none"
-                style={{
-                  fontSize: '16px',
-                  lineHeight: '24px',
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateProject}
-                disabled={!newProjectName.trim()}
-                className="flex-1 sm:flex-none"
-                style={{
-                  fontSize: '16px',
-                  lineHeight: '24px',
-                }}
-              >
-                Create
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CreateProjectDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onProjectCreated={handleCreateProject}
+      />
 
       {/* Rename Project Dialog */}
       <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>

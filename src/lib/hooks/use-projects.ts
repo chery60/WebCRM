@@ -6,10 +6,14 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import type { Project } from '@/types';
 
 // Get all projects (optionally filtered by workspace)
+// Get all projects (optionally filtered by workspace, defaults to current workspace)
 export function useProjects(workspaceId?: string) {
+  const { currentWorkspace } = useWorkspaceStore();
+  const effectiveWorkspaceId = workspaceId || currentWorkspace?.id;
+
   return useQuery({
-    queryKey: ['projects', { workspaceId }],
-    queryFn: () => projectsRepository.getAll(workspaceId),
+    queryKey: ['projects', { workspaceId: effectiveWorkspaceId }],
+    queryFn: () => projectsRepository.getAll(effectiveWorkspaceId),
   });
 }
 
@@ -37,10 +41,18 @@ export function useProject(id: string | undefined) {
 
 export function useCreateProject() {
   const queryClient = useQueryClient();
+  const { currentWorkspace } = useWorkspaceStore();
 
   return useMutation({
-    mutationFn: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>) =>
-      projectsRepository.create(data),
+    mutationFn: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>) => {
+      // Automatically inject workspaceId if not provided
+      const projectData = {
+        ...data,
+        workspaceId: data.workspaceId || currentWorkspace?.id,
+      };
+
+      return projectsRepository.create(projectData);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },

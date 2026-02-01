@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectSeparator,
 } from '@/components/ui/select';
-import { 
-  Send, 
-  Sparkles, 
+import {
+  Send,
+  Sparkles,
   Plus,
   ChevronDown,
   FileText,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAISettingsStore, type AIProviderType } from '@/lib/stores/ai-settings-store';
 import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
+import { AddSectionModal } from './add-section-modal';
 import type { TemplateSection } from '@/types';
 
 // ============================================================================
@@ -71,9 +72,11 @@ export function SectionChatInput({
 }: SectionChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const { activeProvider } = useAISettingsStore();
-  const { templates: customTemplates } = useCustomTemplatesStore();
+  const { templates: customTemplates, updateTemplate } = useCustomTemplatesStore();
+
+  const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
 
   // Get sections from the selected template (memoized to avoid dependency issues)
   const templateSections: TemplateSection[] = React.useMemo(() => {
@@ -144,6 +147,47 @@ export function SectionChatInput({
     }
   };
 
+  const handleSectionSelect = (value: string) => {
+    if (value === 'add-section') {
+      setIsAddSectionModalOpen(true);
+    } else {
+      onSectionChange(value);
+    }
+  };
+
+  const handleAddSection = (sectionData: { title: string; description: string }) => {
+    if (!selectedTemplate) return;
+
+    // Generate ID from title (slugify) plus random suffix
+    const slug = sectionData.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    const id = `${slug}-${Date.now().toString(36).substring(2, 7)}`;
+
+    // Calculate new order (max + 1)
+    const maxOrder = templateSections.length > 0
+      ? Math.max(...templateSections.map(s => s.order))
+      : 0;
+
+    const newSection: TemplateSection = {
+      id,
+      title: sectionData.title,
+      description: sectionData.description,
+      order: maxOrder + 1,
+    };
+
+    // Update template with new section
+    updateTemplate(selectedTemplate, {
+      sections: [...templateSections, newSection]
+    }, `Added section: ${sectionData.title}`);
+
+    // Select the new section
+    onSectionChange(id);
+  };
+
+
+
   // Get template display name
   const getTemplateDisplayName = (templateKey: string): string => {
     const template = customTemplates.find(t => t.id === templateKey);
@@ -170,7 +214,7 @@ export function SectionChatInput({
   const sortedSections = [...templateSections].sort((a, b) => a.order - b.order);
 
   return (
-    <div className="border-t border-border bg-background p-4 space-y-3 sticky bottom-0 z-10">
+    <div className="border-t border-border bg-background p-4 space-y-3 sticky bottom-0 z-20">
       {/* Chat input area */}
       <div className="relative flex items-end gap-2">
         <div className="flex-1 relative">
@@ -218,7 +262,7 @@ export function SectionChatInput({
             </span>
             <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="!z-[100]">
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
               AI Model
             </div>
@@ -247,11 +291,11 @@ export function SectionChatInput({
             </span>
             <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="max-w-[300px]">
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
               PRD Template
             </div>
-            
+
             {/* Starter templates (editable) */}
             {starterTemplates.map((template) => (
               <SelectItem key={template.id} value={template.id} className="text-sm">
@@ -263,7 +307,7 @@ export function SectionChatInput({
                 </div>
               </SelectItem>
             ))}
-            
+
             {/* User-created custom templates */}
             {userTemplates.length > 0 && (
               <>
@@ -283,7 +327,7 @@ export function SectionChatInput({
                 ))}
               </>
             )}
-            
+
             {/* Add template option */}
             <SelectSeparator />
             <SelectItem value="add-template" className="text-sm text-primary">
@@ -292,7 +336,7 @@ export function SectionChatInput({
                 <span>Add Template</span>
               </div>
             </SelectItem>
-            
+
             {/* Edit templates option */}
             <SelectItem value="edit-templates" className="text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
@@ -306,8 +350,8 @@ export function SectionChatInput({
         {/* Section Selector */}
         <Select
           value={selectedSection}
-          onValueChange={onSectionChange}
-          disabled={sortedSections.length === 0}
+          onValueChange={handleSectionSelect}
+          disabled={!selectedTemplate}
         >
           <SelectTrigger className="h-8 text-xs bg-muted/50 border-muted-foreground/20 gap-1.5 max-w-[160px] [&>svg:last-child]:hidden">
             <LayoutList className="h-3 w-3 text-primary shrink-0" />
@@ -316,25 +360,48 @@ export function SectionChatInput({
             </span>
             <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="!z-[100] max-w-[300px]">
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              Section to Generate
+              Available Sections
             </div>
-            {sortedSections.map((section) => (
-              <SelectItem key={section.id} value={section.id} className="text-sm">
-                <div className="flex flex-col">
-                  <span>{section.title}</span>
-                  {section.description && (
-                    <span className="text-xs text-muted-foreground line-clamp-1">
-                      {section.description}
-                    </span>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
+            {sortedSections.length === 0 ? (
+              <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                No sections in this template yet.
+                <br />
+                Click "Add Section" below to create one.
+              </div>
+            ) : (
+              sortedSections.map((section) => (
+                <SelectItem key={section.id} value={section.id} className="text-sm">
+                  <div className="flex flex-col">
+                    <span>{section.title}</span>
+                    {section.description && (
+                      <span className="text-xs text-muted-foreground line-clamp-1">
+                        {section.description}
+                      </span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))
+            )}
+
+            <SelectSeparator />
+            <SelectItem value="add-section" className="text-sm text-primary">
+              <div className="flex items-center gap-2">
+                <Plus className="h-3 w-3" />
+                <span>Add New Section</span>
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {/* Add Section Modal */}
+      <AddSectionModal
+        open={isAddSectionModalOpen}
+        onOpenChange={setIsAddSectionModalOpen}
+        onAdd={handleAddSection}
+      />
     </div>
   );
 }

@@ -530,10 +530,15 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
 
   const handleDeletePipeline = async () => {
     if (!pipelineToDelete) return;
-    await deletePipeline.mutateAsync(pipelineToDelete.id);
-    setShowDeleteDialog(false);
-    setPipelineToDelete(null);
-    toast.success('Pipeline deleted');
+    try {
+      await deletePipeline.mutateAsync(pipelineToDelete.id);
+      setShowDeleteDialog(false);
+      setPipelineToDelete(null);
+      toast.success('Pipeline deleted');
+    } catch (error) {
+      console.error('Failed to delete pipeline:', error);
+      toast.error('Failed to delete pipeline');
+    }
   };
 
   if (collapsed) {

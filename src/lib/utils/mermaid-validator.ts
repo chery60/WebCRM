@@ -24,11 +24,15 @@ export function validateMermaidDiagram(code: string): MermaidValidationResult {
     return { valid: false, error: 'Diagram code is empty' };
   }
 
-  // Check for valid diagram type
+  // Check for valid diagram type (RESTRICTED to flowchart and sequenceDiagram only)
   const validTypes = [
     'flowchart',
     'graph',
     'sequenceDiagram',
+  ];
+
+  // Disabled types that are prone to parsing errors
+  const disabledTypes = [
     'erDiagram',
     'gantt',
     'stateDiagram',
@@ -42,6 +46,17 @@ export function validateMermaidDiagram(code: string): MermaidValidationResult {
   const hasValidType = validTypes.some(type =>
     trimmed.toLowerCase().startsWith(type.toLowerCase())
   );
+
+  const hasDisabledType = disabledTypes.some(type =>
+    trimmed.toLowerCase().startsWith(type.toLowerCase())
+  );
+
+  if (hasDisabledType) {
+    return {
+      valid: false,
+      error: `This diagram type is disabled due to frequent parsing errors. Only flowchart and sequenceDiagram are supported.`,
+    };
+  }
 
   if (!hasValidType) {
     return {

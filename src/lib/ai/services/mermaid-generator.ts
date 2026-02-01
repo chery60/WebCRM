@@ -14,14 +14,12 @@ import { MERMAID_SYNTAX_EXAMPLES } from '../prompts/prd-structured-prompts';
 // TYPES
 // ============================================================================
 
+// RESTRICTED: Only flowchart and sequenceDiagram are supported
+// Other diagram types (erDiagram, gantt, stateDiagram, journey, pie) 
+// are prone to parsing errors and have been disabled
 export type MermaidDiagramType =
   | 'flowchart'
-  | 'sequenceDiagram'
-  | 'erDiagram'
-  | 'gantt'
-  | 'stateDiagram'
-  | 'journey'
-  | 'pie';
+  | 'sequenceDiagram';
 
 export interface MermaidGenerationOptions {
   /** Type of diagram to generate */
@@ -46,6 +44,8 @@ export interface MermaidGenerationResult {
 // DIAGRAM TYPE METADATA
 // ============================================================================
 
+// RESTRICTED: Only flowchart and sequenceDiagram metadata
+// Other types removed to prevent parsing errors
 const DIAGRAM_METADATA: Record<MermaidDiagramType, { title: string; description: string; useCase: string }> = {
   flowchart: {
     title: 'Flow Diagram',
@@ -56,31 +56,6 @@ const DIAGRAM_METADATA: Record<MermaidDiagramType, { title: string; description:
     title: 'Sequence Diagram',
     description: 'System interactions and API flows',
     useCase: 'Best for showing communication between systems, API calls, and data flow',
-  },
-  erDiagram: {
-    title: 'Entity Relationship Diagram',
-    description: 'Data models and database structure',
-    useCase: 'Best for illustrating data relationships and database schema',
-  },
-  gantt: {
-    title: 'Gantt Chart',
-    description: 'Project timeline and milestones',
-    useCase: 'Best for showing project phases, deadlines, and dependencies',
-  },
-  stateDiagram: {
-    title: 'State Diagram',
-    description: 'State machines and status flows',
-    useCase: 'Best for showing object states and transitions (e.g., order status)',
-  },
-  journey: {
-    title: 'User Journey Map',
-    description: 'End-to-end user experience',
-    useCase: 'Best for mapping user emotions and touchpoints across an experience',
-  },
-  pie: {
-    title: 'Pie Chart',
-    description: 'Distribution and composition',
-    useCase: 'Best for showing proportions and breakdowns',
   },
 };
 
@@ -248,36 +223,8 @@ export class MermaidGeneratorService {
       suggestions.push('sequenceDiagram');
     }
 
-    // Check for data model content
-    if (
-      lowerContext.includes('database') ||
-      lowerContext.includes('table') ||
-      lowerContext.includes('entity') ||
-      lowerContext.includes('schema') ||
-      lowerContext.includes('relationship')
-    ) {
-      suggestions.push('erDiagram');
-    }
-
-    // Check for timeline/phase content
-    if (
-      lowerContext.includes('timeline') ||
-      lowerContext.includes('phase') ||
-      lowerContext.includes('milestone') ||
-      lowerContext.includes('deadline')
-    ) {
-      suggestions.push('gantt');
-    }
-
-    // Check for state-related content
-    if (
-      lowerContext.includes('status') ||
-      lowerContext.includes('state') ||
-      lowerContext.includes('workflow') ||
-      lowerContext.includes('approval')
-    ) {
-      suggestions.push('stateDiagram');
-    }
+    // REMOVED: erDiagram, gantt, stateDiagram suggestions (disabled types)
+    // Only flowchart and sequenceDiagram are supported to prevent parsing errors
 
     // Limit to max 4 diagrams
     return suggestions.slice(0, 4);
@@ -294,6 +241,7 @@ export class MermaidGeneratorService {
     const lines = code.split('\n');
 
     // Detect diagram type for specialized handling
+    // Note: ERD handling kept for backward compatibility with existing diagrams
     const isERD = lines.some(line => line.trim().startsWith('erDiagram'));
 
     return lines.map(line => {
@@ -459,7 +407,7 @@ export class MermaidGeneratorService {
       const codeMatch = content.match(/```\s*([\s\S]*?)```/);
       if (codeMatch && codeMatch[1]) {
         const extracted = codeMatch[1].trim();
-        // Validate it looks like mermaid
+        // Validate it looks like mermaid (allow all types for backward compatibility)
         if (
           extracted.startsWith('flowchart') ||
           extracted.startsWith('graph') ||
@@ -475,7 +423,7 @@ export class MermaidGeneratorService {
       }
     }
 
-    // Check if the entire content is mermaid code (no code fences)
+    // Check if the entire content is mermaid code (no code fences - allow all for backward compatibility)
     if (!code) {
       const trimmed = content.trim();
       if (
@@ -514,15 +462,10 @@ export class MermaidGeneratorService {
       return { valid: false, error: 'Empty diagram code' };
     }
 
-    // Type-specific validation
+    // Type-specific validation (only flowchart and sequenceDiagram supported)
     const typeChecks: Record<MermaidDiagramType, string[]> = {
       flowchart: ['flowchart', 'graph'],
       sequenceDiagram: ['sequenceDiagram'],
-      erDiagram: ['erDiagram'],
-      gantt: ['gantt'],
-      stateDiagram: ['stateDiagram', 'stateDiagram-v2'],
-      journey: ['journey'],
-      pie: ['pie'],
     };
 
     const validPrefixes = typeChecks[expectedType];

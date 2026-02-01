@@ -242,7 +242,8 @@ Your section content MUST include relevant visual elements:
 **Mermaid Diagrams** - Include where appropriate:
 - \`\`\`mermaid flowchart TD ... \`\`\` for processes and user flows
 - \`\`\`mermaid sequenceDiagram ... \`\`\` for system interactions
-- \`\`\`mermaid stateDiagram-v2 ... \`\`\` for status flows
+
+IMPORTANT: Only use flowchart and sequenceDiagram. Do NOT use stateDiagram, erDiagram, gantt, pie, or journey (disabled due to parsing errors).
 
 **Bullet Lists** - Use for:
 - User stories: "As a [user], I want [feature] so that [benefit]"

@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useProjects, useCreateProject } from '@/lib/hooks/use-projects';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 
@@ -47,25 +48,9 @@ export function NoteMetadata({ note, onUpdate, className }: NoteMetadataProps) {
     const { data: projects = [] } = useProjects();
     const createProject = useCreateProject();
     const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
-    const [newProjectName, setNewProjectName] = useState('');
-
     // Handle project creation
-    const handleCreateProject = async () => {
-        if (!newProjectName.trim()) return;
-
-        try {
-            const project = await createProject.mutateAsync({
-                name: newProjectName,
-                icon: '📁',
-                color: 'bg-blue-500',
-            });
-
-            onUpdate({ projectId: project.id });
-            setNewProjectName('');
-            setShowCreateProjectDialog(false);
-        } catch (error) {
-            console.error('Failed to create project:', error);
-        }
+    const handleCreateProject = (project: any) => {
+        onUpdate({ projectId: project.id });
     };
 
     const getStatusColor = (status?: string) => {
@@ -227,43 +212,11 @@ export function NoteMetadata({ note, onUpdate, className }: NoteMetadataProps) {
             </div>
 
             {/* Create Project Dialog */}
-            <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>
-                <DialogContent className="w-[400px]">
-                    <DialogHeader>
-                        <DialogTitle>Create New Project</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="newProjectName">Project Name</Label>
-                            <Input
-                                id="newProjectName"
-                                value={newProjectName}
-                                onChange={(e) => setNewProjectName(e.target.value)}
-                                placeholder="Enter project name"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleCreateProject();
-                                }}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleCreateProject} disabled={!newProjectName.trim() || createProject.isPending}>
-                            {createProject.isPending ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Creating...
-                                </>
-                            ) : (
-                                'Create'
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <CreateProjectDialog
+                open={showCreateProjectDialog}
+                onOpenChange={setShowCreateProjectDialog}
+                onProjectCreated={handleCreateProject}
+            />
         </div>
     );
 }

@@ -12,9 +12,9 @@ import {
   SelectValue,
   SelectSeparator,
 } from '@/components/ui/select';
-import { 
-  Send, 
-  Sparkles, 
+import {
+  Send,
+  Sparkles,
   Plus,
   FileText,
   Pencil,
@@ -73,7 +73,7 @@ export function PRDChatInputV2({
   placeholder = 'Describe your product or feature...',
 }: PRDChatInputV2Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const { activeProvider } = useAISettingsStore();
   const { templates: customTemplates } = useCustomTemplatesStore();
 
@@ -219,11 +219,11 @@ export function PRDChatInputV2({
               {getTemplateDisplayName(selectedTemplate)}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-w-[300px]">
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
               PRD Template
             </div>
-            
+
             {/* Starter templates (editable) */}
             {starterTemplates.map((template) => (
               <SelectItem key={template.id} value={template.id} className="text-sm">
@@ -235,7 +235,7 @@ export function PRDChatInputV2({
                 </div>
               </SelectItem>
             ))}
-            
+
             {/* User-created custom templates */}
             {userTemplates.length > 0 && (
               <>
@@ -255,7 +255,7 @@ export function PRDChatInputV2({
                 ))}
               </>
             )}
-            
+
             {/* Add template option */}
             <SelectSeparator />
             <SelectItem value="add-template" className="text-sm text-primary">
@@ -264,7 +264,7 @@ export function PRDChatInputV2({
                 <span>Add Template</span>
               </div>
             </SelectItem>
-            
+
             {/* Edit templates option */}
             <SelectItem value="edit-templates" className="text-sm text-muted-foreground">
               <div className="flex items-center gap-2">

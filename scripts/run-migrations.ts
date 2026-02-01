@@ -10,6 +10,28 @@ import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Manually load .env.local since we're running via tsx
+try {
+    const envPath = path.join(process.cwd(), '.env.local');
+
+    if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf-8');
+        envContent.split('\n').forEach(line => {
+            const match = line.match(/^([^=]+)=(.*)$/);
+            if (match) {
+                const key = match[1].trim();
+                const value = match[2].trim().replace(/^["']|["']$/g, ''); // Remove quotes
+                if (key && value && !process.env[key]) {
+                    process.env[key] = value;
+                }
+            }
+        });
+        console.log('✓ Loaded .env.local');
+    }
+} catch (err) {
+    console.error('Failed to load .env.local:', err);
+}
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ubkywhbguzbyewedxjdj.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_PyJxob7rHLuwo-kBxuaopA_gWZ-r6z0';
 
@@ -36,7 +58,7 @@ const migrationInfo = [
 
 async function checkTable(tableName: string): Promise<{ exists: boolean; error?: string }> {
     const { error } = await supabase.from(tableName).select('id').limit(1);
-    
+
     if (error) {
         if (error.code === '42P01') {
             return { exists: false };
@@ -48,7 +70,7 @@ async function checkTable(tableName: string): Promise<{ exists: boolean; error?:
 
 async function checkMigrationStatus() {
     console.log('🔍 Checking database migration status...\n');
-    
+
     const results: { migration: string; status: 'complete' | 'partial' | 'pending'; missingTables: string[] }[] = [];
 
     for (const migration of migrationInfo) {
@@ -69,12 +91,12 @@ async function checkMigrationStatus() {
             }
         }
 
-        const status = missingTables.length === 0 
-            ? 'complete' 
-            : missingTables.length === migration.tables.length 
-                ? 'pending' 
+        const status = missingTables.length === 0
+            ? 'complete'
+            : missingTables.length === migration.tables.length
+                ? 'pending'
                 : 'partial';
-        
+
         results.push({ migration: migration.name, status, missingTables });
     }
 
@@ -90,12 +112,12 @@ function printMigrationInstructions(pendingMigrations: string[]) {
     console.log('Steps:');
     console.log(`1. Go to: https://supabase.com/dashboard/project/${supabaseUrl.split('//')[1].split('.')[0]}/sql/new`);
     console.log('\n2. Run the following migration files in order:\n');
-    
+
     pendingMigrations.forEach((migration, index) => {
         const migrationPath = path.join(process.cwd(), 'supabase', 'migrations', migration);
         console.log(`   ${index + 1}. ${migration}`);
         console.log(`      Path: ${migrationPath}`);
-        
+
         const info = migrationInfo.find(m => m.name === migration);
         if (info) {
             console.log(`      Description: ${info.description}`);
@@ -113,7 +135,7 @@ function printMigrationInstructions(pendingMigrations: string[]) {
 
 function printSQLContent(migrationName: string) {
     const migrationPath = path.join(process.cwd(), 'supabase', 'migrations', migrationName);
-    
+
     try {
         const content = fs.readFileSync(migrationPath, 'utf8');
         console.log('\n' + '='.repeat(70));
@@ -134,21 +156,21 @@ async function runMigrations() {
     console.log('');
 
     const results = await checkMigrationStatus();
-    
+
     // Print status for each migration
     console.log('Migration Status:');
     console.log('-'.repeat(50));
-    
+
     const pendingMigrations: string[] = [];
-    
+
     for (const result of results) {
         const icon = result.status === 'complete' ? '✅' : result.status === 'partial' ? '⚠️' : '❌';
         console.log(`${icon} ${result.migration}: ${result.status.toUpperCase()}`);
-        
+
         if (result.missingTables.length > 0) {
             console.log(`   Missing tables: ${result.missingTables.join(', ')}`);
         }
-        
+
         if (result.status !== 'complete') {
             pendingMigrations.push(result.migration);
         }
@@ -157,13 +179,13 @@ async function runMigrations() {
     // Check all new tables from migration 003
     console.log('\n📊 Table Status Summary:');
     console.log('-'.repeat(50));
-    
+
     const allTables = [
-        'users', 'employees', 'tasks', 'notes', 'tags', 
-        'calendar_events', 'workspaces', 'pipelines', 
+        'users', 'employees', 'tasks', 'notes', 'tags',
+        'calendar_events', 'workspaces', 'pipelines',
         'roadmaps', 'feature_requests', 'projects', 'task_tabs'
     ];
-    
+
     for (const table of allTables) {
         const { exists, error } = await checkTable(table);
         const icon = exists ? '✅' : '❌';
@@ -172,7 +194,7 @@ async function runMigrations() {
 
     if (pendingMigrations.length > 0) {
         printMigrationInstructions(pendingMigrations);
-        
+
         // Ask if user wants to see the SQL content
         const args = process.argv.slice(2);
         if (args.includes('--show-sql') || args.includes('-s')) {
@@ -183,7 +205,7 @@ async function runMigrations() {
             console.log('\n💡 TIP: Run with --show-sql or -s flag to display the SQL content directly:');
             console.log('   npx tsx scripts/run-migrations.ts --show-sql\n');
         }
-        
+
         return false;
     }
 

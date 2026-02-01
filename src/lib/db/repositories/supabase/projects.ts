@@ -45,6 +45,7 @@ export const projectsRepository = {
     } else {
       // If no workspace is provided, don't return any projects
       // This prevents leaking data between workspaces
+      console.warn('[Projects Repository] No workspace provided - returning empty list to prevent data leaks');
       query = query.eq('workspace_id', '00000000-0000-0000-0000-000000000000'); // Non-existent UUID
     }
 
@@ -53,12 +54,14 @@ export const projectsRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('Error fetching projects:', error);
+        console.error('[Projects Repository] Error fetching projects:', error);
       }
       return [];
     }
 
-    return (data || []).map(rowToProject);
+    const projects = (data || []).map(rowToProject);
+    console.log(`[Projects Repository] Fetched ${projects.length} projects for workspace: ${workspaceId}`);
+    return projects;
   },
 
   // Get a single project by ID
@@ -91,8 +94,11 @@ export const projectsRepository = {
 
     // SECURITY: workspace_id is REQUIRED - prevent data leaks
     if (!data.workspaceId) {
+      console.error('[Projects Repository] Attempted to create project without workspace_id:', { name: data.name, userId });
       throw new Error('Workspace ID is required to create a project. Please ensure you have a workspace selected.');
     }
+
+    console.log(`[Projects Repository] Creating project "${data.name}" in workspace: ${data.workspaceId}`);
 
     const { data: insertedData, error } = await supabase
       .from('projects')
@@ -110,10 +116,11 @@ export const projectsRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('Error creating project:', error);
+      console.error('[Projects Repository] Error creating project:', error);
       throw new Error(error?.message || 'Failed to create project');
     }
 
+    console.log(`[Projects Repository] Successfully created project: ${insertedData.id}`);
     return rowToProject(insertedData);
   },
 
@@ -150,22 +157,12 @@ export const projectsRepository = {
     return rowToProject(updatedData);
   },
 
-  // Soft delete a project
+  // Soft delete a project using RPC (handles cascading updates securely)
   async delete(id: string): Promise<boolean> {
     const supabase = getSupabaseClient();
     if (!supabase) return false;
 
-    // Move notes from this project to no project
-    await supabase
-      .from('notes')
-      .update({ project_id: null })
-      .eq('project_id', id);
-
-    // Soft delete the project
-    const { error } = await supabase
-      .from('projects')
-      .update({ is_deleted: true })
-      .eq('id', id);
+    const { error } = await supabase.rpc('delete_project', { target_project_id: id });
 
     if (error) {
       console.error('Error deleting project:', error);
