@@ -20,7 +20,7 @@ import { useAIService } from '@/lib/ai/use-ai-service';
 import { Loader2 } from 'lucide-react';
 import { AIGenerationPanel, type GenerationMode } from './ai-generation-panel';
 import { PRDTemplateSelector } from './prd-template-selector';
-import { PRDChatDrawer } from './prd-chat-drawer';
+import { PRDChatDrawerV2 as PRDChatDrawer } from './prd-chat-drawer-v2';
 import { SectionChatDrawer } from './section-chat-drawer';
 import { ExcalidrawExtension, setInlineCanvasAIContext } from './extensions/excalidraw-extension';
 import { MermaidExtension } from './extensions/mermaid-extension';

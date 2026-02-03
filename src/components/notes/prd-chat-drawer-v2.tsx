@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -43,10 +43,13 @@ import type { ToolInvocation } from '@/components/ai/tool-invocation';
 // ============================================================================
 
 export interface PRDChatDrawerV2Props {
-  isOpen: boolean;
-  onClose: () => void;
-  onAddToNote: (content: string) => void;
-  currentNoteContent?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  noteContent: string;
+  onApplyContent: (content: string, mode: 'overwrite' | 'append') => void;
+  onGenerateFeatures?: (content: string) => void;
+  onGenerateTasks?: (content: string) => void;
+  noteId?: string;
 }
 
 // ============================================================================
@@ -100,8 +103,8 @@ function extractToolInvocations(uiMessage: any): ToolInvocation[] {
   return toolInvocations;
 }
 
-function extractThinkingSteps(content: string): ThinkingStep[] {
-  // Parse thinking steps from special markers in the content
+function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
+  // First try to extract from special markers in content
   const steps: ThinkingStep[] = [];
   const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/g;
   let match;
@@ -117,6 +120,35 @@ function extractThinkingSteps(content: string): ThinkingStep[] {
       timestamp: new Date(),
     });
   }
+
+  // Also extract from UI message parts (reasoning chunks from backend)
+  if (uiMessage.parts && Array.isArray(uiMessage.parts)) {
+    const reasoningParts = uiMessage.parts.filter((part: any) => 
+      part.type === 'reasoning-delta' || part.type === 'reasoning-start' || part.type === 'reasoning-end'
+    );
+
+    // Group reasoning parts by their id
+    const reasoningGroups = new Map<string, string>();
+    for (const part of uiMessage.parts) {
+      if (part.type === 'reasoning-delta' && part.delta) {
+        const existing = reasoningGroups.get(part.id) || '';
+        reasoningGroups.set(part.id, existing + part.delta);
+      }
+    }
+
+    // Convert to thinking steps
+    for (const [id, content] of reasoningGroups.entries()) {
+      if (content.trim()) {
+        steps.push({
+          id: `reasoning-${id}`,
+          type: 'reasoning',
+          content: content.trim(),
+          status: 'completed',
+          timestamp: new Date(),
+        });
+      }
+    }
+  }
   
   return steps;
 }
@@ -131,10 +163,13 @@ function cleanContentFromThinking(content: string): string {
 // ============================================================================
 
 export function PRDChatDrawerV2({
-  isOpen,
-  onClose,
-  onAddToNote,
-  currentNoteContent = '',
+  open,
+  onOpenChange,
+  noteContent,
+  onApplyContent,
+  onGenerateFeatures,
+  onGenerateTasks,
+  noteId,
 }: PRDChatDrawerV2Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
@@ -142,6 +177,10 @@ export function PRDChatDrawerV2({
   const [showEditTemplatesModal, setShowEditTemplatesModal] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [messageActions, setMessageActions] = useState<Record<string, React.ReactNode>>({});
+  
+  // State for overwrite/append dialog
+  const [showApplyModeDialog, setShowApplyModeDialog] = useState(false);
+  const [pendingContent, setPendingContent] = useState<string | null>(null);
 
   // Store hooks
   const {
@@ -188,17 +227,17 @@ export function PRDChatDrawerV2({
   const handleSubmit = async (message: string) => {
     if (!message.trim() || isLoading) return;
 
-    // Add context about template if selected
-    let contextualMessage = message;
-    if (template) {
-      contextualMessage = `Using template: ${template.name}\n\n${message}`;
+    try {
+      // Send the user's message as-is (template context is already in the hook configuration)
+      // The template information is passed through templateName, templateDescription, etc. in useAIPRDChat
+      chat.sendMessage({ role: 'user', parts: [{ type: 'text', text: message }] });
+
+      // Clear input
+      setInputValue('');
+    } catch (error) {
+      console.error('[PRD Chat] Error submitting message:', error);
+      // Error will be displayed through the error state from useAIPRDChat
     }
-
-    // Send message using AI SDK
-    chat.sendMessage({ role: 'user', parts: [{ type: 'text', text: contextualMessage }] });
-
-    // Clear input
-    setInputValue('');
   };
 
   const handleClearChat = () => {
@@ -211,13 +250,35 @@ export function PRDChatDrawerV2({
     setShowClearDialog(false);
   };
 
-  const handleAddToNote = (messageId: string, content: string) => {
-    const cleanedContent = cleanContentFromThinking(content);
-    onAddToNote(cleanedContent);
-  };
+  const handleApplyModeSelect = useCallback((mode: 'overwrite' | 'append') => {
+    if (pendingContent) {
+      onApplyContent(pendingContent, mode);
+    }
+    setPendingContent(null);
+    setShowApplyModeDialog(false);
+  }, [pendingContent, onApplyContent]);
 
-  // Convert UI messages to our Message format
-  const convertedMessages: Message[] = messages.map(convertUIMessageToMessage);
+  const handleAddToNote = useCallback((messageId: string, content: string) => {
+    const cleanedContent = cleanContentFromThinking(content);
+    
+    // Check if there's existing content in the note (more than just whitespace)
+    const hasExistingContent = noteContent && noteContent.trim().length > 0;
+
+    if (hasExistingContent) {
+      // Show dialog to ask user whether to overwrite or append
+      setPendingContent(cleanedContent);
+      setShowApplyModeDialog(true);
+    } else {
+      // No existing content, just apply directly
+      onApplyContent(cleanedContent, 'append');
+    }
+  }, [noteContent, onApplyContent]);
+
+  // Convert UI messages to our Message format (memoized)
+  const convertedMessages: Message[] = useMemo(() => 
+    messages.map(convertUIMessageToMessage), 
+    [messages]
+  );
 
   // Generate actions for each assistant message
   useEffect(() => {
@@ -237,6 +298,28 @@ export function PRDChatDrawerV2({
               <Plus className="w-3 h-3 mr-1.5" />
               Add to Note
             </Button>
+            {onGenerateFeatures && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => onGenerateFeatures(cleanedContent)}
+              >
+                <Sparkles className="w-3 h-3 mr-1.5" />
+                Generate Features
+              </Button>
+            )}
+            {onGenerateTasks && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => onGenerateTasks(cleanedContent)}
+              >
+                <Sparkles className="w-3 h-3 mr-1.5" />
+                Generate Tasks
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -257,11 +340,11 @@ export function PRDChatDrawerV2({
     });
 
     setMessageActions(actions);
-  }, [convertedMessages, isLoading]);
+  }, [messages.length, isLoading, handleAddToNote, onGenerateFeatures, onGenerateTasks, chat.regenerate]);
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={onClose}>
+      <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent 
           side="right" 
           className="w-full sm:max-w-2xl p-0 flex flex-col"
@@ -283,7 +366,7 @@ export function PRDChatDrawerV2({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={onClose}
+                onClick={() => onOpenChange(false)}
                 className="h-8 w-8"
               >
                 <X className="h-4 w-4" />
@@ -350,7 +433,7 @@ export function PRDChatDrawerV2({
             {convertedMessages.map((message, index) => {
               const isLastMessage = index === convertedMessages.length - 1;
               const isStreaming = isLastMessage && isLoading;
-              const thinkingSteps = extractThinkingSteps(message.content);
+              const thinkingSteps = extractThinkingSteps(message.content, messages[index]);
               const toolInvocations = extractToolInvocations(messages[index]);
 
               return (
@@ -367,8 +450,24 @@ export function PRDChatDrawerV2({
             })}
 
             {error && (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-sm text-destructive">
-                <strong>Error:</strong> {error.message}
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <div className="text-destructive font-semibold">⚠️ Error</div>
+                </div>
+                <p className="text-sm text-destructive">{error.message}</p>
+                {error.message.includes('API key') && (
+                  <div className="mt-3 pt-3 border-t border-destructive/20">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      <strong>Need help?</strong> Configure your API key:
+                    </p>
+                    <ol className="text-xs text-muted-foreground space-y-1 ml-4 list-decimal">
+                      <li>Go to Settings → Features</li>
+                      <li>Select your AI provider (OpenAI, Anthropic, or Gemini)</li>
+                      <li>Enter your API key</li>
+                      <li>Enable the provider</li>
+                    </ol>
+                  </div>
+                )}
               </div>
             )}
 
@@ -419,6 +518,37 @@ export function PRDChatDrawerV2({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmClearChat}>
               Clear Chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Overwrite/Append Dialog */}
+      <AlertDialog open={showApplyModeDialog} onOpenChange={setShowApplyModeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add PRD to Note</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your note already has content. Would you like to replace the existing content or add the new PRD at the end?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setShowApplyModeDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleApplyModeSelect('append')}
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Append to Note
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => handleApplyModeSelect('overwrite')}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Replace className="w-4 h-4 mr-2" />
+              Overwrite
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

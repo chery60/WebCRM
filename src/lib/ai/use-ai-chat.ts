@@ -38,7 +38,12 @@ export function useAIChat(options: UseAIChatOptions = {}) {
   const providerConfig = providers[provider];
 
   if (!providerConfig?.apiKey) {
-    throw new Error(`No API key configured for ${provider}`);
+    throw new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before using AI generation.`);
+  }
+
+  // Validate API key is not empty
+  if (providerConfig.apiKey.trim().length === 0) {
+    throw new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
   }
 
   // Create transport with proper configuration
@@ -102,7 +107,12 @@ export function useAIPRDChat(options: UseAIPRDChatOptions = {}) {
   const providerConfig = providers[provider];
 
   if (!providerConfig?.apiKey) {
-    throw new Error(`No API key configured for ${provider}`);
+    throw new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before generating PRDs.`);
+  }
+
+  // Validate API key is not empty
+  if (providerConfig.apiKey.trim().length === 0) {
+    throw new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
   }
 
   // Create transport with proper configuration including full template context
