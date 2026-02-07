@@ -11,6 +11,7 @@ function rowToPipeline(row: any): Pipeline {
     description: row.description || undefined,
     icon: row.icon || undefined,
     color: row.color || undefined,
+    workspaceId: row.workspace_id || undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
     isDeleted: row.is_deleted,
@@ -27,26 +28,39 @@ async function getCurrentUserId(): Promise<string | null> {
 }
 
 export const pipelinesRepository = {
-  // Get all pipelines for current user
-  async getAll(): Promise<Pipeline[]> {
+  // Get all pipelines for current user, optionally filtered by workspace
+  async getAll(workspaceId?: string): Promise<Pipeline[]> {
     const supabase = getSupabaseClient();
     if (!supabase) return [];
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('pipelines')
       .select('*')
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false });
+      .eq('is_deleted', false);
+
+    // Filter by workspace - STRICT: only show pipelines in the specified workspace
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    } else {
+      // If no workspace is provided, don't return any pipelines
+      // This prevents leaking data between workspaces
+      console.warn('[Pipelines Repository] No workspace provided - returning empty list to prevent data leaks');
+      query = query.eq('workspace_id', '00000000-0000-0000-0000-000000000000'); // Non-existent UUID
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('Error fetching pipelines:', error);
+        console.error('[Pipelines Repository] Error fetching pipelines:', error);
       }
       return [];
     }
 
-    return (data || []).map(rowToPipeline);
+    const pipelines = (data || []).map(rowToPipeline);
+    console.log(`[Pipelines Repository] Fetched ${pipelines.length} pipelines for workspace: ${workspaceId}`);
+    return pipelines;
   },
 
   // Get a single pipeline by ID
@@ -70,12 +84,20 @@ export const pipelinesRepository = {
   },
 
   // Create a new pipeline
-  async create(data: { name: string; description?: string; icon?: string; color?: string }): Promise<Pipeline> {
+  async create(data: { name: string; description?: string; icon?: string; color?: string; workspaceId?: string }): Promise<Pipeline> {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not available');
 
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('User not authenticated');
+
+    // SECURITY: workspace_id is REQUIRED - prevent data leaks
+    if (!data.workspaceId) {
+      console.error('[Pipelines Repository] Attempted to create pipeline without workspace_id:', { name: data.name, userId });
+      throw new Error('Workspace ID is required to create a pipeline. Please ensure you have a workspace selected.');
+    }
+
+    console.log(`[Pipelines Repository] Creating pipeline "${data.name}" in workspace: ${data.workspaceId}`);
 
     const { data: insertedData, error } = await supabase
       .from('pipelines')
@@ -84,6 +106,7 @@ export const pipelinesRepository = {
         description: data.description || null,
         icon: data.icon || null,
         color: data.color || null,
+        workspace_id: data.workspaceId,
         user_id: userId,
         is_deleted: false,
       })
@@ -91,10 +114,11 @@ export const pipelinesRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('Error creating pipeline:', error);
+      console.error('[Pipelines Repository] Error creating pipeline:', error);
       throw new Error(error?.message || 'Failed to create pipeline');
     }
 
+    console.log(`[Pipelines Repository] Successfully created pipeline: ${insertedData.id}`);
     return rowToPipeline(insertedData);
   },
 

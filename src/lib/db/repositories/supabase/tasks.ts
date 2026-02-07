@@ -15,6 +15,7 @@ function rowToTask(row: any): Task {
         labels: row.labels || [],
         assignees: row.assignees || [],
         projectId: row.project_id || undefined,
+        workspaceId: row.workspace_id || undefined,
         checklists: row.checklists || [],
         attachments: row.attachments || [],
         activities: row.activities || [],
@@ -47,6 +48,7 @@ function taskToRow(task: Partial<Task>) {
     if (task.labels !== undefined) row.labels = task.labels;
     if (task.assignees !== undefined) row.assignees = task.assignees;
     if (task.projectId !== undefined) row.project_id = task.projectId || null;
+    if (task.workspaceId !== undefined) row.workspace_id = task.workspaceId || null;
     if (task.checklists !== undefined) row.checklists = task.checklists;
     if (task.attachments !== undefined) row.attachments = task.attachments;
     if (task.activities !== undefined) row.activities = task.activities;
@@ -70,7 +72,17 @@ export async function getTasks(
         .select('*')
         .eq('is_deleted', false);
 
-    // Apply filters
+    // Filter by workspace - STRICT: only show tasks in the specified workspace
+    if (filter?.workspaceId) {
+        query = query.eq('workspace_id', filter.workspaceId);
+    } else {
+        // If no workspace is provided, don't return any tasks
+        // This prevents leaking data between workspaces
+        console.warn('[Tasks Repository] No workspace provided - returning empty list to prevent data leaks');
+        query = query.eq('workspace_id', '00000000-0000-0000-0000-000000000000'); // Non-existent UUID
+    }
+
+    // Apply other filters
     if (filter?.status?.length) {
         query = query.in('status', filter.status);
     }
@@ -100,16 +112,18 @@ export async function getTasks(
     const { data, error } = await query;
 
     if (error) {
-        console.error('Error fetching tasks:', error);
+        console.error('[Tasks Repository] Error fetching tasks:', error);
         return [];
     }
 
-    return (data || []).map(rowToTask);
+    const tasks = (data || []).map(rowToTask);
+    console.log(`[Tasks Repository] Fetched ${tasks.length} tasks for workspace: ${filter?.workspaceId}`);
+    return tasks;
 }
 
-// Get tasks grouped by status
-export async function getTasksByStatus(): Promise<Record<TaskStatus, Task[]>> {
-    const allTasks = await getTasks();
+// Get tasks grouped by status (filtered by workspace)
+export async function getTasksByStatus(filter?: TasksFilter): Promise<Record<TaskStatus, Task[]>> {
+    const allTasks = await getTasks(filter);
 
     return {
         planned: allTasks.filter((t) => t.status === 'planned'),
@@ -154,9 +168,17 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
 
     const userId = await getCurrentUserId();
     if (!userId) {
-        console.error('User not authenticated');
+        console.error('[Tasks Repository] User not authenticated');
         return null;
     }
+
+    // SECURITY: workspace_id is REQUIRED - prevent data leaks
+    if (!data.workspaceId) {
+        console.error('[Tasks Repository] Attempted to create task without workspace_id:', { title: data.title, userId });
+        throw new Error('Workspace ID is required to create a task. Please ensure you have a workspace selected.');
+    }
+
+    console.log(`[Tasks Repository] Creating task "${data.title}" in workspace: ${data.workspaceId}`);
 
     // Get highest order for the status
     const { data: existingTasks } = await supabase
@@ -177,6 +199,7 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
         labels: data.labels,
         assignees: data.assignees,
         project_id: data.projectId || null,
+        workspace_id: data.workspaceId,
         checklists: data.checklists,
         attachments: [],
         activities: [],
@@ -193,10 +216,11 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
         .single();
 
     if (error || !insertedData) {
-        console.error('Error creating task:', error);
+        console.error('[Tasks Repository] Error creating task:', error);
         return null;
     }
 
+    console.log(`[Tasks Repository] Successfully created task: ${insertedData.id}`);
     return rowToTask(insertedData);
 }
 

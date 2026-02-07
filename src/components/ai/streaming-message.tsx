@@ -52,7 +52,7 @@ function UserMessageDisplay({ message }: { message: Message }) {
 // ASSISTANT MESSAGE
 // ============================================================================
 
-function AssistantMessageDisplay({ 
+function AssistantMessageDisplay({
   message,
   isStreaming,
   showChainOfThought,
@@ -63,10 +63,29 @@ function AssistantMessageDisplay({
   const hasContent = message.content && message.content.length > 0;
   const isGenerating = isStreaming && !hasContent;
 
+  // Track if we ever showed thinking during this message's generation
+  // Once shown, keep it visible even after streaming ends
+  const wasThinkingShownRef = React.useRef(false);
+
+  // Update the ref when streaming is active
+  if (isStreaming) {
+    wasThinkingShownRef.current = true;
+  }
+
+  // Determine if we should show Chain of Thought:
+  // - Show if we have thinking steps
+  // - Show if streaming is active (even without steps yet)
+  // - Show if thinking was shown during this session (keeps it visible after streaming ends)
+  const shouldShowChainOfThought = showChainOfThought && (
+    thinkingSteps.length > 0 ||
+    isStreaming ||
+    (wasThinkingShownRef.current && hasContent) // Keep showing after generation is complete
+  );
+
   // Parse content for markdown-like formatting
   const formattedContent = useMemo(() => {
     if (!hasContent) return '';
-    
+
     return message.content
       // Headers
       .replace(/^### (.*$)/gim, '<h3 class="text-base font-semibold mt-4 mb-2">$1</h3>')
@@ -89,12 +108,12 @@ function AssistantMessageDisplay({
       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
         <Bot className="w-4 h-4 text-primary" />
       </div>
-      
+
       <div className="flex-1 space-y-3">
-        {/* Chain of Thought */}
-        {showChainOfThought && (thinkingSteps.length > 0 || isStreaming) && (
-          <ChainOfThought 
-            steps={thinkingSteps} 
+        {/* Chain of Thought - Visible during streaming AND after completion */}
+        {shouldShowChainOfThought && (
+          <ChainOfThought
+            steps={thinkingSteps}
             isStreaming={isStreaming}
             defaultExpanded={isStreaming}
           />
@@ -115,9 +134,9 @@ function AssistantMessageDisplay({
           <Card className="border-border/50 shadow-sm">
             <CardContent className="p-4">
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <div 
+                <div
                   className="text-sm whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: formattedContent }} 
+                  dangerouslySetInnerHTML={{ __html: formattedContent }}
                 />
               </div>
               {isStreaming && (
@@ -127,7 +146,7 @@ function AssistantMessageDisplay({
                 </div>
               )}
             </CardContent>
-            
+
             {/* Actions */}
             {actions && !isStreaming && (
               <CardFooter className="p-3 pt-0 flex flex-wrap gap-2 border-t border-border/50">

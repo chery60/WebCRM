@@ -45,6 +45,7 @@ import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } fro
 import { useMoveNoteToProject, useAllPRDs, useCreateNote, useDeleteNote } from '@/lib/hooks/use-notes';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { FileText } from 'lucide-react';
 import {
   Dialog,
@@ -117,8 +118,9 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { data: projects = [] } = useProjects();
-  const { data: allPRDs = [] } = useAllPRDs();
   const { currentUser } = useAuthStore();
+  const { currentWorkspace } = useWorkspaceStore();
+  const { data: allPRDs = [] } = useAllPRDs(currentWorkspace?.id);
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
@@ -274,6 +276,11 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
       return;
     }
 
+    if (!currentWorkspace) {
+      toast.error('Please select a workspace first');
+      return;
+    }
+
     setCreatingPRDForProject(projectId);
     try {
       const newPRD = await createNote.mutateAsync({
@@ -282,6 +289,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
           content: '',
           tags: [],
           projectId,
+          workspaceId: currentWorkspace.id,
         },
         authorId: currentUser.id,
         authorName: currentUser.name || currentUser.email,

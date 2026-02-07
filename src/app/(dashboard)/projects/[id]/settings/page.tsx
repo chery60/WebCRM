@@ -2,7 +2,9 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useProject, useUpdateProject, useDeleteProject } from '@/lib/hooks/use-projects';
-import { useNotes, useDeleteNote } from '@/lib/hooks/use-notes';
+import { useNotes, useDeleteNote, useCreateNote } from '@/lib/hooks/use-notes';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,11 +47,17 @@ export default function ProjectSettingsPage() {
   const router = useRouter();
   const projectId = params.id as string;
 
+  const { currentWorkspace } = useWorkspaceStore();
+  const { currentUser } = useAuthStore();
   const { data: project, isLoading: projectLoading } = useProject(projectId);
-  const { data: prds = [], isLoading: prdsLoading } = useNotes({ projectId });
+  const { data: prds = [], isLoading: prdsLoading } = useNotes({
+    projectId,
+    workspaceId: currentWorkspace?.id
+  });
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
   const deleteNote = useDeleteNote();
+  const createNote = useCreateNote();
 
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -133,6 +141,44 @@ export default function ProjectSettingsPage() {
       toast.success(`"${prdTitle}" deleted`);
     } catch (error) {
       toast.error('Failed to delete PRD');
+    }
+  };
+
+  const handleCreatePRD = async () => {
+    if (!currentUser || !currentWorkspace) {
+      toast.error('Please select a workspace first');
+      return;
+    }
+
+    try {
+      const result = await createNote.mutateAsync({
+        data: {
+          title: 'Untitled PRD',
+          content: JSON.stringify({
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Start writing your PRD here...' }]
+              }
+            ]
+          }),
+          tags: [],
+          workspaceId: currentWorkspace.id,
+          projectId: projectId, // Assign to current project
+        },
+        authorId: currentUser.id,
+        authorName: currentUser.name,
+        authorAvatar: currentUser.avatar,
+      });
+
+      if (result) {
+        router.push(`/notes/${result.id}`);
+        toast.success('PRD created successfully');
+      }
+    } catch (error) {
+      toast.error('Failed to create PRD');
+      console.error(error);
     }
   };
 
@@ -221,7 +267,15 @@ export default function ProjectSettingsPage() {
                   <div className="text-center py-12 text-muted-foreground">
                     <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>No PRDs yet</p>
-                    <p className="text-sm">Create your first PRD using the sidebar</p>
+                    <p className="text-sm mb-4">Create your first PRD for this project</p>
+                    <Button
+                      onClick={handleCreatePRD}
+                      className="gap-2"
+                      disabled={createNote.isPending}
+                    >
+                      <Plus className="h-4 w-4" />
+                      {createNote.isPending ? 'Creating...' : 'Create PRD'}
+                    </Button>
                   </div>
                 ) : (
                   <ul className="space-y-0">

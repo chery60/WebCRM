@@ -9,8 +9,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { 
-  Sparkles, 
+import {
+  Sparkles,
   X,
   MessageSquare,
   RotateCcw,
@@ -37,6 +37,9 @@ import { useAIPRDChat } from '@/lib/ai/use-ai-chat';
 import { type AIProviderType } from '@/lib/stores/ai-settings-store';
 import type { ThinkingStep } from '@/components/ai/chain-of-thought';
 import type { ToolInvocation } from '@/components/ai/tool-invocation';
+import { chatSessionsRepository } from '@/lib/db/repositories/supabase/chat-sessions';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import type { ChatSessionData } from '@/lib/db/repositories/supabase/chat-sessions';
 
 // ============================================================================
 // TYPES
@@ -66,12 +69,12 @@ function convertUIMessageToMessage(uiMessage: any): Message {
       }
     }
   }
-  
+
   // Also handle direct content property (for backward compatibility)
   if (!content && uiMessage.content) {
     content = uiMessage.content;
   }
-  
+
   return {
     id: uiMessage.id,
     role: uiMessage.role,
@@ -82,7 +85,7 @@ function convertUIMessageToMessage(uiMessage: any): Message {
 
 function extractToolInvocations(uiMessage: any): ToolInvocation[] {
   const toolInvocations: ToolInvocation[] = [];
-  
+
   if (uiMessage.parts && Array.isArray(uiMessage.parts)) {
     for (const part of uiMessage.parts) {
       if (part.type === 'tool-call' || part.type === 'tool-invocation') {
@@ -99,7 +102,7 @@ function extractToolInvocations(uiMessage: any): ToolInvocation[] {
       }
     }
   }
-  
+
   return toolInvocations;
 }
 
@@ -109,7 +112,7 @@ function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
   const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/g;
   let match;
   let index = 0;
-  
+
   while ((match = thinkingRegex.exec(content)) !== null) {
     const thinkingContent = match[1].trim();
     steps.push({
@@ -123,7 +126,7 @@ function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
 
   // Also extract from UI message parts (reasoning chunks from backend)
   if (uiMessage.parts && Array.isArray(uiMessage.parts)) {
-    const reasoningParts = uiMessage.parts.filter((part: any) => 
+    const reasoningParts = uiMessage.parts.filter((part: any) =>
       part.type === 'reasoning-delta' || part.type === 'reasoning-start' || part.type === 'reasoning-end'
     );
 
@@ -149,7 +152,7 @@ function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
       }
     }
   }
-  
+
   return steps;
 }
 
@@ -177,10 +180,26 @@ export function PRDChatDrawerV2({
   const [showEditTemplatesModal, setShowEditTemplatesModal] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [messageActions, setMessageActions] = useState<Record<string, React.ReactNode>>({});
-  
+
   // State for overwrite/append dialog
   const [showApplyModeDialog, setShowApplyModeDialog] = useState(false);
   const [pendingContent, setPendingContent] = useState<string | null>(null);
+
+  // State for user ID
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Get user ID from Supabase auth
+  useEffect(() => {
+    const getUserId = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id || null);
+    };
+
+    getUserId();
+  }, []);
 
   // Store hooks
   const {
@@ -208,8 +227,10 @@ export function PRDChatDrawerV2({
       order: s.order,
       description: s.description,
     })),
-    onFinish: (message) => {
+    onFinish: async (message) => {
       console.log('PRD generation finished:', message);
+      // Save to Supabase when generation finishes
+      await saveChatToSupabase();
     },
     onError: (error) => {
       console.error('PRD generation error:', error);
@@ -218,6 +239,69 @@ export function PRDChatDrawerV2({
 
   const { messages, error, status } = chat;
   const isLoading = status === 'submitted' || status === 'streaming';
+
+  // Function to save chat session to Supabase
+  // This is a non-critical background operation - failures are silent
+  const saveChatToSupabase = useCallback(async () => {
+    // Early returns - no logging needed, these are expected conditions
+    if (!noteId || !userId || messages.length === 0) {
+      return;
+    }
+
+    try {
+      // Convert UI messages to ChatSessionData format
+      const sessionData: ChatSessionData = {
+        id: `prd-session-${noteId}`,
+        messages: messages
+          .filter((msg) => msg.role === 'user' || msg.role === 'assistant') // Only save user and assistant messages
+          .map((msg) => {
+            // Extract text content from parts
+            let content = '';
+            if (msg.parts && Array.isArray(msg.parts)) {
+              for (const part of msg.parts) {
+                if (part.type === 'text' && part.text) {
+                  content += part.text;
+                }
+              }
+            }
+
+            return {
+              id: msg.id,
+              role: msg.role as 'user' | 'assistant',
+              content: content,
+              timestamp: new Date().toISOString(),
+              templateUsed: selectedTemplate || undefined,
+              providerUsed: selectedProvider || undefined,
+            };
+          }),
+        noteId: noteId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Silent background save - repository handles all error cases gracefully
+      await chatSessionsRepository.upsert(
+        noteId,
+        'prd',
+        sessionData,
+        userId
+      );
+    } catch {
+      // Silently ignore any errors - persistence is optional
+    }
+  }, [noteId, userId, messages, selectedTemplate, selectedProvider]);
+
+  // Save to Supabase whenever messages change (debounced)
+  useEffect(() => {
+    if (messages.length > 0 && !isLoading) {
+      // Use a small delay to avoid saving too frequently during streaming
+      const timeoutId = setTimeout(() => {
+        saveChatToSupabase();
+      }, 1000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, isLoading, saveChatToSupabase]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -244,7 +328,18 @@ export function PRDChatDrawerV2({
     setShowClearDialog(true);
   };
 
-  const confirmClearChat = () => {
+  const confirmClearChat = async () => {
+    // Delete from Supabase if we have a noteId and userId
+    if (noteId && userId) {
+      try {
+        console.log('[PRD Chat] Deleting chat session from Supabase');
+        await chatSessionsRepository.delete(noteId, 'prd', userId);
+        console.log('[PRD Chat] Successfully deleted from Supabase');
+      } catch (error) {
+        console.error('[PRD Chat] Error deleting from Supabase:', error);
+      }
+    }
+
     // Clear messages by reloading the page or resetting state
     window.location.reload();
     setShowClearDialog(false);
@@ -260,7 +355,7 @@ export function PRDChatDrawerV2({
 
   const handleAddToNote = useCallback((messageId: string, content: string) => {
     const cleanedContent = cleanContentFromThinking(content);
-    
+
     // Check if there's existing content in the note (more than just whitespace)
     const hasExistingContent = noteContent && noteContent.trim().length > 0;
 
@@ -275,15 +370,15 @@ export function PRDChatDrawerV2({
   }, [noteContent, onApplyContent]);
 
   // Convert UI messages to our Message format (memoized)
-  const convertedMessages: Message[] = useMemo(() => 
-    messages.map(convertUIMessageToMessage), 
+  const convertedMessages: Message[] = useMemo(() =>
+    messages.map(convertUIMessageToMessage),
     [messages]
   );
 
   // Generate actions for each assistant message
   useEffect(() => {
     const actions: Record<string, React.ReactNode> = {};
-    
+
     convertedMessages.forEach((message, index) => {
       if (message.role === 'assistant' && index === convertedMessages.length - 1 && !isLoading) {
         const cleanedContent = cleanContentFromThinking(message.content);
@@ -345,8 +440,8 @@ export function PRDChatDrawerV2({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent 
-          side="right" 
+        <SheetContent
+          side="right"
           className="w-full sm:max-w-2xl p-0 flex flex-col"
         >
           {/* Header */}
@@ -363,28 +458,26 @@ export function PRDChatDrawerV2({
                   </SheetDescription>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onOpenChange(false)}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 pt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleClearChat}
-                disabled={messages.length === 0}
-                className="h-8 text-xs"
-              >
-                <MessageSquare className="w-3 h-3 mr-1.5" />
-                Clear Chat
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearChat}
+                  disabled={messages.length === 0}
+                  className="h-8 text-xs"
+                >
+                  <MessageSquare className="w-3 h-3 mr-1.5" />
+                  Clear Chat
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onOpenChange(false)}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </SheetHeader>
 

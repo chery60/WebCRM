@@ -138,7 +138,12 @@ function buildTemplatePrompts(options: {
   systemPrompt += `  |----------|----------|----------|\n`;
   systemPrompt += `  | Cell 1   | Cell 2   | Cell 3   |\n`;
   systemPrompt += `- Use bullet lists for user stories and acceptance criteria.\n`;
-  systemPrompt += `- Include Mermaid diagrams only if the section description requests them.\n`;
+  systemPrompt += `- **MANDATORY: Include Mermaid diagrams** to visualize concepts:\n`;
+  systemPrompt += `  * For sections about processes/flows: include flowchart diagrams\n`;
+  systemPrompt += `  * For sections about system architecture: include flowchart or sequence diagrams\n`;
+  systemPrompt += `  * For any section where visual representation helps understanding: add appropriate diagrams\n`;
+  systemPrompt += `  * Use ONLY these diagram types: \`\`\`mermaid flowchart\`\`\` or \`\`\`mermaid sequenceDiagram\`\`\`\n`;
+  systemPrompt += `  * Wrap all node labels with special characters in quotes: A["Label (with parens)"]\n`;
   systemPrompt += `- Generate substantial, detailed content for each section (aim for 150+ words per section).\n\n`;
 
   const prompt = `Create a PRD using ONLY the template sections above.\n`;
@@ -214,6 +219,12 @@ function buildSectionPrompt(options: {
   prompt += `  | Column 1 | Column 2 | Column 3 |\n`;
   prompt += `  |----------|----------|----------|\n`;
   prompt += `  | Data 1   | Data 2   | Data 3   |\n`;
+  prompt += `- **IMPORTANT: Include Mermaid diagrams where they add value:**\n`;
+  prompt += `  * For flow/process sections: add \`\`\`mermaid flowchart TD\`\`\` diagrams\n`;
+  prompt += `  * For system interaction sections: add \`\`\`mermaid sequenceDiagram\`\`\` diagrams\n`;
+  prompt += `  * For architecture sections: add flowchart diagrams showing components and data flow\n`;
+  prompt += `  * ONLY use flowchart or sequenceDiagram types (others are disabled)\n`;
+  prompt += `  * Always wrap node labels with special characters in quotes: A["User Login (OAuth)"]\n`;
   prompt += `- Generate comprehensive, detailed content (aim for at least 100-200 words with specific examples)\n`;
   prompt += `- Avoid incomplete sentences or truncated content\n`;
   prompt += `- If you need to generate a table, ensure it's complete with all rows and columns\n`;

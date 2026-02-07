@@ -4,20 +4,24 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pipelinesRepository } from '@/lib/db/repositories/pipelines';
 import { roadmapsRepository } from '@/lib/db/repositories/roadmaps';
 import { featureRequestsRepository } from '@/lib/db/repositories/feature-requests';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import type { Pipeline } from '@/types';
 
-// Query keys
+// Query keys - now include workspaceId for proper cache isolation
 export const pipelineKeys = {
   all: ['pipelines'] as const,
-  lists: () => [...pipelineKeys.all, 'list'] as const,
+  lists: (workspaceId?: string) => [...pipelineKeys.all, 'list', { workspaceId }] as const,
   detail: (id: string) => [...pipelineKeys.all, 'detail', id] as const,
 };
 
-// Get all pipelines
+// Get all pipelines (filtered by current workspace)
 export function usePipelines() {
+  const { currentWorkspace } = useWorkspaceStore();
+  const workspaceId = currentWorkspace?.id;
+
   return useQuery({
-    queryKey: pipelineKeys.lists(),
-    queryFn: () => pipelinesRepository.getAll(),
+    queryKey: pipelineKeys.lists(workspaceId),
+    queryFn: () => pipelinesRepository.getAll(workspaceId),
   });
 }
 
@@ -33,12 +37,19 @@ export function usePipeline(id: string | undefined) {
 // Create pipeline
 export function useCreatePipeline() {
   const queryClient = useQueryClient();
+  const { currentWorkspace } = useWorkspaceStore();
 
   return useMutation({
-    mutationFn: (data: { name: string; description?: string; icon?: string; color?: string }) =>
-      pipelinesRepository.create(data),
+    mutationFn: (data: { name: string; description?: string; icon?: string; color?: string }) => {
+      // Automatically inject workspaceId if not provided
+      const pipelineData = {
+        ...data,
+        workspaceId: currentWorkspace?.id,
+      };
+      return pipelinesRepository.create(pipelineData);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: pipelineKeys.lists(currentWorkspace?.id) });
     },
   });
 }

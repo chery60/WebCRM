@@ -34,6 +34,7 @@ function rowToEmployee(row: any): Employee {
         lastActivityAt: row.last_activity_at ? new Date(row.last_activity_at) : undefined,
         deactivatedAt: row.deactivated_at ? new Date(row.deactivated_at) : undefined,
         deactivatedBy: row.deactivated_by,
+        workspaceId: row.workspace_id,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
         isDeleted: row.is_deleted,
@@ -71,6 +72,7 @@ function employeeToRow(employee: Partial<Employee>): Record<string, any> {
     if (employee.lastActivityAt !== undefined) row.last_activity_at = employee.lastActivityAt?.toISOString();
     if (employee.deactivatedAt !== undefined) row.deactivated_at = employee.deactivatedAt?.toISOString();
     if (employee.deactivatedBy !== undefined) row.deactivated_by = employee.deactivatedBy;
+    if (employee.workspaceId !== undefined) row.workspace_id = employee.workspaceId;
     if (employee.isDeleted !== undefined) row.is_deleted = employee.isDeleted;
 
     return row;
@@ -84,23 +86,35 @@ function generateEmployeeId(): string {
 }
 
 export const employeesRepository = {
-    // Get all employees
-    async getAll(): Promise<Employee[]> {
+    // Get all employees for a workspace
+    async getAll(workspaceId?: string): Promise<Employee[]> {
         const supabase = getSupabaseClient();
         if (!supabase) return [];
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('employees')
             .select('*')
-            .eq('is_deleted', false)
-            .order('first_name');
+            .eq('is_deleted', false);
 
-        if (error) {
-            console.error('Error fetching employees:', error);
+        // SECURITY: Filter by workspace - strict mode
+        if (workspaceId) {
+            query = query.eq('workspace_id', workspaceId);
+        } else {
+            // If no workspace provided, return empty to prevent data leaks
+            console.warn('[Employees Repository] No workspace provided - returning empty list');
             return [];
         }
 
-        return (data || []).map(rowToEmployee);
+        const { data, error } = await query.order('first_name');
+
+        if (error) {
+            console.error('[Employees Repository] Error fetching employees:', error);
+            return [];
+        }
+
+        const employees = (data || []).map(rowToEmployee);
+        console.log(`[Employees Repository] Fetched ${employees.length} employees for workspace: ${workspaceId}`);
+        return employees;
     },
 
     // Get employee by ID
@@ -140,15 +154,23 @@ export const employeesRepository = {
         return rowToEmployee(data);
     },
 
-    // Create a new employee
+    // Create a new employee (requires workspaceId for data isolation)
     async create(data: EmployeeFormData, invitedBy: string): Promise<Employee | null> {
         const supabase = getSupabaseClient();
         if (!supabase) return null;
 
+        // SECURITY: workspace_id is REQUIRED
+        if (!data.workspaceId) {
+            console.error('[Employees Repository] Attempted to create employee without workspace_id:', { email: data.email });
+            throw new Error('Workspace ID is required to create an employee. Please ensure you have a workspace selected.');
+        }
+
+        console.log(`[Employees Repository] Creating employee "${data.email}" in workspace: ${data.workspaceId}`);
+
         // Check if email already exists
         const existing = await this.getByEmail(data.email);
         if (existing) {
-            console.error('Employee with this email already exists');
+            console.error('[Employees Repository] Employee with this email already exists');
             return null;
         }
 
@@ -172,6 +194,7 @@ export const employeesRepository = {
             country: data.country,
             city: data.city,
             address: data.address,
+            workspace_id: data.workspaceId,
             invitation_token: crypto.randomUUID().replace(/-/g, ''),
             invited_at: new Date().toISOString(),
             invited_by: invitedBy,
@@ -186,10 +209,11 @@ export const employeesRepository = {
             .single();
 
         if (error || !insertedData) {
-            console.error('Error creating employee:', error);
+            console.error('[Employees Repository] Error creating employee:', error);
             return null;
         }
 
+        console.log(`[Employees Repository] Successfully created employee: ${insertedData.id}`);
         return rowToEmployee(insertedData);
     },
 

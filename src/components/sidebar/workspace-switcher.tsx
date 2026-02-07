@@ -64,9 +64,14 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
         setIsLoading(true);
         try {
             await createWorkspace(newWorkspaceName.trim(), currentUser.id, undefined, undefined);
-            // Invalidate all workspace-scoped queries
+            // Invalidate ALL workspace-scoped queries
             queryClient.invalidateQueries({ queryKey: ['notes'] });
             queryClient.invalidateQueries({ queryKey: ['projects'] });
+            queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+            queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+            queryClient.invalidateQueries({ queryKey: ['featureRequests'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['employees'] });
             toast.success('Workspace created successfully');
             setIsCreateOpen(false);
             setNewWorkspaceName('');
@@ -81,9 +86,14 @@ export function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps)
     const handleSwitchWorkspace = async (workspaceId: string) => {
         try {
             await switchWorkspace(workspaceId);
-            // Invalidate all workspace-scoped queries to refresh data
+            // Invalidate ALL workspace-scoped queries to refresh data
             queryClient.invalidateQueries({ queryKey: ['notes'] });
             queryClient.invalidateQueries({ queryKey: ['projects'] });
+            queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+            queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+            queryClient.invalidateQueries({ queryKey: ['featureRequests'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['employees'] });
             toast.success('Switched workspace');
         } catch (error) {
             toast.error('Failed to switch workspace');

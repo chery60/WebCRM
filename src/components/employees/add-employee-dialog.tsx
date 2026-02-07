@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEmployeeStore } from '@/lib/stores/employee-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { EmployeeCategory } from '@/types';
 
 import {
@@ -86,7 +87,8 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
     const [newDepartmentInput, setNewDepartmentInput] = useState('');
     const { addEmployee, getAllDepartments, addDepartment } = useEmployeeStore();
     const { currentUser } = useAuthStore();
-    
+    const { currentWorkspace } = useWorkspaceStore();
+
     // Get all available departments dynamically
     const departments = getAllDepartments();
 
@@ -121,6 +123,11 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
             return;
         }
 
+        if (!currentWorkspace?.id) {
+            toast.error('Please select a workspace first');
+            return;
+        }
+
         const result = await addEmployee(
             {
                 firstName: values.firstName,
@@ -140,7 +147,8 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
                 avatar: avatarPreview || undefined,
             },
             currentUser.role,
-            currentUser.id
+            currentUser.id,
+            currentWorkspace.id
         );
 
         if (result) {
@@ -240,8 +248,8 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
                                             </PopoverTrigger>
                                             <PopoverContent className="w-[250px] p-0" align="start">
                                                 <Command>
-                                                    <CommandInput 
-                                                        placeholder="Search or create..." 
+                                                    <CommandInput
+                                                        placeholder="Search or create..."
                                                         value={newDepartmentInput}
                                                         onValueChange={setNewDepartmentInput}
                                                     />
@@ -250,8 +258,8 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
                                                             <div className="py-2 px-2">
                                                                 <p className="text-sm text-muted-foreground mb-2">No department found.</p>
                                                                 {newDepartmentInput.trim() && (
-                                                                    <Button 
-                                                                        size="sm" 
+                                                                    <Button
+                                                                        size="sm"
                                                                         className="w-full gap-2"
                                                                         onClick={() => {
                                                                             const newDept = newDepartmentInput.trim();

@@ -299,13 +299,17 @@ After your thinking analysis, generate the PRD following this structure:
 1. **Show your thinking** - Use <thinking> tags before generating major sections to explain your reasoning
 2. Be specific and concrete - avoid vague statements
 3. **MANDATORY: Include Mermaid diagrams** - Every PRD MUST include:
-   - At least 1 flowchart for user flow or process flow
-   - At least 1 sequence diagram OR state diagram where applicable
+   - At least 2-3 flowchart diagrams for user flows, processes, or system architecture
+   - At least 1 sequence diagram for system interactions (where applicable)
+   - Diagrams should appear in relevant sections (Current Scenario, Diagrams, Solution)
    - Tables for feature comparisons, requirements matrices, or data summaries
 4. Ensure all Mermaid code is valid and will render
-5. **IMPORTANT for Mermaid syntax**: If node labels contain parentheses or special characters, wrap the label text in double quotes:
-   - WRONG: A[User Login (OAuth)] 
-   - CORRECT: A["User Login (OAuth)"]
+5. **IMPORTANT for Mermaid syntax**: 
+   - Use ONLY \`\`\`mermaid flowchart TD\`\`\` or \`\`\`mermaid sequenceDiagram\`\`\`
+   - If node labels contain parentheses or special characters, wrap the label text in double quotes:
+     * WRONG: A[User Login (OAuth)] 
+     * CORRECT: A["User Login (OAuth)"]
+   - Make diagrams comprehensive with multiple nodes and clear flow
 6. Use the exact section headers and emojis provided
 7. Keep the document scannable with good use of formatting
 8. Every requirement should be testable

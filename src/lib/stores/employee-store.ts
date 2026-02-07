@@ -74,8 +74,8 @@ interface EmployeeState {
     loadDepartmentsFromStorage: () => void;
 
     // CRUD Operations
-    fetchEmployees: () => Promise<void>;
-    addEmployee: (data: EmployeeFormData, currentUserRole: string, currentUserId: string) => Promise<Employee | null>;
+    fetchEmployees: (workspaceId?: string) => Promise<void>;
+    addEmployee: (data: EmployeeFormData, currentUserRole: string, currentUserId: string, workspaceId?: string) => Promise<Employee | null>;
     updateEmployee: (id: string, data: Partial<EmployeeFormData>, currentUserRole: string) => Promise<boolean>;
     deleteEmployee: (id: string, currentUserRole: string) => Promise<boolean>;
     deleteEmployees: (ids: string[], currentUserRole: string) => Promise<boolean>;
@@ -261,17 +261,17 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         });
     },
 
-    // Fetch all employees
-    fetchEmployees: async () => {
+    // Fetch all employees for a workspace
+    fetchEmployees: async (workspaceId?: string) => {
         set({ isLoading: true, error: null });
         try {
             let activeEmployees: Employee[];
 
             if (USE_SUPABASE) {
-                // Use Supabase repository
-                activeEmployees = await employeesRepository.getAll();
+                // Use Supabase repository with workspace filter
+                activeEmployees = await employeesRepository.getAll(workspaceId);
             } else {
-                // Use Dexie (fallback)
+                // Use Dexie (fallback - no workspace filtering available)
                 const allEmployees = await db.employees.toArray();
                 activeEmployees = allEmployees
                     .filter(e => !e.isDeleted)
@@ -280,7 +280,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
 
             set({ employees: activeEmployees, isLoading: false });
         } catch (error) {
-            console.error('Error fetching employees:', error);
+            console.error('[Employee Store] Error fetching employees:', error);
             set({ error: 'Failed to fetch employees', isLoading: false });
 
             // If table doesn't exist yet, just set empty array
@@ -289,7 +289,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     },
 
     // Add new employee (admin only)
-    addEmployee: async (data, currentUserRole, currentUserId) => {
+    addEmployee: async (data, currentUserRole, currentUserId, workspaceId) => {
         // Check permissions
         if (currentUserRole !== 'admin') {
             toast.error('Only admins can add employees');
@@ -308,7 +308,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
                     set({ isLoading: false });
                     return null;
                 }
-                newEmployee = await employeesRepository.create(data, currentUserId);
+                // Pass workspaceId in the data
+                newEmployee = await employeesRepository.create({ ...data, workspaceId }, currentUserId);
             } else {
                 // Use Dexie (fallback)
                 const existing = await db.employees.where('email').equals(data.email).first();

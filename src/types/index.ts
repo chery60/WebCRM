@@ -74,6 +74,7 @@ export interface Pipeline {
   description?: string;
   icon?: string;
   color?: string;
+  workspaceId?: string; // Workspace this pipeline belongs to
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
@@ -302,6 +303,9 @@ export interface Employee {
   deactivatedAt?: Date;
   deactivatedBy?: string;
 
+  // Workspace scoping
+  workspaceId?: string;
+
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
@@ -334,6 +338,7 @@ export interface EmployeeFormData {
   city?: string;
   address?: string;
   category?: EmployeeCategory;
+  workspaceId?: string; // Workspace this employee belongs to
 }
 
 // Workspace types for multi-org support
@@ -675,6 +680,7 @@ export interface Task {
   labels: string[];
   assignees: string[]; // User IDs
   projectId?: string; // Optional project/tab ID for grouping tasks
+  workspaceId?: string; // Workspace this task belongs to
   checklists: TaskChecklist[];
   attachments: TaskAttachment[];
   activities: TaskActivity[];
@@ -693,6 +699,7 @@ export interface TaskFormData {
   labels: string[];
   assignees: string[];
   projectId?: string; // Optional project/tab ID for grouping tasks
+  workspaceId?: string; // Workspace this task belongs to
   checklists: TaskChecklist[];
 }
 
@@ -703,6 +710,7 @@ export interface TasksFilter {
   labels?: string[];
   assignees?: string[];
   projectId?: string; // Filter by project/tab
+  workspaceId?: string; // Filter by workspace
   search?: string;
 }
 

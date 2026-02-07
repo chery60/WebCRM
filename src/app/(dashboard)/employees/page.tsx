@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useEmployeeStore, EmployeeViewType, DepartmentFilter } from '@/lib/stores/employee-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,6 +57,9 @@ export default function EmployeesPage() {
     const [employeeToEdit, setEmployeeToEdit] = useState<any>(null);
     const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
 
+    // Get current workspace for filtering
+    const { currentWorkspace } = useWorkspaceStore();
+
     const {
         employees,
         isLoading,
@@ -85,10 +89,12 @@ export default function EmployeesPage() {
     const { currentUser, isAuthenticated } = useAuthStore();
     const isAdmin = currentUser?.role === 'admin';
 
-    // Fetch employees on mount
+    // Fetch employees when workspace changes
     useEffect(() => {
-        fetchEmployees();
-    }, [fetchEmployees]);
+        if (currentWorkspace?.id) {
+            fetchEmployees(currentWorkspace.id);
+        }
+    }, [fetchEmployees, currentWorkspace?.id]);
 
     const filteredEmployees = getFilteredEmployees();
     const isEmpty = !isLoading && filteredEmployees.length === 0;
@@ -112,21 +118,21 @@ export default function EmployeesPage() {
     const handleDeleteEmployee = async (employeeId: string) => {
         if (confirm('Are you sure you want to delete this employee?')) {
             await deleteEmployee(employeeId, currentUser?.role || 'member');
-            fetchEmployees();
+            if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };
 
     // Handle bulk activate employees
     const handleActivateEmployees = async (ids: string[]) => {
         await activateEmployees(ids, currentUser?.role || 'member');
-        fetchEmployees();
+        if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
     };
 
     // Handle bulk deactivate employees
     const handleDeactivateEmployees = async (ids: string[]) => {
         if (confirm(`Are you sure you want to deactivate ${ids.length} employee(s)? They will not be able to log in.`)) {
             await deactivateEmployees(ids, currentUser?.role || 'member', currentUser?.id || '');
-            fetchEmployees();
+            if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };
 
@@ -134,7 +140,7 @@ export default function EmployeesPage() {
     const handleDeleteEmployees = async (ids: string[]) => {
         if (confirm(`Are you sure you want to delete ${ids.length} employee(s)? All their data will be removed.`)) {
             await deleteEmployees(ids, currentUser?.role || 'member');
-            fetchEmployees();
+            if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };
 
@@ -154,10 +160,10 @@ export default function EmployeesPage() {
 
         switch (activeView) {
             case 'list':
-                return <EmployeeListView 
-                    employees={filteredEmployees} 
-                    onEmployeeClick={handleEmployeeClick} 
-                    onEditEmployee={handleEditEmployee} 
+                return <EmployeeListView
+                    employees={filteredEmployees}
+                    onEmployeeClick={handleEmployeeClick}
+                    onEditEmployee={handleEditEmployee}
                     onDeleteEmployee={handleDeleteEmployee}
                     onActivateEmployees={handleActivateEmployees}
                     onDeactivateEmployees={handleDeactivateEmployees}
@@ -171,10 +177,10 @@ export default function EmployeesPage() {
             case 'grid':
                 return <EmployeeGridView employees={filteredEmployees} onEmployeeClick={handleEmployeeClick} onEditEmployee={handleEditEmployee} onDeleteEmployee={handleDeleteEmployee} />;
             default:
-                return <EmployeeListView 
-                    employees={filteredEmployees} 
-                    onEmployeeClick={handleEmployeeClick} 
-                    onEditEmployee={handleEditEmployee} 
+                return <EmployeeListView
+                    employees={filteredEmployees}
+                    onEmployeeClick={handleEmployeeClick}
+                    onEditEmployee={handleEditEmployee}
                     onDeleteEmployee={handleDeleteEmployee}
                     onActivateEmployees={handleActivateEmployees}
                     onDeactivateEmployees={handleDeactivateEmployees}
@@ -230,7 +236,7 @@ export default function EmployeesPage() {
                             <AddEmployeeDialog
                                 open={addDialogOpen}
                                 onOpenChange={setAddDialogOpen}
-                                onSuccess={() => fetchEmployees()}
+                                onSuccess={() => { if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id); }}
                             />
                         </>
                     )}
@@ -357,7 +363,7 @@ export default function EmployeesPage() {
                     onOpenChange={setEditDialogOpen}
                     employee={employeeToEdit}
                     onSuccess={() => {
-                        fetchEmployees();
+                        if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
                         setEditDialogOpen(false);
                     }}
                 />

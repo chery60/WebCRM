@@ -34,6 +34,7 @@ import {
     useReorderTasks,
 } from '@/lib/hooks/use-tasks';
 import { useTaskTabsManager } from '@/lib/hooks/use-task-tabs';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import type { Task, TaskFormData, TaskStatus, TaskSortField, SortDirection, TaskTab } from '@/types';
 import { db } from '@/lib/db/dexie';
 import { useQuery } from '@tanstack/react-query';
@@ -60,8 +61,14 @@ export default function TasksPage() {
     // Task tab manager (handles both local storage and Supabase)
     const { tabs, activeTabId, addTab, updateTab, deleteTab, setActiveTab, isLoading: tabsLoading } = useTaskTabsManager();
 
-    // Filter based on active tab
-    const filter = activeTabId ? { projectId: activeTabId } : undefined;
+    // Workspace store for filtering
+    const { currentWorkspace } = useWorkspaceStore();
+
+    // Filter based on active tab AND workspace
+    const filter = {
+        ...(activeTabId ? { projectId: activeTabId } : {}),
+        workspaceId: currentWorkspace?.id,
+    };
 
     // Queries
     const { data: tasksByStatus, isLoading: loadingByStatus } = useTasksByStatus(filter);
@@ -135,7 +142,11 @@ export default function TasksPage() {
     };
 
     const handleCreateNewTask = (data: TaskFormData) => {
-        createTask.mutate(data);
+        // Automatically inject workspaceId
+        createTask.mutate({
+            ...data,
+            workspaceId: currentWorkspace?.id,
+        });
     };
 
     const handleUpdateTask = (id: string, updates: Partial<Task>) => {

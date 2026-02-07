@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Brain, 
+import {
+  ChevronDown,
+  ChevronRight,
+  Brain,
   Lightbulb,
   Search,
   Loader2,
@@ -139,15 +139,26 @@ function ThinkingStepComponent({ step }: { step: ThinkingStep }) {
 // MAIN COMPONENT
 // ============================================================================
 
-export function ChainOfThought({ 
-  steps, 
+export function ChainOfThought({
+  steps,
   isStreaming = false,
   className,
   defaultExpanded = false,
 }: ChainOfThoughtProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  // Track if we ever showed thinking content - once shown, keep showing
+  const [wasEverShown, setWasEverShown] = useState(false);
 
-  if (steps.length === 0 && !isStreaming) {
+  // Update wasEverShown when we have steps or start streaming
+  React.useEffect(() => {
+    if (steps.length > 0 || isStreaming) {
+      setWasEverShown(true);
+    }
+  }, [steps.length, isStreaming]);
+
+  // Only hide if we never had any thinking content
+  // Once shown during a session, keep showing (even if steps become empty)
+  if (!wasEverShown && steps.length === 0 && !isStreaming) {
     return null;
   }
 
@@ -159,7 +170,7 @@ export function ChainOfThought({
     <div className={cn('border border-border/50 rounded-lg bg-muted/30', className)}>
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CollapsibleTrigger asChild>
-          <button 
+          <button
             className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -182,8 +193,8 @@ export function ChainOfThought({
                   {completedSteps} / {totalSteps} steps
                 </span>
               )}
-              <Badge 
-                variant="secondary" 
+              <Badge
+                variant="secondary"
                 className={cn(
                   'text-xs',
                   hasActiveStep && 'bg-blue-500/10 text-blue-700 border-blue-200'
@@ -194,7 +205,7 @@ export function ChainOfThought({
             </div>
           </button>
         </CollapsibleTrigger>
-        
+
         <CollapsibleContent>
           <div className="px-3 pb-3 space-y-1 border-t border-border/50 pt-3">
             {steps.map((step) => (
@@ -217,10 +228,10 @@ export function ChainOfThought({
 // INLINE THINKING INDICATOR (for streaming)
 // ============================================================================
 
-export function ThinkingIndicator({ 
+export function ThinkingIndicator({
   currentStep,
-  className 
-}: { 
+  className
+}: {
   currentStep?: string;
   className?: string;
 }) {

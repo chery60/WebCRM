@@ -116,10 +116,29 @@ function parseInlineMarks(text: string): TipTapNode[] {
  * Creates a paragraph node with parsed inline content
  */
 function createParagraph(text: string): TipTapNode {
-  const content = parseInlineMarks(text.trim());
+  const trimmed = text.trim();
+  
+  // Return paragraph with empty text node if no content
+  if (!trimmed) {
+    return {
+      type: 'paragraph',
+      content: [{ type: 'text', text: '' }],
+    };
+  }
+  
+  const content = parseInlineMarks(trimmed);
+  
+  // Ensure we always have at least one text node, even if empty
+  if (content.length === 0) {
+    return {
+      type: 'paragraph',
+      content: [{ type: 'text', text: '' }],
+    };
+  }
+  
   return {
     type: 'paragraph',
-    content: content.length > 0 ? content : undefined,
+    content,
   };
 }
 
@@ -127,11 +146,32 @@ function createParagraph(text: string): TipTapNode {
  * Creates a heading node
  */
 function createHeading(level: number, text: string): TipTapNode {
-  const content = parseInlineMarks(text.trim());
+  const trimmed = text.trim();
+  
+  // Return heading with empty text node if no content
+  if (!trimmed) {
+    return {
+      type: 'heading',
+      attrs: { level },
+      content: [{ type: 'text', text: '' }],
+    };
+  }
+  
+  const content = parseInlineMarks(trimmed);
+  
+  // Ensure we always have at least one text node
+  if (content.length === 0) {
+    return {
+      type: 'heading',
+      attrs: { level },
+      content: [{ type: 'text', text: '' }],
+    };
+  }
+  
   return {
     type: 'heading',
     attrs: { level },
-    content: content.length > 0 ? content : undefined,
+    content,
   };
 }
 
