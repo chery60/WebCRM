@@ -1111,15 +1111,15 @@ export default function NoteDetailPage() {
     return (
       <div className="flex flex-col h-full bg-white">
         <div className="flex-1 overflow-auto">
-          <div className="max-w-[1280px] mx-auto px-8 py-6">
+          <div className="max-w-[1280px] mx-auto px-10 py-6">
             <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-7">
+              <div className="col-span-8">
                 <Skeleton className="h-4 w-24 mb-8" />
                 <Skeleton className="h-[52px] w-2/3 mb-8" />
                 <Skeleton className="h-4 w-48 mb-8" />
                 <Skeleton className="h-[350px] w-full" />
               </div>
-              <div className="col-span-5 pl-12">
+              <div className="col-span-4 pl-12">
                 <Skeleton className="h-[200px] w-full mb-6" />
                 <Skeleton className="h-[150px] w-full" />
               </div>
@@ -1145,11 +1145,11 @@ export default function NoteDetailPage() {
   return (
     <div className="flex flex-col h-full bg-white text-note-text">
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[1280px] mx-auto px-8 py-6">
+        <div className="max-w-[1280px] mx-auto px-10 py-6">
           {/* 12-column grid layout */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-            {/* Left Content Area - col-span-7 */}
-            <div className="col-span-1 xl:col-span-7 flex flex-col gap-4">
+            {/* Left Content Area - col-span-8 */}
+            <div className="col-span-1 xl:col-span-8 flex flex-col gap-4">
               {/* Back Navigation */}
               <div className="flex items-center justify-between">
                 <Link
@@ -1516,8 +1516,8 @@ export default function NoteDetailPage() {
 
             </div>
 
-            {/* Right Sidebar - col-span-5 */}
-            <div className="col-span-1 xl:col-span-5 pl-0 xl:pl-6">
+            {/* Right Sidebar - col-span-4 */}
+            <div className="col-span-1 xl:col-span-4 pl-0 xl:pl-6">
               <div className="space-y-6 sticky top-6">
                 {/* Canvas Card */}
                 <CanvasCard
