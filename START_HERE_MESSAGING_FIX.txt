@@ -1,0 +1,67 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║   🎯 DIRECT MESSAGING FIX - START HERE                        ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+PROBLEM:
+--------
+Employees don't appear in "Start a direct message" dialog
+Shows: "No other workspace members yet"
+
+ROOT CAUSE:
+-----------
+Employees exist in 'employees' table but not in:
+  ✗ 'users' table (needed for identity)
+  ✗ 'workspace_memberships' table (needed for messaging)
+
+SOLUTION:
+---------
+Run migration 027 to automatically sync employees to both tables
+
+┌────────────────────────────────────────────────────────────────┐
+│  STEP 1: Apply the Fix                                        │
+└────────────────────────────────────────────────────────────────┘
+
+Option A: Supabase Dashboard
+  1. Open Supabase Dashboard → SQL Editor
+  2. Copy content of: supabase/migrations/027_fix_employee_and_messaging.sql
+  3. Paste and click "Run"
+
+Option B: Supabase CLI
+  $ supabase db push
+
+┌────────────────────────────────────────────────────────────────┐
+│  STEP 2: Verify & Test                                        │
+└────────────────────────────────────────────────────────────────┘
+
+1. Go to Messages → Click "New Message"
+2. You should now see all employees!
+3. Select one and send a test message
+
+┌────────────────────────────────────────────────────────────────┐
+│  WHAT THE FIX DOES                                            │
+└────────────────────────────────────────────────────────────────┘
+
+✅ Creates trigger to auto-sync employees → users table
+✅ Creates workspace_memberships for all employees  
+✅ Backfills existing employees (runs once)
+✅ Fixes unique constraint to allow re-adding deleted employees
+✅ Handles future employee additions automatically
+
+┌────────────────────────────────────────────────────────────────┐
+│  FILES CREATED                                                │
+└────────────────────────────────────────────────────────────────┘
+
+📄 DIRECT_MESSAGING_FIX_COMPLETE.md   - Full technical documentation
+📄 QUICK_TEST_GUIDE.md                - Testing instructions  
+📄 APPLY_THIS_FIX_NOW.sql             - Quick diagnostic + fix
+📄 supabase/migrations/027_...sql     - The actual migration
+
+┌────────────────────────────────────────────────────────────────┐
+│  NEED HELP?                                                   │
+└────────────────────────────────────────────────────────────────┘
+
+Read: DIRECT_MESSAGING_FIX_COMPLETE.md (Troubleshooting section)
+
+That's it! After running the migration, messaging will work! 🎉

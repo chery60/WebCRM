@@ -1,0 +1,79 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                                                                       ║
+║              🚨 ACTION REQUIRED: RUN THIS SQL SCRIPT 🚨              ║
+║                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+YOU NEED TO RUN 1 MORE SQL SCRIPT TO FIX THE ERROR!
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                                      ┃
+┃  STEP 1: Go to Supabase Dashboard                                   ┃
+┃  ─────────────────────────────────────────────────────────────────  ┃
+┃  URL: https://ubkywhbguzbyewedxjdj.supabase.co                      ┃
+┃                                                                      ┃
+┃  STEP 2: Open SQL Editor                                            ┃
+┃  ─────────────────────────────────────────────────────────────────  ┃
+┃  Left sidebar → "SQL Editor" → "New query"                          ┃
+┃                                                                      ┃
+┃  STEP 3: Run This File                                              ┃
+┃  ─────────────────────────────────────────────────────────────────  ┃
+┃  File: FIX_EMPLOYEE_INSERT_RLS.sql                                  ┃
+┃  Action: Copy ENTIRE file → Paste → Click "Run"                     ┃
+┃                                                                      ┃
+┃  STEP 4: Look for Success Message                                   ┃
+┃  ─────────────────────────────────────────────────────────────────  ┃
+┃  Should see: "🎉 FIX COMPLETE!"                                     ┃
+┃                                                                      ┃
+┃  STEP 5: Test in Your App                                           ┃
+┃  ─────────────────────────────────────────────────────────────────  ┃
+┃  Refresh browser → Try adding employee → Should work! ✅            ┃
+┃                                                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+═══════════════════════════════════════════════════════════════════════
+
+WHY THIS IS NEEDED:
+
+  Issue #1: Email constraint ✅ FIXED (you already ran this)
+  Issue #2: RLS policy blocking insert ⏳ NEEDS FIX (run the script above)
+
+═══════════════════════════════════════════════════════════════════════
+
+WHAT THE SCRIPT DOES:
+
+  ✅ Ensures you have a workspace
+  ✅ Creates/updates your workspace membership
+  ✅ Sets you as owner with active status
+  ✅ Fixes RLS policies
+  ✅ Enables you to add employees
+
+═══════════════════════════════════════════════════════════════════════
+
+SUMMARY OF PREVIOUS FIXES:
+
+  ✅ Migration 025: Fixed email uniqueness constraint
+  ✅ Enhanced error logging in code
+  ✅ Workspace-scoped employee validation
+  ⏳ RLS policy fix: WAITING FOR YOU TO RUN SQL SCRIPT
+
+═══════════════════════════════════════════════════════════════════════
+
+TIME REQUIRED: 1 minute
+
+FILES IN ORDER:
+  1. APPLY_EMAIL_CONSTRAINT_FIX.sql ← Already ran ✅
+  2. FIX_EMPLOYEE_INSERT_RLS.sql ← RUN THIS NOW ⏳
+
+DOCUMENTATION:
+  • COMPLETE_FIX_GUIDE.md ← Read this for details
+  • RUN_THIS_TO_FIX.txt ← This file (quick reference)
+
+═══════════════════════════════════════════════════════════════════════
+
+👉 OPEN: FIX_EMPLOYEE_INSERT_RLS.sql
+👉 GO TO: Supabase SQL Editor  
+👉 RUN IT: Click "Run" button
+👉 TEST: Add employee in your app
+
+═══════════════════════════════════════════════════════════════════════

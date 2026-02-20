@@ -25,6 +25,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import type { CustomPRDTemplate } from '@/types';
 import { cn } from '@/lib/utils';
 import { EditTemplatesModal } from './edit-templates-modal';
@@ -70,7 +71,8 @@ const DEFAULT_USE_CASES = ['General purpose', 'Custom workflow'];
 // ============================================================================
 
 export function PRDTemplateSelector({ open, onClose, onSelect }: PRDTemplateSelectorProps) {
-  const { templates, seedStarterTemplates } = useCustomTemplatesStore();
+  const { templates, seedStarterTemplates, syncFromSupabase } = useCustomTemplatesStore();
+  const { currentUser } = useAuthStore();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [hoveredTemplateId, setHoveredTemplateId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -81,6 +83,13 @@ export function PRDTemplateSelector({ open, onClose, onSelect }: PRDTemplateSele
   useEffect(() => {
     seedStarterTemplates();
   }, [seedStarterTemplates]);
+
+  // Sync templates from Supabase on mount
+  useEffect(() => {
+    if (currentUser?.id) {
+      syncFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id, syncFromSupabase]);
 
   const handleSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -206,7 +215,7 @@ export function PRDTemplateSelector({ open, onClose, onSelect }: PRDTemplateSele
                       </button>
                     );
                   })}
-                  
+
                   {templates.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -275,16 +284,16 @@ export function PRDTemplateSelector({ open, onClose, onSelect }: PRDTemplateSele
                         {activeTemplate.sections
                           .sort((a, b) => a.order - b.order)
                           .map((section, index) => (
-                          <div
-                            key={section.id}
-                            className="text-sm py-1.5 px-2 rounded flex items-center gap-2 bg-background/50"
-                          >
-                            <span className="text-muted-foreground text-xs w-5">
-                              {index + 1}.
-                            </span>
-                            <span>{section.title}</span>
-                          </div>
-                        ))}
+                            <div
+                              key={section.id}
+                              className="text-sm py-1.5 px-2 rounded flex items-center gap-2 bg-background/50"
+                            >
+                              <span className="text-muted-foreground text-xs w-5">
+                                {index + 1}.
+                              </span>
+                              <span>{section.title}</span>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   </div>

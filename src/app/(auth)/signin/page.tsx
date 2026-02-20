@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,7 @@ import { AuthMarketingPanel } from '@/components/auth/auth-marketing-panel';
 
 function SignInContent() {
     const { login, isLoading } = useAuthStore();
+    const { fetchUserWorkspaces } = useWorkspaceStore();
     const router = useRouter();
     const searchParams = useSearchParams();
     const invitationToken = searchParams?.get('invitation');
@@ -32,14 +34,35 @@ function SignInContent() {
         try {
             await login(email, password);
 
+            // Fetch user's workspaces after login (per spec Flow #2)
+            const currentUser = useAuthStore.getState().currentUser;
+            if (currentUser) {
+                await fetchUserWorkspaces(currentUser.id);
+            }
+
             // If user was invited, redirect to accept the invitation
             if (invitationToken) {
                 router.push(`/invitation?token=${invitationToken}`);
+            } else if (currentUser && !currentUser.hasCompletedOnboarding) {
+                // New users who haven't completed onboarding
+                router.push('/onboarding');
             } else {
                 router.push('/notes');
             }
         } catch (err) {
-            setError('Login failed. Please check your email and password.');
+            // Check if error is due to invalid credentials (user not found)
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            
+            // If the error indicates invalid credentials, redirect to signup with email pre-filled
+            if (errorMessage.includes('Invalid login credentials') || 
+                errorMessage.includes('User not found') ||
+                errorMessage.includes('Email not confirmed')) {
+                // Redirect to signup page with email pre-filled
+                router.push(`/signup?email=${encodeURIComponent(email)}`);
+            } else {
+                // For other errors, show generic error message
+                setError('Login failed. Please check your email and password.');
+            }
         }
     };
 
@@ -49,15 +72,15 @@ function SignInContent() {
     };
 
     return (
-        <div className="flex min-h-screen">
+        <div className="min-h-screen flex bg-gradient-to-br from-gray-50 to-gray-100">
             {/* Left Panel - Marketing */}
             <div className="hidden lg:flex lg:w-1/2">
                 <AuthMarketingPanel variant="signin" />
             </div>
 
             {/* Right Panel - Form */}
-            <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:px-8 bg-white">
-                <div className="w-full max-w-sm">
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+                <div className="w-full max-w-md">
                     {/* Logo */}
                     <div className="flex justify-center mb-8">
                         <div className="flex items-center gap-2">

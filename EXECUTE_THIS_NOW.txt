@@ -1,0 +1,82 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                                                                       ║
+║           🚨 CRITICAL: YOU MUST DO THIS TO FIX THE ERROR 🚨          ║
+║                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Your app is ready, but the DATABASE needs one update!
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                                      ┃
+┃  STEP 1: Open Supabase Dashboard                                    ┃
+┃  ────────────────────────────────────────                           ┃
+┃  URL: https://ubkywhbguzbyewedxjdj.supabase.co                      ┃
+┃                                                                      ┃
+┃  STEP 2: Go to SQL Editor                                           ┃
+┃  ────────────────────────────────────────                           ┃
+┃  Click: "SQL Editor" in left sidebar                                ┃
+┃  Click: "New query" button                                          ┃
+┃                                                                      ┃
+┃  STEP 3: Run This SQL Script                                        ┃
+┃  ────────────────────────────────────────                           ┃
+┃  File: APPLY_EMAIL_CONSTRAINT_FIX.sql                               ┃
+┃  Action: Copy ENTIRE file contents                                  ┃
+┃  Action: Paste into SQL Editor                                      ┃
+┃  Action: Click "Run" button                                         ┃
+┃                                                                      ┃
+┃  STEP 4: Verify Success                                             ┃
+┃  ────────────────────────────────────────                           ┃
+┃  Look for: "🎉 MIGRATION COMPLETE!" message                         ┃
+┃                                                                      ┃
+┃  STEP 5: Test in Your App                                           ┃
+┃  ────────────────────────────────────────                           ┃
+┃  Go to: http://localhost:3000/employees                             ┃
+┃  Try: Adding the employee again                                     ┃
+┃  Result: ✅ Should work!                                            ┃
+┃                                                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+═══════════════════════════════════════════════════════════════════════
+
+📋 WHAT HAPPENED:
+
+  Screenshots showed:
+    ❌ "Failed to add employee" error
+    ❌ Console: "[Employees Repository] Error creating employee"
+    
+  Root Cause:
+    Database has OLD constraint: Email must be globally unique
+    
+  Fix:
+    Update constraint: Email unique per workspace (not globally)
+
+═══════════════════════════════════════════════════════════════════════
+
+⏱️  TIME REQUIRED: 30 seconds
+
+📁 FILES TO USE:
+    
+    1. APPLY_EMAIL_CONSTRAINT_FIX.sql  ← Run this in Supabase
+    2. FIX_EMPLOYEE_INVITATION_ERROR.md ← Read for details
+    3. QUICK_FIX_GUIDE.txt ← Quick reference
+
+═══════════════════════════════════════════════════════════════════════
+
+✅ AFTER MIGRATION, YOU CAN:
+
+    ✓ Add employees without errors
+    ✓ Re-invite removed employees
+    ✓ Use same email across workspaces
+    ✓ Support multi-workspace users
+
+═══════════════════════════════════════════════════════════════════════
+
+🎯 BOTTOM LINE:
+
+    Application code: ✅ READY
+    Database schema: ⏳ NEEDS MIGRATION (← YOU DO THIS)
+    
+═══════════════════════════════════════════════════════════════════════
+
+👉 GO TO STEP 1 NOW! 👈
+

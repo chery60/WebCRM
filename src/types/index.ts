@@ -375,6 +375,82 @@ export interface WorkspaceInvitation {
   createdAt: Date;
 }
 
+// Messaging types
+export interface Channel {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  isPrivate: boolean;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  isDeleted: boolean;
+  unreadCount?: number; // Client-side computed
+}
+
+export interface ChannelMember {
+  id: string;
+  channelId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: Date;
+  lastReadAt: Date;
+}
+
+export interface Message {
+  id: string;
+  workspaceId: string;
+  channelId?: string; // For channel messages
+  senderId: string;
+  receiverId?: string; // For direct messages
+  content: string;
+  parentMessageId?: string; // For threaded replies
+  threadCount: number;
+  attachments: MessageAttachment[];
+  reactions: MessageReaction[];
+  isEdited: boolean;
+  editedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  isDeleted: boolean;
+  sender?: User; // Populated from join
+}
+
+export interface MessageAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  userIds: string[];
+  count: number;
+}
+
+export interface MessageRead {
+  id: string;
+  messageId: string;
+  userId: string;
+  readAt: Date;
+}
+
+export interface DirectMessageConversation {
+  id: string;
+  workspaceId: string;
+  user1Id: string;
+  user2Id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastMessageAt?: Date;
+  otherUser?: User; // Populated client-side
+  lastMessage?: Message; // Populated client-side
+  unreadCount?: number; // Populated client-side
+}
+
 
 // Form types
 export interface NoteFormData {

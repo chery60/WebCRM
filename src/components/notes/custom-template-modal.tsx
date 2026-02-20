@@ -17,14 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-  Plus, 
-  X, 
+import {
+  Plus,
+  X,
   GripVertical,
   FileText,
   Trash2,
 } from 'lucide-react';
 import { useCustomTemplatesStore, AVAILABLE_SECTIONS, DEFAULT_TEMPLATE_SECTIONS } from '@/lib/stores/custom-templates-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import type { CustomPRDTemplate } from '@/types';
 
 // ============================================================================
@@ -55,7 +56,9 @@ export function CustomTemplateModal({
   editTemplate,
 }: CustomTemplateModalProps) {
   const { addTemplate, updateTemplate } = useCustomTemplatesStore();
-  
+  const { currentUser } = useAuthStore();
+  const userId = currentUser?.id;
+
   const [name, setName] = useState(editTemplate?.name || '');
   const [description, setDescription] = useState(editTemplate?.description || '');
   const [sections, setSections] = useState<TemplateSection[]>(
@@ -92,10 +95,10 @@ export function CustomTemplateModal({
 
   const handleAddCustomSection = () => {
     if (!customSectionTitle.trim()) return;
-    
+
     const id = customSectionTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const newOrder = sections.length > 0 ? Math.max(...sections.map(s => s.order)) + 1 : 1;
-    
+
     setSections([...sections, { id, title: customSectionTitle.trim(), order: newOrder }]);
     setCustomSectionTitle('');
   };
@@ -114,29 +117,29 @@ export function CustomTemplateModal({
 
     const newSections = [...sections];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    
+
     // Swap orders
     const tempOrder = newSections[index].order;
     newSections[index].order = newSections[targetIndex].order;
     newSections[targetIndex].order = tempOrder;
-    
+
     // Swap positions
     [newSections[index], newSections[targetIndex]] = [newSections[targetIndex], newSections[index]];
-    
+
     setSections(newSections);
   };
 
   const validate = (): boolean => {
     const newErrors: { name?: string; sections?: string } = {};
-    
+
     if (!name.trim()) {
       newErrors.name = 'Template name is required';
     }
-    
+
     if (sections.length === 0) {
       newErrors.sections = 'At least one section is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -151,12 +154,12 @@ export function CustomTemplateModal({
     };
 
     let savedTemplate: CustomPRDTemplate;
-    
+
     if (editTemplate) {
-      updateTemplate(editTemplate.id, templateData);
+      updateTemplate(editTemplate.id, templateData, undefined, userId);
       savedTemplate = { ...editTemplate, ...templateData, updatedAt: new Date() };
     } else {
-      savedTemplate = addTemplate(templateData);
+      savedTemplate = addTemplate(templateData, userId);
     }
 
     onTemplateCreated?.(savedTemplate);
@@ -215,7 +218,7 @@ export function CustomTemplateModal({
                 <p className="text-xs text-destructive">{errors.sections}</p>
               )}
             </div>
-            
+
             <ScrollArea className="flex-1 border rounded-md p-2">
               {sortedSections.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">

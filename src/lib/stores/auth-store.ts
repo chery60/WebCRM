@@ -8,7 +8,9 @@ import { db } from '@/lib/db/dexie';
 import { User } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { employeesRepository } from '@/lib/db/repositories/supabase/employees';
+import { supabaseWorkspacesRepository } from '@/lib/db/repositories/supabase/workspaces';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { ensureCurrentUserInUsersTable } from '@/lib/db/sync-auth-users';
 
 interface AuthState {
     currentUser: User | null;
@@ -18,7 +20,10 @@ interface AuthState {
 
     // Actions
     login: (email: string, password: string) => Promise<void>;
-    signup: (userData: Omit<User, 'id'>) => Promise<{ requiresEmailConfirmation: boolean }>; 
+    signup: (userData: Omit<User, 'id'>) => Promise<{ requiresEmailConfirmation: boolean }>;
+    sendOtp: (email: string) => Promise<void>;
+    verifyOtp: (email: string, token: string) => Promise<void>;
+    resendOtp: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     updateProfile: (data: Partial<User>) => Promise<void>;
     setHasHydrated: (state: boolean) => void;
@@ -169,49 +174,29 @@ export const useAuthStore = create<AuthState>()(
                             throw new Error('Signup failed');
                         }
 
-                        // Check if user profile already exists before creating
-                        const { data: existingProfile } = await supabase
-                            .from('users')
-                            .select('id')
-                            .eq('id', data.user.id)
-                            .single();
+                        // Don't create user profile here — defer to verifyOtp()
+                        // Supabase auth.signUp() creates the auth user.
+                        // The user profile in the 'users' table will be created only after
+                        // successful OTP verification to ensure email ownership.
 
-                        // Only create profile if it doesn't exist
-                        if (!existingProfile) {
-                            const { error: profileError } = await supabase
-                                .from('users')
-                                .insert({
-                                    id: data.user.id,
-                                    name: userData.name,
-                                    email: userData.email,
-                                    avatar: userData.avatar,
-                                    role: userData.role || 'member',
-                                });
+                        // Send OTP via our custom Nodemailer-based endpoint
+                        const otpResponse = await fetch('/api/send-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: userData.email }),
+                        });
 
-                            if (profileError) {
-                                // Check for duplicate key violation (error code 23505)
-                                if (profileError.code === '23505') {
-                                    console.warn('User profile already exists, skipping creation');
-                                } else {
-                                    console.error('Error creating user profile:', profileError);
-                                    console.error('Error details:', JSON.stringify(profileError, null, 2));
-                                    // Don't throw here - profile creation is not critical for signup
-                                }
-                            }
+                        if (!otpResponse.ok) {
+                            const otpResult = await otpResponse.json();
+                            console.error('Failed to send OTP email:', otpResult);
+                            throw new Error('Account created but failed to send verification email. Please try resending the OTP.');
                         }
 
+                        console.log('✅ Signup successful. OTP sent via Nodemailer.');
+
+                        // Check if session exists (email confirmations disabled) or not (enabled)
                         const requiresEmailConfirmation = !data.session;
-
-                        if (data.session) {
-                            const user: User = {
-                                id: data.user.id,
-                                ...userData,
-                            };
-
-                            set({ currentUser: user, isAuthenticated: true });
-                        } else {
-                            set({ currentUser: null, isAuthenticated: false });
-                        }
+                        set({ currentUser: null, isAuthenticated: false });
 
                         return { requiresEmailConfirmation };
                     }
@@ -236,6 +221,182 @@ export const useAuthStore = create<AuthState>()(
                 } finally {
                     set({ isLoading: false });
                 }
+            },
+
+            sendOtp: async (email: string) => {
+                set({ isLoading: true });
+                try {
+                    if (USE_SUPABASE) {
+                        const supabase = getSupabaseClient();
+                        if (!supabase) throw new Error('Supabase client not available');
+
+                        // Use our custom OTP API (Nodemailer-based)
+                        const response = await fetch('/api/send-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email }),
+                        });
+
+                        if (!response.ok) {
+                            const result = await response.json();
+                            throw new Error(result.error || 'Failed to send OTP');
+                        }
+                    } else {
+                        // Dexie doesn't support OTP
+                        throw new Error('OTP not supported in offline mode');
+                    }
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            verifyOtp: async (email: string, token: string) => {
+                set({ isLoading: true });
+                try {
+                    if (USE_SUPABASE) {
+                        const supabase = getSupabaseClient();
+                        if (!supabase) throw new Error('Supabase client not available');
+
+                        // Step 1: Verify OTP via our custom API
+                        const verifyResponse = await fetch('/api/verify-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, otp: token }),
+                        });
+
+                        const verifyResult = await verifyResponse.json();
+
+                        if (!verifyResponse.ok) {
+                            throw new Error(verifyResult.error || 'Invalid or expired OTP');
+                        }
+
+                        // Step 2: Now sign in the user (email is confirmed by the API)
+                        // We need the password from the URL search params or session storage
+                        const pendingPassword = sessionStorage.getItem('pending_signup_password');
+
+                        let session = null;
+                        let signedInUser = null;
+
+                        if (pendingPassword) {
+                            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                                email,
+                                password: pendingPassword,
+                            });
+
+                            if (signInError) {
+                                console.error('Error signing in after OTP verification:', signInError);
+                                throw new Error('Email verified but sign-in failed. Please go to the sign-in page and log in with your credentials.');
+                            }
+
+                            session = signInData.session;
+                            signedInUser = signInData.user;
+
+                            // Clean up stored password
+                            sessionStorage.removeItem('pending_signup_password');
+                        } else {
+                            throw new Error('Email verified successfully! Please go to the sign-in page and log in with your credentials.');
+                        }
+
+                        if (!signedInUser) {
+                            throw new Error('Verification succeeded but could not sign in. Please try signing in manually.');
+                        }
+
+                        // Step 3: Create user profile in the 'users' table
+                        const userName = signedInUser.user_metadata?.name || email.split('@')[0];
+                        const userAvatar = signedInUser.user_metadata?.avatar || null;
+                        const userRole = signedInUser.user_metadata?.role || 'member';
+
+                        const { data: existingProfile } = await supabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', signedInUser.id)
+                            .single();
+
+                        let userProfile = existingProfile;
+
+                        if (!existingProfile) {
+                            const { data: newProfile, error: profileError } = await supabase
+                                .from('users')
+                                .insert({
+                                    id: signedInUser.id,
+                                    name: userName,
+                                    email: email,
+                                    avatar: userAvatar,
+                                    role: userRole,
+                                })
+                                .select()
+                                .single();
+
+                            if (profileError) {
+                                if (profileError.code === '23505') {
+                                    console.warn('User profile already exists, fetching it');
+                                    const { data: refetched } = await supabase
+                                        .from('users')
+                                        .select('*')
+                                        .eq('id', signedInUser.id)
+                                        .single();
+                                    userProfile = refetched;
+                                } else {
+                                    console.error('Error creating user profile after OTP verification:', profileError);
+                                }
+                            } else {
+                                userProfile = newProfile;
+                            }
+                        }
+
+                        const employee = await employeesRepository.getByEmail(email);
+
+                        // Step 4: Auto-create default workspace if needed
+                        if (session) {
+                            try {
+                                const { data: existingWorkspaces } = await supabase
+                                    .from('workspace_memberships')
+                                    .select('workspace_id')
+                                    .eq('user_id', signedInUser.id);
+
+                                if (!existingWorkspaces || existingWorkspaces.length === 0) {
+                                    const firstName = userName?.split(' ')[0] || 'My';
+                                    const workspaceName = `${firstName}'s Workspace`;
+                                    const workspace = await supabaseWorkspacesRepository.create(
+                                        workspaceName,
+                                        signedInUser.id
+                                    );
+                                    if (workspace) {
+                                        useWorkspaceStore.getState().setCurrentWorkspace(workspace);
+                                        useWorkspaceStore.setState({
+                                            userWorkspaces: [workspace],
+                                        });
+                                    }
+                                }
+                            } catch (wsError) {
+                                console.warn('Could not auto-create default workspace:', wsError);
+                            }
+                        }
+
+                        const employeeName = (employee?.firstName && employee?.lastName)
+                            ? `${employee.firstName} ${employee.lastName}`.trim()
+                            : undefined;
+
+                        const user = supabaseUserToUser(signedInUser, {
+                            ...employee,
+                            has_completed_onboarding: userProfile?.has_completed_onboarding,
+                            onboarding_completed_at: userProfile?.onboarding_completed_at,
+                            name: userProfile?.name || employeeName,
+                            avatar: userProfile?.avatar || employee?.avatar,
+                        });
+
+                        set({ currentUser: user, isAuthenticated: true });
+                    } else {
+                        throw new Error('OTP not supported in offline mode');
+                    }
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            resendOtp: async (email: string) => {
+                // Resend is the same as sendOtp
+                return get().sendOtp(email);
             },
 
             logout: async () => {
@@ -309,15 +470,38 @@ export const useAuthStore = create<AuthState>()(
                 if (!supabase) return;
 
                 try {
-                    const { data: { session } } = await supabase.auth.getSession();
+                    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+                    // Handle session errors gracefully
+                    if (sessionError) {
+                        console.error('Error fetching session:', sessionError);
+
+                        // Only clear auth state for certain errors
+                        if (sessionError.message?.includes('refresh_token') ||
+                            sessionError.message?.includes('Invalid') ||
+                            sessionError.message?.includes('expired')) {
+                            set({ currentUser: null, isAuthenticated: false });
+                        }
+                        return;
+                    }
 
                     if (session?.user) {
+                        // Ensure user exists in users table for messaging system
+                        await ensureCurrentUserInUsersTable().catch(err => {
+                            console.warn('Could not sync user to users table:', err);
+                        });
+
                         // Get user profile from users table (contains hasCompletedOnboarding)
-                        const { data: userProfile } = await supabase
+                        const { data: userProfile, error: profileError } = await supabase
                             .from('users')
                             .select('*')
                             .eq('id', session.user.id)
                             .single();
+
+                        if (profileError && profileError.code !== 'PGRST116') {
+                            // PGRST116 is "not found" - that's okay for new users
+                            console.warn('Error fetching user profile:', profileError);
+                        }
 
                         const employee = await employeesRepository.getByEmail(session.user.email || '');
 
@@ -340,6 +524,12 @@ export const useAuthStore = create<AuthState>()(
                     }
                 } catch (error) {
                     console.error('Error refreshing session:', error);
+
+                    // Don't clear auth state on network errors
+                    // This prevents logout during temporary network issues
+                    if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+                        set({ currentUser: null, isAuthenticated: false });
+                    }
                 }
             },
         }),

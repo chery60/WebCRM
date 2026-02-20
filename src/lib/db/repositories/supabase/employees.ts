@@ -136,16 +136,23 @@ export const employeesRepository = {
         return rowToEmployee(data);
     },
 
-    // Get employee by email
-    async getByEmail(email: string): Promise<Employee | undefined> {
+    // Get employee by email (workspace-scoped)
+    async getByEmail(email: string, workspaceId?: string): Promise<Employee | undefined> {
         const supabase = getSupabaseClient();
         if (!supabase) return undefined;
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('employees')
             .select('*')
             .eq('email', email)
-            .single();
+            .eq('is_deleted', false);
+
+        // Filter by workspace if provided
+        if (workspaceId) {
+            query = query.eq('workspace_id', workspaceId);
+        }
+
+        const { data, error } = await query.maybeSingle();
 
         if (error || !data) {
             return undefined;
@@ -154,10 +161,30 @@ export const employeesRepository = {
         return rowToEmployee(data);
     },
 
+    // Get all employees with a specific email across all workspaces (for checking if user exists)
+    async getByEmailGlobal(email: string): Promise<Employee[]> {
+        const supabase = getSupabaseClient();
+        if (!supabase) return [];
+
+        const { data, error } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('email', email);
+
+        if (error || !data) {
+            return [];
+        }
+
+        return data.map(rowToEmployee);
+    },
+
     // Create a new employee (requires workspaceId for data isolation)
     async create(data: EmployeeFormData, invitedBy: string): Promise<Employee | null> {
         const supabase = getSupabaseClient();
-        if (!supabase) return null;
+        if (!supabase) {
+            console.error('[Employees Repository] Supabase client is null');
+            return null;
+        }
 
         // SECURITY: workspace_id is REQUIRED
         if (!data.workspaceId) {
@@ -166,11 +193,12 @@ export const employeesRepository = {
         }
 
         console.log(`[Employees Repository] Creating employee "${data.email}" in workspace: ${data.workspaceId}`);
+        console.log('[Employees Repository] Invited by:', invitedBy);
 
-        // Check if email already exists
-        const existing = await this.getByEmail(data.email);
-        if (existing) {
-            console.error('[Employees Repository] Employee with this email already exists');
+        // Check if email already exists IN THIS WORKSPACE (workspace-scoped check)
+        const existingInWorkspace = await this.getByEmail(data.email, data.workspaceId);
+        if (existingInWorkspace) {
+            console.error('[Employees Repository] Employee with this email already exists in this workspace');
             return null;
         }
 
@@ -209,7 +237,27 @@ export const employeesRepository = {
             .single();
 
         if (error || !insertedData) {
-            console.error('[Employees Repository] Error creating employee:', error);
+            // Comprehensive error logging
+            console.error('═══════════════════════════════════════════════════');
+            console.error('[Employees Repository] ERROR CREATING EMPLOYEE');
+            console.error('═══════════════════════════════════════════════════');
+            console.error('Error Message:', error?.message || 'No message');
+            console.error('Error Code:', error?.code || 'No code');
+            console.error('Error Details:', error?.details || 'No details');
+            console.error('Error Hint:', error?.hint || 'No hint');
+            console.error('Full Error Object:', JSON.stringify(error, null, 2));
+            console.error('───────────────────────────────────────────────────');
+            console.error('Employee Data Attempted:');
+            console.error('  Email:', data.email);
+            console.error('  Workspace ID:', data.workspaceId);
+            console.error('  Invited By:', invitedBy);
+            console.error('  First Name:', data.firstName);
+            console.error('  Last Name:', data.lastName);
+            console.error('  Department:', data.department);
+            console.error('  Role:', data.role);
+            console.error('───────────────────────────────────────────────────');
+            console.error('Full Employee Data:', JSON.stringify(employeeData, null, 2));
+            console.error('═══════════════════════════════════════════════════');
             return null;
         }
 

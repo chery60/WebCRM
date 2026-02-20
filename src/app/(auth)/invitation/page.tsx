@@ -102,6 +102,20 @@ function InvitationContent() {
 
         setIsAccepting(true);
         try {
+            // Check if already a member (race condition check)
+            const existingMembership = await db.workspaceMemberships
+                .where('workspaceId')
+                .equals(invitation.workspaceId)
+                .and(m => m.userId === currentUser.id && m.status === 'active')
+                .first();
+
+            if (existingMembership) {
+                toast.success(`You're already a member of ${workspace?.name || 'this workspace'}!`);
+                await fetchUserWorkspaces(currentUser.id);
+                router.push('/notes');
+                return;
+            }
+
             const membership = await acceptInvitation(invitation.token, currentUser.id);
 
             if (membership) {

@@ -8,7 +8,7 @@ interface AuthMarketingPanelProps {
 
 export function AuthMarketingPanel({ variant = 'signin' }: AuthMarketingPanelProps) {
     return (
-        <div className="relative hidden lg:flex flex-col justify-between bg-black text-white p-10 h-full overflow-hidden">
+        <div className="relative w-full flex flex-col justify-between bg-black text-white p-10 h-full overflow-hidden">
             {/* Decorative pattern - diagonal lines */}
             <div className="absolute inset-0 opacity-20">
                 <div className="absolute top-0 left-0 w-full h-full">

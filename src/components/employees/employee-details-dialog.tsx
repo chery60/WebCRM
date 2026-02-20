@@ -2,6 +2,7 @@
 
 import { Employee, getEmployeeFullName } from '@/types';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useEmployeeStore } from '@/lib/stores/employee-store';
 import {
     Dialog,
@@ -35,7 +36,11 @@ interface EmployeeDetailsDialogProps {
 export function EmployeeDetailsDialog({ open, onOpenChange, employee }: EmployeeDetailsDialogProps) {
     const fullName = getEmployeeFullName(employee);
     const { currentUser } = useAuthStore();
-    const isAdmin = currentUser?.role === 'admin';
+    const { currentWorkspace, memberships } = useWorkspaceStore();
+
+    // Get user's role in the current workspace (not global role)
+    const workspaceRole = memberships.find(m => m.workspaceId === currentWorkspace?.id && m.userId === currentUser?.id)?.role;
+    const isAdmin = workspaceRole === 'admin' || workspaceRole === 'owner';
 
     // Format last activity
     const lastActivity = employee.lastActivityAt

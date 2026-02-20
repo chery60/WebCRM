@@ -41,6 +41,8 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { WorkspaceSwitcher } from '@/components/sidebar/workspace-switcher';
 import { PipelineNavSection } from '@/components/pipelines/pipeline-nav-section';
+import { ChannelsSection } from '@/components/messaging/channels-section';
+import { DirectMessagesSection } from '@/components/messaging/direct-messages-section';
 import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } from '@/lib/hooks/use-projects';
 import { useMoveNoteToProject, useAllPRDs, useCreateNote, useDeleteNote } from '@/lib/hooks/use-notes';
 import { useRouter } from 'next/navigation';
@@ -75,6 +77,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { MoreHorizontal, Pencil, Trash2, Folder } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
+import { CreateChannelDialog } from '@/components/messaging/create-channel-dialog';
+import { StartDMDialog } from '@/components/messaging/start-dm-dialog';
 import type { Project } from '@/types';
 
 interface NavItem {
@@ -780,6 +784,8 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
   const { features } = useFeatureSettingsStore();
   const [mounted, setMounted] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showStartDM, setShowStartDM] = useState(false);
 
   // Prevent hydration mismatch by only reading persisted state after mount
   useEffect(() => {
@@ -870,6 +876,14 @@ export function Sidebar() {
 
 
 
+            {/* Messaging section */}
+            {!isCollapsed && (
+              <div className="flex flex-col" style={{ gap: '8px' }}>
+                <ChannelsSection onCreateChannel={() => setShowCreateChannel(true)} />
+                <DirectMessagesSection onStartDM={() => setShowStartDM(true)} />
+              </div>
+            )}
+
             {/* Database section */}
             {filteredDatabaseNavItems.length > 0 && (
               <div className="flex flex-col" style={{ gap: '8px' }}>
@@ -919,6 +933,10 @@ export function Sidebar() {
           <WorkspaceSwitcher collapsed={isCollapsed} />
         </div>
       </aside>
+
+      {/* Dialogs */}
+      <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
+      <StartDMDialog open={showStartDM} onOpenChange={setShowStartDM} />
     </TooltipProvider>
   );
 }

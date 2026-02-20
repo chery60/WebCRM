@@ -1,0 +1,47 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║     🔧 QUICK FIX: "Failed to add employee" Error              ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+⚡ FASTEST FIX (30 seconds):
+
+1. Go to: https://ubkywhbguzbyewedxjdj.supabase.co
+2. Click: "SQL Editor" → "New query"
+3. Copy & Paste: ENTIRE content of "APPLY_EMAIL_CONSTRAINT_FIX.sql"
+4. Click: "Run" button
+5. See: "🎉 MIGRATION COMPLETE!" message
+6. Test: Try adding employee again in your app
+
+✅ DONE! Employee invitation will work.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 WHAT THIS FIXES:
+
+Before Fix:
+  ❌ "Failed to add employee"
+  ❌ Cannot re-invite removed employees
+  ❌ Email must be globally unique
+
+After Fix:
+  ✅ Employees added successfully
+  ✅ Can re-invite removed employees
+  ✅ Same email works across workspaces
+  ✅ Multi-workspace support enabled
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 DETAILED GUIDE:
+See: FIX_EMPLOYEE_INVITATION_ERROR.md
+
+🔧 SQL FILE:
+Use: APPLY_EMAIL_CONSTRAINT_FIX.sql
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  IMPORTANT:
+This is a database migration. You MUST run the SQL script in
+Supabase dashboard. The application code is already updated.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

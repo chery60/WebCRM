@@ -13,7 +13,7 @@ import type {
 
 import { validateTemplate, sanitizeTemplate, autoFixTemplate } from '@/lib/utils/template-validator';
 import { isTemplateExportedTemplate, type TemplateExportedTemplate } from '@/lib/utils/template-export-types';
-import { 
+import {
   getCustomTemplates,
   createCustomTemplate,
   updateCustomTemplate as updateCustomTemplateInSupabase,
@@ -28,14 +28,14 @@ import { USE_SUPABASE } from '@/lib/db/database';
 export interface CustomTemplatesState {
   // All templates (including seeded starter templates)
   templates: CustomPRDTemplate[];
-  
+
   // Track if starter templates have been seeded
   hasSeededStarterTemplates: boolean;
-  
+
   // Sync state
   isSyncing: boolean;
   lastSyncedAt: Date | null;
-  
+
   // Actions
   addTemplate: (template: Omit<CustomPRDTemplate, 'id' | 'createdAt' | 'updatedAt'>, userId?: string) => CustomPRDTemplate;
   updateTemplate: (id: string, updates: Partial<Omit<CustomPRDTemplate, 'id' | 'createdAt'>>, changeDescription?: string, userId?: string) => void;
@@ -45,19 +45,19 @@ export interface CustomTemplatesState {
   duplicateTemplate: (id: string, newName: string, userId?: string) => CustomPRDTemplate | undefined;
   seedStarterTemplates: () => void;
   resetToStarterTemplates: () => void;
-  
+
   // Category helpers
   getTemplatesByCategory: (category: TemplateCategory) => CustomPRDTemplate[];
-  
+
   // Version history
   getTemplateVersionHistory: (id: string) => TemplateVersion[];
   restoreTemplateVersion: (templateId: string, versionId: string, userId?: string) => boolean;
-  
+
   // Import/Export
   exportTemplates: (templateIds: string[]) => TemplateExportFormat;
   exportAllTemplates: () => TemplateExportFormat;
   importTemplates: (data: TemplateExportFormat, overwriteExisting?: boolean, userId?: string) => TemplateImportResult;
-  
+
   // Supabase sync
   syncFromSupabase: (userId: string) => Promise<void>;
   syncToSupabase: (template: CustomPRDTemplate, userId: string, operation: 'create' | 'update' | 'delete') => Promise<void>;
@@ -395,19 +395,19 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
       // Note: Fails silently if table doesn't exist or access is denied
       syncFromSupabase: async (userId: string) => {
         if (!USE_SUPABASE || !userId) return;
-        
+
         set({ isSyncing: true });
         try {
           const supabaseTemplates = await getCustomTemplates(userId);
-          
+
           if (supabaseTemplates && supabaseTemplates.length > 0) {
             // Merge with local templates - Supabase takes precedence for existing IDs
             const localTemplates = get().templates;
             const supabaseIds = new Set(supabaseTemplates.map(t => t.id));
-            
+
             // Keep local templates that don't exist in Supabase (might be offline changes)
             const localOnlyTemplates = localTemplates.filter(t => !supabaseIds.has(t.id));
-            
+
             set({
               templates: [...supabaseTemplates, ...localOnlyTemplates],
               lastSyncedAt: new Date(),
@@ -429,10 +429,12 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
       // Sync to Supabase - syncs a single template operation
       // Note: Fails silently if table doesn't exist or access is denied
       syncToSupabase: async (template: CustomPRDTemplate, userId: string, operation: 'create' | 'update' | 'delete') => {
+        console.log('[CustomTemplatesStore] syncToSupabase called:', { operation, templateId: template.id, userId, USE_SUPABASE });
         if (!USE_SUPABASE || !userId) {
-          return; // Silently skip - no logging needed
+          console.warn('[CustomTemplatesStore] syncToSupabase SKIPPED - USE_SUPABASE:', USE_SUPABASE, 'userId:', userId);
+          return;
         }
-        
+
         try {
           switch (operation) {
             case 'create':
@@ -507,11 +509,11 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
 
       updateTemplate: (id, updates, changeDescription, userId) => {
         let updatedTemplate: CustomPRDTemplate | null = null;
-        
+
         set((state) => ({
           templates: state.templates.map((template) => {
             if (template.id !== id) return template;
-            
+
             // Create a version snapshot before updating
             const currentVersion = template.version || 1;
             const newVersion: TemplateVersion = {
@@ -525,19 +527,19 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
               changeDescription: changeDescription || `Updated template`,
               createdAt: new Date(),
             };
-            
+
             // Keep only last 10 versions to prevent storage bloat
             const existingHistory = template.versionHistory || [];
             const updatedHistory = [...existingHistory, newVersion].slice(-10);
-            
-            updatedTemplate = { 
-              ...template, 
-              ...updates, 
+
+            updatedTemplate = {
+              ...template,
+              ...updates,
               version: currentVersion + 1,
               versionHistory: updatedHistory,
-              updatedAt: new Date() 
+              updatedAt: new Date()
             };
-            
+
             return updatedTemplate;
           }),
         }));
@@ -550,7 +552,7 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
 
       deleteTemplate: (id, userId) => {
         const templateToDelete = get().templates.find(t => t.id === id);
-        
+
         set((state) => ({
           templates: state.templates.filter((template) => template.id !== id),
         }));
@@ -659,7 +661,7 @@ Focus on the most relevant sections and be flexible with the structure.`;
       // Import/Export
       exportTemplates: (templateIds) => {
         const templates = get().templates.filter((t) => templateIds.includes(t.id));
-        
+
         return {
           formatVersion: '1.0',
           exportedAt: new Date(),
@@ -669,7 +671,7 @@ Focus on the most relevant sections and be flexible with the structure.`;
 
       exportAllTemplates: () => {
         const templates = get().templates;
-        
+
         return {
           formatVersion: '1.0',
           exportedAt: new Date(),

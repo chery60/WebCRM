@@ -5,6 +5,7 @@ import { DefaultChatTransport } from 'ai';
 import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
 import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 import type { AIGenerationType } from '@/types';
+import { useMemo } from 'react';
 
 // ============================================================================
 // TYPES
@@ -23,8 +24,8 @@ export interface UseAIChatOptions {
 // ============================================================================
 
 export function useAIChat(options: UseAIChatOptions = {}) {
-  const { 
-    provider: selectedProvider, 
+  const {
+    provider: selectedProvider,
     type = 'ask',
     temperature,
     onFinish,
@@ -32,31 +33,35 @@ export function useAIChat(options: UseAIChatOptions = {}) {
   } = options;
 
   const { providers, activeProvider } = useAISettingsStore();
-  
+
   // Determine which provider to use
   const provider = selectedProvider || activeProvider || 'openai';
   const providerConfig = providers[provider];
 
-  if (!providerConfig?.apiKey) {
-    throw new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before using AI generation.`);
-  }
-
-  // Validate API key is not empty
-  if (providerConfig.apiKey.trim().length === 0) {
-    throw new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
-  }
+  // Validate API key
+  const validationError = useMemo(() => {
+    if (!providerConfig?.apiKey) {
+      return new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before using AI generation.`);
+    }
+    if (providerConfig.apiKey.trim().length === 0) {
+      return new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
+    }
+    return null;
+  }, [provider, providerConfig]);
 
   // Create transport with proper configuration
-  const transport = new DefaultChatTransport({
+  // Even if validation fails, we need a valid transport to avoid hooks error
+  // The error will be returned and handled by the component
+  const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/ai/chat',
     body: {
       provider,
-      apiKey: providerConfig.apiKey,
-      model: providerConfig.defaultModel,
+      apiKey: providerConfig?.apiKey || '', // Safe fallback
+      model: providerConfig?.defaultModel || '',
       type,
       temperature,
     },
-  });
+  }), [provider, providerConfig, type, temperature]);
 
   // Use AI SDK's useChat hook with transport
   const chat = useAISDKChat({
@@ -67,8 +72,9 @@ export function useAIChat(options: UseAIChatOptions = {}) {
 
   return {
     ...chat,
+    error: validationError || chat.error, // Prioritize validation error
     provider,
-    model: providerConfig.defaultModel,
+    model: providerConfig?.defaultModel,
   };
 }
 
@@ -89,7 +95,7 @@ export interface UseAIPRDChatOptions extends UseAIChatOptions {
 }
 
 export function useAIPRDChat(options: UseAIPRDChatOptions = {}) {
-  const { 
+  const {
     provider: selectedProvider,
     templateName,
     templateDescription,
@@ -101,34 +107,44 @@ export function useAIPRDChat(options: UseAIPRDChatOptions = {}) {
   } = options;
 
   const { providers, activeProvider } = useAISettingsStore();
-  
+
   // Determine which provider to use
   const provider = selectedProvider || activeProvider || 'openai';
   const providerConfig = providers[provider];
 
-  if (!providerConfig?.apiKey) {
-    throw new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before generating PRDs.`);
-  }
-
-  // Validate API key is not empty
-  if (providerConfig.apiKey.trim().length === 0) {
-    throw new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
-  }
+  // Validate API key
+  const validationError = useMemo(() => {
+    if (!providerConfig?.apiKey) {
+      return new Error(`No API key configured for ${provider}. Please add your API key in Settings > Features before generating PRDs.`);
+    }
+    if (providerConfig.apiKey.trim().length === 0) {
+      return new Error(`Invalid API key for ${provider}. The API key cannot be empty.`);
+    }
+    return null;
+  }, [provider, providerConfig]);
 
   // Create transport with proper configuration including full template context
-  const transport = new DefaultChatTransport({
+  const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/ai/prd',
     body: {
       provider,
-      apiKey: providerConfig.apiKey,
-      model: providerConfig.defaultModel,
+      apiKey: providerConfig?.apiKey || '', // Safe fallback
+      model: providerConfig?.defaultModel || '',
       templateName,
       templateDescription,
       templateContextPrompt,
       templateSections,
       temperature,
     },
-  });
+  }), [
+    provider,
+    providerConfig,
+    templateName,
+    templateDescription,
+    templateContextPrompt,
+    templateSections,
+    temperature
+  ]);
 
   // Use AI SDK's useChat hook with transport
   const chat = useAISDKChat({
@@ -139,8 +155,9 @@ export function useAIPRDChat(options: UseAIPRDChatOptions = {}) {
 
   return {
     ...chat,
+    error: validationError || chat.error, // Prioritize validation error
     provider,
-    model: providerConfig.defaultModel,
+    model: providerConfig?.defaultModel,
   };
 }
 

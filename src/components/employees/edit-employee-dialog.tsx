@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEmployeeStore } from '@/lib/stores/employee-store';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { Employee, EmployeeCategory, getEmployeeFullName } from '@/types';
 
 import {
@@ -87,7 +88,8 @@ export function EditEmployeeDialog({ open, onOpenChange, employee, onSuccess }: 
     const [newDepartmentInput, setNewDepartmentInput] = useState('');
     const { updateEmployee, getAllDepartments, addDepartment } = useEmployeeStore();
     const { currentUser } = useAuthStore();
-    
+    const { currentWorkspace, getCurrentWorkspaceRole } = useWorkspaceStore();
+
     // Get all available departments dynamically
     const departments = getAllDepartments();
 
@@ -145,6 +147,9 @@ export function EditEmployeeDialog({ open, onOpenChange, employee, onSuccess }: 
     const onSubmit = async (values: FormData) => {
         if (!currentUser) return;
 
+        // Get the user's role in the current workspace (owner/admin/member/viewer)
+        const workspaceRole = getCurrentWorkspaceRole(currentUser.id);
+
         const success = await updateEmployee(
             employee.id,
             {
@@ -164,7 +169,7 @@ export function EditEmployeeDialog({ open, onOpenChange, employee, onSuccess }: 
                 category: values.category as EmployeeCategory,
                 avatar: avatarPreview || undefined,
             },
-            currentUser.role
+            workspaceRole || 'member' // Use workspace role, default to 'member' if not found
         );
 
         if (success) {
@@ -264,8 +269,8 @@ export function EditEmployeeDialog({ open, onOpenChange, employee, onSuccess }: 
                                             </PopoverTrigger>
                                             <PopoverContent className="w-[250px] p-0" align="start">
                                                 <Command>
-                                                    <CommandInput 
-                                                        placeholder="Search or create..." 
+                                                    <CommandInput
+                                                        placeholder="Search or create..."
                                                         value={newDepartmentInput}
                                                         onValueChange={setNewDepartmentInput}
                                                     />
@@ -274,8 +279,8 @@ export function EditEmployeeDialog({ open, onOpenChange, employee, onSuccess }: 
                                                             <div className="py-2 px-2">
                                                                 <p className="text-sm text-muted-foreground mb-2">No department found.</p>
                                                                 {newDepartmentInput.trim() && (
-                                                                    <Button 
-                                                                        size="sm" 
+                                                                    <Button
+                                                                        size="sm"
                                                                         className="w-full gap-2"
                                                                         onClick={() => {
                                                                             const newDept = newDepartmentInput.trim();

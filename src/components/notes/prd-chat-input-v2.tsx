@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAISettingsStore, type AIProviderType } from '@/lib/stores/ai-settings-store';
 import { useCustomTemplatesStore } from '@/lib/stores/custom-templates-store';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 // ============================================================================
 // TYPES
@@ -75,7 +76,15 @@ export function PRDChatInputV2({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { activeProvider } = useAISettingsStore();
-  const { templates: customTemplates } = useCustomTemplatesStore();
+  const { templates: customTemplates, syncFromSupabase } = useCustomTemplatesStore();
+  const { currentUser } = useAuthStore();
+
+  // Sync templates from Supabase on mount
+  useEffect(() => {
+    if (currentUser?.id) {
+      syncFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id, syncFromSupabase]);
 
   // Auto-resize textarea
   useEffect(() => {

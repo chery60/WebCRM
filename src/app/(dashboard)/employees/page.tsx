@@ -87,7 +87,11 @@ export default function EmployeesPage() {
     const availableDepartments = allDepartments.filter(d => !visibleDepartments.includes(d));
 
     const { currentUser, isAuthenticated } = useAuthStore();
-    const isAdmin = currentUser?.role === 'admin';
+
+    // Get user's role in the current workspace (not global role)
+    const { memberships } = useWorkspaceStore();
+    const workspaceRole = memberships.find(m => m.workspaceId === currentWorkspace?.id && m.userId === currentUser?.id)?.role;
+    const isAdmin = workspaceRole === 'admin' || workspaceRole === 'owner';
 
     // Fetch employees when workspace changes
     useEffect(() => {
@@ -117,21 +121,21 @@ export default function EmployeesPage() {
     // Handle delete employee
     const handleDeleteEmployee = async (employeeId: string) => {
         if (confirm('Are you sure you want to delete this employee?')) {
-            await deleteEmployee(employeeId, currentUser?.role || 'member');
+            await deleteEmployee(employeeId, workspaceRole || 'member');
             if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };
 
     // Handle bulk activate employees
     const handleActivateEmployees = async (ids: string[]) => {
-        await activateEmployees(ids, currentUser?.role || 'member');
+        await activateEmployees(ids, workspaceRole || 'member');
         if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
     };
 
     // Handle bulk deactivate employees
     const handleDeactivateEmployees = async (ids: string[]) => {
         if (confirm(`Are you sure you want to deactivate ${ids.length} employee(s)? They will not be able to log in.`)) {
-            await deactivateEmployees(ids, currentUser?.role || 'member', currentUser?.id || '');
+            await deactivateEmployees(ids, workspaceRole || 'member', currentUser?.id || '');
             if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };
@@ -139,7 +143,7 @@ export default function EmployeesPage() {
     // Handle bulk delete employees
     const handleDeleteEmployees = async (ids: string[]) => {
         if (confirm(`Are you sure you want to delete ${ids.length} employee(s)? All their data will be removed.`)) {
-            await deleteEmployees(ids, currentUser?.role || 'member');
+            await deleteEmployees(ids, workspaceRole || 'member');
             if (currentWorkspace?.id) fetchEmployees(currentWorkspace.id);
         }
     };

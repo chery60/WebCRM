@@ -3,39 +3,29 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Building2, User, ArrowRight, Sparkles } from 'lucide-react';
+import { User, ArrowRight, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OnboardingPage() {
     const router = useRouter();
     const { currentUser, updateProfile, hasHydrated, isAuthenticated } = useAuthStore();
-    const { createWorkspace } = useWorkspaceStore();
 
-    const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
 
     // Profile form state
     const [name, setName] = useState('');
     const [role, setRole] = useState<'pm' | 'designer' | 'developer' | 'founder' | 'other'>('pm');
 
-    // Workspace form state
-    const [workspaceName, setWorkspaceName] = useState('');
-
     // Initialize form with user data
     useEffect(() => {
         if (currentUser) {
             setName(currentUser.name || '');
-            // Set default workspace name based on user's name
-            if (!workspaceName) {
-                setWorkspaceName(`${currentUser.name?.split(' ')[0] || 'My'}'s Workspace`);
-            }
         }
-    }, [currentUser, workspaceName]);
+    }, [currentUser]);
 
     // Redirect if not authenticated or already onboarded
     useEffect(() => {
@@ -51,17 +41,6 @@ export default function OnboardingPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (step === 1) {
-            // Move to step 2
-            setStep(2);
-            return;
-        }
-
-        if (!workspaceName.trim()) {
-            toast.error('Please enter a workspace name');
-            return;
-        }
-
         if (!currentUser) {
             toast.error('User not found');
             return;
@@ -69,15 +48,9 @@ export default function OnboardingPage() {
 
         setIsLoading(true);
         try {
-            // Create the first workspace
-            await createWorkspace(
-                workspaceName.trim(),
-                currentUser.id,
-                undefined,
-                undefined
-            );
+            // Workspace is already auto-created during signup (per spec Flow #1)
+            // Here we only update the user profile and mark onboarding as complete
 
-            // Update user profile with onboarding completion
             await updateProfile({
                 name: name.trim() || currentUser.name,
                 hasCompletedOnboarding: true,
@@ -143,12 +116,6 @@ export default function OnboardingPage() {
                         The world's best AI-powered product management tool. Create PRDs, manage features, and ship products faster.
                     </p>
                 </div>
-
-                {/* Step indicators */}
-                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-2">
-                    <div className={`h-2 w-8 rounded-full transition-colors ${step === 1 ? 'bg-white' : 'bg-white/30'}`} />
-                    <div className={`h-2 w-8 rounded-full transition-colors ${step === 2 ? 'bg-white' : 'bg-white/30'}`} />
-                </div>
             </div>
 
             {/* Right Panel - Form */}
@@ -164,127 +131,66 @@ export default function OnboardingPage() {
                         </div>
                     </div>
 
-                    {step === 1 && (
-                        <>
-                            {/* Step 1: Profile */}
-                            <div className="text-center mb-8">
-                                <h2 className="text-2xl font-semibold">Set up your profile</h2>
-                                <p className="text-muted-foreground mt-2">Tell us a bit about yourself</p>
-                            </div>
+                    {/* Profile Setup */}
+                    <div className="text-center mb-8">
+                        <h2 className="text-2xl font-semibold">Set up your profile</h2>
+                        <p className="text-muted-foreground mt-2">Tell us a bit about yourself</p>
+                    </div>
 
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                {/* Avatar */}
-                                <div className="flex justify-center mb-6">
-                                    <Avatar className="h-20 w-20">
-                                        <AvatarImage src={currentUser?.avatar} />
-                                        <AvatarFallback className="text-xl bg-primary text-primary-foreground">
-                                            {userInitials}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                </div>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Avatar */}
+                        <div className="flex justify-center mb-6">
+                            <Avatar className="h-20 w-20">
+                                <AvatarImage src={currentUser?.avatar} />
+                                <AvatarFallback className="text-xl bg-primary text-primary-foreground">
+                                    {userInitials}
+                                </AvatarFallback>
+                            </Avatar>
+                        </div>
 
-                                {/* Name */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Your Name</Label>
-                                    <Input
-                                        id="name"
-                                        type="text"
-                                        placeholder="Enter your full name"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        className="h-12"
-                                    />
-                                </div>
+                        {/* Name */}
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Your Name</Label>
+                            <Input
+                                id="name"
+                                type="text"
+                                placeholder="Enter your full name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="h-12"
+                            />
+                        </div>
 
-                                {/* Role */}
-                                <div className="space-y-2">
-                                    <Label>Your Role</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {roleOptions.map((option) => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setRole(option.value as typeof role)}
-                                                className={`flex items-center gap-2 p-3 rounded-lg border transition-all text-left ${role === option.value
-                                                        ? 'border-black bg-black/5 ring-1 ring-black'
-                                                        : 'border-gray-200 hover:border-gray-300'
-                                                    }`}
-                                            >
-                                                <span className="text-lg">{option.icon}</span>
-                                                <span className="text-sm font-medium">{option.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <Button
-                                    type="submit"
-                                    className="w-full h-12 bg-black hover:bg-black/90 text-white"
-                                >
-                                    Continue
-                                    <ArrowRight className="ml-2 h-4 w-4" />
-                                </Button>
-                            </form>
-                        </>
-                    )}
-
-                    {step === 2 && (
-                        <>
-                            {/* Step 2: Workspace */}
-                            <div className="text-center mb-8">
-                                <h2 className="text-2xl font-semibold">Create your workspace</h2>
-                                <p className="text-muted-foreground mt-2">
-                                    Workspaces help you organize and collaborate on PRDs
-                                </p>
-                            </div>
-
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                {/* Workspace icon */}
-                                <div className="flex justify-center mb-6">
-                                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                                        <Building2 className="h-10 w-10 text-white" />
-                                    </div>
-                                </div>
-
-                                {/* Workspace Name */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="workspace-name">Workspace Name</Label>
-                                    <Input
-                                        id="workspace-name"
-                                        type="text"
-                                        placeholder="e.g., My Company, Personal Projects"
-                                        value={workspaceName}
-                                        onChange={(e) => setWorkspaceName(e.target.value)}
-                                        className="h-12"
-                                        autoFocus
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        You can create more workspaces later and invite team members to collaborate
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <Button
+                        {/* Role */}
+                        <div className="space-y-2">
+                            <Label>Your Role</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {roleOptions.map((option) => (
+                                    <button
+                                        key={option.value}
                                         type="button"
-                                        variant="outline"
-                                        onClick={() => setStep(1)}
-                                        className="flex-1 h-12"
-                                        disabled={isLoading}
+                                        onClick={() => setRole(option.value as typeof role)}
+                                        className={`flex items-center gap-2 p-3 rounded-lg border transition-all text-left ${role === option.value
+                                            ? 'border-black bg-black/5 ring-1 ring-black'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                            }`}
                                     >
-                                        Back
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        className="flex-1 h-12 bg-black hover:bg-black/90 text-white"
-                                        disabled={isLoading || !workspaceName.trim()}
-                                    >
-                                        {isLoading ? 'Creating...' : 'Get Started'}
-                                        {!isLoading && <Sparkles className="ml-2 h-4 w-4" />}
-                                    </Button>
-                                </div>
-                            </form>
-                        </>
-                    )}
+                                        <span className="text-lg">{option.icon}</span>
+                                        <span className="text-sm font-medium">{option.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <Button
+                            type="submit"
+                            className="w-full h-12 bg-black hover:bg-black/90 text-white"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? 'Setting up...' : 'Get Started'}
+                            {!isLoading && <Sparkles className="ml-2 h-4 w-4" />}
+                        </Button>
+                    </form>
 
                     {/* Copyright */}
                     <p className="mt-8 text-center text-xs text-muted-foreground">

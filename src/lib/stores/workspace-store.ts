@@ -28,8 +28,11 @@ interface WorkspaceStore {
     // Membership actions
     addMember: (workspaceId: string, userId: string, role: 'owner' | 'admin' | 'member' | 'viewer', invitedBy?: string) => Promise<WorkspaceMembership>;
     removeMember: (membershipId: string) => Promise<void>;
-    updateMemberRole: (membershipId: string, role: 'admin' | 'member' | 'viewer') => Promise<void>;
+    updateMemberRole: (membershipId: string, role: 'owner' | 'admin' | 'member' | 'viewer') => Promise<void>;
     resetWorkspaceState: () => void;
+
+    // Helper to get current user's role in the active workspace
+    getCurrentWorkspaceRole: (userId: string) => 'owner' | 'admin' | 'member' | 'viewer' | null;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>()(
@@ -381,6 +384,18 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
             resetWorkspaceState: () => {
                 set({ currentWorkspace: null, userWorkspaces: [], memberships: [] });
+            },
+
+            // Get current user's role in the active workspace
+            getCurrentWorkspaceRole: (userId: string) => {
+                const state = get();
+                if (!state.currentWorkspace || !userId) return null;
+
+                const membership = state.memberships.find(
+                    m => m.workspaceId === state.currentWorkspace?.id && m.userId === userId
+                );
+
+                return membership?.role || null;
             },
         }),
         {

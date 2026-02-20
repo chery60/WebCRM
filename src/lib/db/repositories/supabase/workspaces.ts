@@ -64,7 +64,8 @@ export const supabaseWorkspacesRepository = {
             return [];
         }
 
-        const workspaceIds = memberships.map(m => m.workspace_id);
+        // Deduplicate workspace IDs (handling potential DB duplicates)
+        const workspaceIds = Array.from(new Set(memberships.map(m => m.workspace_id)));
 
         // Get workspaces
         const { data: workspaces, error } = await supabase
@@ -78,7 +79,12 @@ export const supabaseWorkspacesRepository = {
             return [];
         }
 
-        return (workspaces || []).map(rowToWorkspace);
+        // Deduplicate result workspaces just to be safe
+        const uniqueWorkspaces = Array.from(
+            new Map((workspaces || []).map(w => [w.id, w])).values()
+        );
+
+        return uniqueWorkspaces.map(rowToWorkspace);
     },
 
     // Get a single workspace by ID
@@ -271,7 +277,7 @@ export const supabaseWorkspacesRepository = {
     // Update member role
     async updateMemberRole(
         membershipId: string,
-        role: 'admin' | 'member' | 'viewer'
+        role: 'owner' | 'admin' | 'member' | 'viewer'
     ): Promise<void> {
         const supabase = getSupabaseClient();
         if (!supabase) return;

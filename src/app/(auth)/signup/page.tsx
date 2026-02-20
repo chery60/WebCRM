@@ -16,10 +16,11 @@ function SignUpContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const invitationToken = searchParams?.get('invitation');
+    const prefillEmail = searchParams?.get('email');
 
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(prefillEmail ? decodeURIComponent(prefillEmail) : '');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -50,7 +51,10 @@ function SignUpContent() {
             });
 
             if (requiresEmailConfirmation) {
-                router.push(`/signin?message=check-email&email=${encodeURIComponent(email)}`);
+                // Store password temporarily so we can sign in after OTP verification
+                sessionStorage.setItem('pending_signup_password', password);
+                // Redirect to OTP verification page with email
+                router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
                 return;
             }
 
@@ -72,15 +76,15 @@ function SignUpContent() {
     };
 
     return (
-        <div className="flex min-h-screen">
+        <div className="min-h-screen flex bg-gradient-to-br from-gray-50 to-gray-100">
             {/* Left Panel - Marketing */}
             <div className="hidden lg:flex lg:w-1/2">
                 <AuthMarketingPanel variant="signup" />
             </div>
 
             {/* Right Panel - Form */}
-            <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:px-8 bg-white">
-                <div className="w-full max-w-sm">
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+                <div className="w-full max-w-md">
                     {/* Logo */}
                     <div className="flex justify-center mb-6">
                         <div className="flex items-center gap-2">

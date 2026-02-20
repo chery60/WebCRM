@@ -87,7 +87,7 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
     const [newDepartmentInput, setNewDepartmentInput] = useState('');
     const { addEmployee, getAllDepartments, addDepartment } = useEmployeeStore();
     const { currentUser } = useAuthStore();
-    const { currentWorkspace } = useWorkspaceStore();
+    const { currentWorkspace, getCurrentWorkspaceRole } = useWorkspaceStore();
 
     // Get all available departments dynamically
     const departments = getAllDepartments();
@@ -113,6 +113,15 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
         },
     });
 
+    // Reset form when dialog closes
+    const handleDialogChange = (open: boolean) => {
+        if (!open) {
+            form.reset();
+            setAvatarPreview(null);
+        }
+        onOpenChange(open);
+    };
+
     const isLoading = form.formState.isSubmitting;
     const firstName = form.watch('firstName');
     const lastName = form.watch('lastName');
@@ -128,11 +137,17 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
             return;
         }
 
+        // Get the user's role in the current workspace (owner/admin/member/viewer)
+        const workspaceRole = getCurrentWorkspaceRole(currentUser.id);
+
+        // Note: The role field in the form is the workspace role (admin/member/viewer)
+        // This will create an employee record AND send them a workspace invitation
         const result = await addEmployee(
             {
                 firstName: values.firstName,
                 lastName: values.lastName,
                 email: values.email,
+                role: values.role, // Workspace role for invitation
                 department: values.department,
                 phone: values.phone,
                 phoneCountryCode: values.phoneCountryCode,
@@ -146,7 +161,7 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
                 category: values.category as EmployeeCategory,
                 avatar: avatarPreview || undefined,
             },
-            currentUser.role,
+            workspaceRole || 'member', // Current user's workspace role
             currentUser.id,
             currentWorkspace.id
         );
@@ -166,7 +181,7 @@ export function AddEmployeeDialog({ open, onOpenChange, onSuccess }: AddEmployee
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleDialogChange}>
             <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Create New Employee</DialogTitle>

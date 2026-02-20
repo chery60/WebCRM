@@ -3,11 +3,11 @@
  */
 
 import { getSupabaseClient } from '@/lib/supabase/client';
-import type { 
-  CustomPRDTemplate, 
+import type {
+  CustomPRDTemplate,
   TemplateSection,
   TemplateCategory,
-  TemplateVersion 
+  TemplateVersion
 } from '@/types';
 
 export interface CustomTemplateRow {
@@ -79,7 +79,7 @@ function mapTemplateToRow(template: Omit<CustomPRDTemplate, 'createdAt' | 'updat
 export async function getCustomTemplates(userId?: string): Promise<CustomPRDTemplate[]> {
   const supabase = getSupabaseClient();
   if (!supabase) return [];
-  
+
   try {
     const { data, error } = await supabase
       .from('custom_prd_templates')
@@ -87,10 +87,7 @@ export async function getCustomTemplates(userId?: string): Promise<CustomPRDTemp
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Only log in development, and only for actual errors (not missing tables)
-      if (process.env.NODE_ENV === 'development' && error.code !== '42P01') {
-        console.log('[custom-templates] Fetch skipped:', error.message || 'Table may not exist');
-      }
+      console.error('[custom-templates] Fetch error:', error.code, error.message, error.details);
       return [];
     }
 
@@ -103,7 +100,7 @@ export async function getCustomTemplates(userId?: string): Promise<CustomPRDTemp
 
 export async function getCustomTemplateById(id: string): Promise<CustomPRDTemplate | null> {
   const supabase = getSupabaseClient();
-  
+
   const { data, error } = await supabase
     .from('custom_prd_templates')
     .select('*')
@@ -124,10 +121,10 @@ export async function createCustomTemplate(
 ): Promise<CustomPRDTemplate | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  
+
   try {
     const row = mapTemplateToRow(template);
-    
+
     const { data, error } = await supabase
       .from('custom_prd_templates')
       .insert({
@@ -138,7 +135,7 @@ export async function createCustomTemplate(
       .single();
 
     if (error) {
-      // Silently fail - table may not exist
+      console.error('[custom-templates] Create error:', error.code, error.message, error.details, error.hint);
       return null;
     }
 
@@ -155,10 +152,10 @@ export async function updateCustomTemplate(
 ): Promise<CustomPRDTemplate | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  
+
   try {
     const updateData: Partial<CustomTemplateRow> = {};
-    
+
     if (updates.name !== undefined) updateData.name = updates.name;
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.sections !== undefined) updateData.sections = updates.sections;
@@ -169,7 +166,7 @@ export async function updateCustomTemplate(
     if (updates.category !== undefined) updateData.category = updates.category;
     if (updates.version !== undefined) updateData.version = updates.version;
     if (updates.versionHistory !== undefined) updateData.version_history = updates.versionHistory;
-    
+
     const { data, error } = await supabase
       .from('custom_prd_templates')
       .update(updateData)
@@ -179,12 +176,13 @@ export async function updateCustomTemplate(
       .single();
 
     if (error) {
-      // Silently fail - table may not exist
+      console.error('[custom-templates] Update error:', error.code, error.message, error.details, error.hint);
       return null;
     }
 
     return mapRowToTemplate(data as CustomTemplateRow);
   } catch (e) {
+    console.error('[custom-templates] Update exception:', e);
     return null;
   }
 }
@@ -192,7 +190,7 @@ export async function updateCustomTemplate(
 export async function deleteCustomTemplate(id: string, userId: string): Promise<boolean> {
   const supabase = getSupabaseClient();
   if (!supabase) return false;
-  
+
   try {
     const { error } = await supabase
       .from('custom_prd_templates')
@@ -201,7 +199,7 @@ export async function deleteCustomTemplate(id: string, userId: string): Promise<
       .eq('user_id', userId);
 
     if (error) {
-      // Silently fail - table may not exist
+      console.error('[custom-templates] Delete error:', error.code, error.message, error.details, error.hint);
       return false;
     }
 
@@ -216,7 +214,7 @@ export async function getCustomTemplatesByCategory(
   userId?: string
 ): Promise<CustomPRDTemplate[]> {
   const supabase = getSupabaseClient();
-  
+
   const { data, error } = await supabase
     .from('custom_prd_templates')
     .select('*')
@@ -234,7 +232,7 @@ export async function getCustomTemplatesByCategory(
 // Custom categories management
 export async function getCustomCategories(userId: string): Promise<CustomCategoryRow[]> {
   const supabase = getSupabaseClient();
-  
+
   const { data, error } = await supabase
     .from('custom_template_categories')
     .select('*')
@@ -254,7 +252,7 @@ export async function createCustomCategory(
   userId: string
 ): Promise<CustomCategoryRow | null> {
   const supabase = getSupabaseClient();
-  
+
   const { data, error } = await supabase
     .from('custom_template_categories')
     .insert({
