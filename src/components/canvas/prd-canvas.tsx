@@ -387,6 +387,270 @@ const CategorizedMenuItems = ({
 };
 
 // ============================================================================
+// CANVAS HEADER — Defined OUTSIDE the main component so React treats it as a
+// stable component type and never unmounts/remounts it on parent re-renders.
+// Previously defined as an inline function inside PRDCanvas, which caused the
+// input to lose focus after every keystroke (React unmounts/remounts on each render).
+// ============================================================================
+
+interface CanvasHeaderProps {
+  inFullPage: boolean;
+  displayName: string;
+  isEditingName: boolean;
+  editName: string;
+  nameInputRef: React.RefObject<HTMLInputElement | null>;
+  setEditName: (name: string) => void;
+  setIsEditingName: (editing: boolean) => void;
+  handleSaveName: () => void;
+  handleNameKeyDown: (e: React.KeyboardEvent) => void;
+  isGenerating: boolean;
+  generatingType: CanvasGenerationType | null;
+  isFullscreen: boolean;
+  onMinimize?: () => void;
+  handleGenerate: (type: CanvasGenerationType) => void;
+  handleLoadTemplate: (templateId: any) => void;
+  handleExportPNG: () => void;
+  handleExportSVG: () => void;
+  setIsFullscreen: (value: boolean) => void;
+}
+
+function CanvasHeader({
+  inFullPage,
+  displayName,
+  isEditingName,
+  editName,
+  nameInputRef,
+  setEditName,
+  setIsEditingName,
+  handleSaveName,
+  handleNameKeyDown,
+  isGenerating,
+  generatingType,
+  isFullscreen,
+  onMinimize,
+  handleGenerate,
+  handleLoadTemplate,
+  handleExportPNG,
+  handleExportSVG,
+  setIsFullscreen,
+}: CanvasHeaderProps) {
+  return (
+    <div className={cn(
+      "flex items-center justify-between border-b bg-white dark:bg-zinc-900 flex-shrink-0",
+      inFullPage ? "px-6 py-3" : "px-0 py-2 mb-4"
+    )}>
+      {/* Left side: Canvas name with icon - editable like Google Docs */}
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Layers className="h-5 w-5 text-muted-foreground shrink-0" />
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleSaveName}
+              onKeyDown={handleNameKeyDown}
+              className="font-semibold text-base bg-transparent focus:outline-none min-w-0 flex-1 px-1"
+              placeholder="Canvas name"
+            />
+          ) : (
+            <span
+              className={cn(
+                "font-semibold text-base truncate",
+                "cursor-text hover:bg-muted/30 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+              )}
+              onClick={() => setIsEditingName(true)}
+              title={displayName}
+            >
+              {displayName}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Right side: All action buttons */}
+      <div className="flex items-center gap-1">
+        {/* AI Generate Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isGenerating}
+              className="gap-2"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {isGenerating ? 'Generating...' : 'AI Generate'}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
+            <CategorizedMenuItems
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
+              generatingType={generatingType}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Templates Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <FolderOpen className="h-4 w-4" />
+              Templates
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
+              <DropdownMenuItem
+                key={template.id}
+                onClick={() => handleLoadTemplate(template.id)}
+                className="flex items-start gap-3 py-2"
+              >
+                <span className="text-lg">{template.thumbnail}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm">{template.name}</div>
+                  <div className="text-xs text-muted-foreground">{template.description}</div>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Comments */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Comments</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Collaboration Presence - Only you indicator */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Users className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Only you</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Export dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Export</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportPNG}>
+              Export as PNG
+              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportSVG}>
+              Export as SVG
+              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Keyboard shortcuts help */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Keyboard className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Keyboard Shortcuts</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Minimize/Expand button */}
+        {inFullPage ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onMinimize}
+                >
+                  <Minimize2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Minimize</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <>
+            {!isFullscreen && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setIsFullscreen(true)}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Fullscreen</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {isFullscreen && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setIsFullscreen(false)}
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Exit Fullscreen</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
@@ -1102,10 +1366,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   const [editName, setEditName] = useState(canvasName || 'PRD Canvas');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync editName when canvasName prop changes
+  // Sync editName when canvasName prop changes (only when not currently editing)
   useEffect(() => {
-    setEditName(canvasName || 'PRD Canvas');
-  }, [canvasName]);
+    if (!isEditingName) {
+      setEditName(canvasName || 'PRD Canvas');
+    }
+  }, [canvasName, isEditingName]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -1222,228 +1488,25 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     );
   }
 
-  // Header component — defined as a stable render function (no hooks inside, uses parent state via closure)
-  const CanvasHeader = ({ inFullPage = false }: { inFullPage?: boolean }) => {
-    const displayName = canvasName || 'PRD Canvas';
-
-    return (
-      <div className={cn(
-        "flex items-center justify-between border-b bg-white dark:bg-zinc-900 flex-shrink-0",
-        inFullPage ? "px-6 py-3" : "px-0 py-2 mb-4"
-      )}>
-        {/* Left side: Canvas name with icon - editable like Google Docs */}
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Layers className="h-5 w-5 text-muted-foreground shrink-0" />
-            {isEditingName ? (
-              <input
-                ref={nameInputRef}
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onBlur={handleSaveName}
-                onKeyDown={handleNameKeyDown}
-                className="font-semibold text-base bg-transparent focus:outline-none min-w-0 flex-1 px-1"
-                placeholder="Canvas name"
-              />
-            ) : (
-              <span
-                className={cn(
-                  "font-semibold text-base truncate",
-                  "cursor-text hover:bg-muted/30 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
-                )}
-                onClick={() => {
-                  setIsEditingName(true);
-                }}
-                title={displayName}
-              >
-                {displayName}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Right side: All action buttons */}
-        <div className="flex items-center gap-1">
-          {/* AI Generate Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isGenerating}
-                className="gap-2"
-              >
-                {isGenerating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                {isGenerating ? 'Generating...' : 'AI Generate'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
-              <CategorizedMenuItems
-                onGenerate={handleGenerate}
-                isGenerating={isGenerating}
-                generatingType={generatingType}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Templates Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-              >
-                <FolderOpen className="h-4 w-4" />
-                Templates
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
-                <DropdownMenuItem
-                  key={template.id}
-                  onClick={() => handleLoadTemplate(template.id)}
-                  className="flex items-start gap-3 py-2"
-                >
-                  <span className="text-lg">{template.thumbnail}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm">{template.name}</div>
-                    <div className="text-xs text-muted-foreground">{template.description}</div>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-
-          {/* Comments */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MessageSquare className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Comments</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Collaboration Presence - Only you indicator */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Users className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Only you</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Export dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Export</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportPNG}>
-                Export as PNG
-                <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportSVG}>
-                Export as SVG
-                <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Keyboard shortcuts help */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Keyboard className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Keyboard Shortcuts</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Minimize/Expand button */}
-          {inFullPage ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={onMinimize}
-                  >
-                    <Minimize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Minimize</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <>
-              {!isFullscreen && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setIsFullscreen(true)}
-                      >
-                        <Maximize2 className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Fullscreen</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {isFullscreen && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setIsFullscreen(false)}
-                      >
-                        <Minimize2 className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Exit Fullscreen</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </>
-          )}
-
-        </div>
-      </div>
-    );
+  // Shared props for the stable CanvasHeader component
+  const sharedHeaderProps = {
+    displayName: canvasName || 'PRD Canvas',
+    isEditingName,
+    editName,
+    nameInputRef,
+    setEditName,
+    setIsEditingName,
+    handleSaveName,
+    handleNameKeyDown,
+    isGenerating,
+    generatingType,
+    isFullscreen,
+    onMinimize,
+    handleGenerate,
+    handleLoadTemplate,
+    handleExportPNG,
+    handleExportSVG,
+    setIsFullscreen,
   };
 
   // Expanded view - Different rendering based on mode
@@ -1504,7 +1567,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         data-prd-canvas
       >
         {/* Header - passes inFullPage prop */}
-        <CanvasHeader inFullPage={isFullPage} />
+        <CanvasHeader {...sharedHeaderProps} inFullPage={isFullPage} />
 
         {/* Canvas container - full height in full-page/fullscreen modes */}
         <div

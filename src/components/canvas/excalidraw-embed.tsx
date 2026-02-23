@@ -465,6 +465,321 @@ function ExcalidrawWrapper({
 }
 
 // ============================================================================
+// CANVAS HEADER — Defined OUTSIDE the main component so React treats it as a
+// stable component type and never unmounts/remounts it on parent re-renders.
+// Previously defined as an inline function inside ExcalidrawEmbed, which caused
+// the input to lose focus after every keystroke.
+// ============================================================================
+
+interface EmbedCanvasHeaderProps {
+  inFullscreen: boolean;
+  canvasName: string;
+  isEditingName: boolean;
+  editName: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  setEditName: (name: string) => void;
+  setIsEditingName: (editing: boolean) => void;
+  handleSaveName: () => void;
+  handleNameKeyDown: (e: React.KeyboardEvent) => void;
+  onCanvasNameChange?: (name: string) => void;
+  isGenerating: boolean;
+  generatingType: CanvasGenerationType | null;
+  aiDropdownOpen: boolean;
+  setAiDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  templatesDropdownOpen: boolean;
+  setTemplatesDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  exportDropdownOpen: boolean;
+  setExportDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  onGenerateContent?: (type: CanvasGenerationType) => Promise<GeneratedCanvasContent | null>;
+  handleGenerate: (type: CanvasGenerationType) => void;
+  handleLoadTemplate: (templateId: any) => void;
+  handleExportPNG: () => void;
+  handleExportSVG: () => void;
+  setIsFullscreen: (value: boolean) => void;
+  onExpand?: () => void;
+  onDelete?: () => void;
+  handleDropdownTriggerClick: (
+    e: React.MouseEvent,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>,
+    currentOpen: boolean
+  ) => void;
+}
+
+function EmbedCanvasHeader({
+  inFullscreen,
+  canvasName,
+  isEditingName,
+  editName,
+  inputRef,
+  setEditName,
+  setIsEditingName,
+  handleSaveName,
+  handleNameKeyDown,
+  onCanvasNameChange,
+  isGenerating,
+  generatingType,
+  aiDropdownOpen,
+  setAiDropdownOpen,
+  templatesDropdownOpen,
+  setTemplatesDropdownOpen,
+  exportDropdownOpen,
+  setExportDropdownOpen,
+  onGenerateContent,
+  handleGenerate,
+  handleLoadTemplate,
+  handleExportPNG,
+  handleExportSVG,
+  setIsFullscreen,
+  onExpand,
+  onDelete,
+  handleDropdownTriggerClick,
+}: EmbedCanvasHeaderProps) {
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2.5 border-b bg-white dark:bg-zinc-900 shrink-0 z-50"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+        {isEditingName ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleSaveName}
+            onKeyDown={handleNameKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.stopPropagation()}
+            data-canvas-name-input="true"
+            className="font-medium text-sm bg-transparent focus:outline-none min-w-0 flex-1 px-1 border border-transparent focus:border-primary/30 rounded"
+          />
+        ) : (
+          <span
+            className={cn(
+              "font-medium text-sm truncate cursor-text",
+              onCanvasNameChange && "hover:bg-muted/30 rounded px-1 py-0.5 -mx-1 -my-0.5 transition-colors"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (onCanvasNameChange) {
+                setIsEditingName(true);
+              }
+            }}
+            title={canvasName}
+          >
+            {canvasName}{inFullscreen ? ' - Fullscreen' : ''}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {/* AI Generate Dropdown */}
+        {onGenerateContent && (
+          <DropdownMenu
+            modal={true}
+            open={aiDropdownOpen}
+            onOpenChange={setAiDropdownOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isGenerating}
+                className="gap-2 h-7"
+                onClick={(e) => handleDropdownTriggerClick(e, setAiDropdownOpen, aiDropdownOpen)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {isGenerating ? 'Generating...' : 'AI Generate'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
+              <CategorizedMenuItems
+                onGenerate={(type) => {
+                  handleGenerate(type);
+                  setAiDropdownOpen(false);
+                }}
+                isGenerating={isGenerating}
+                generatingType={generatingType}
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* Templates Dropdown */}
+        <DropdownMenu
+          modal={true}
+          open={templatesDropdownOpen}
+          onOpenChange={setTemplatesDropdownOpen}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 h-7"
+              onClick={(e) => handleDropdownTriggerClick(e, setTemplatesDropdownOpen, templatesDropdownOpen)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Templates
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
+              <DropdownMenuItem
+                key={template.id}
+                onClick={() => {
+                  handleLoadTemplate(template.id);
+                  setTemplatesDropdownOpen(false);
+                }}
+                className="flex items-center gap-3"
+              >
+                <span className="text-lg">{template.thumbnail}</span>
+                <div>
+                  <div className="font-medium text-sm">{template.name}</div>
+                  <div className="text-xs text-muted-foreground">{template.description}</div>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Export Dropdown */}
+        <DropdownMenu
+          modal={true}
+          open={exportDropdownOpen}
+          onOpenChange={setExportDropdownOpen}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => handleDropdownTriggerClick(e, setExportDropdownOpen, exportDropdownOpen)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => {
+              handleExportPNG();
+              setExportDropdownOpen(false);
+            }}>
+              Export as PNG
+              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              handleExportSVG();
+              setExportDropdownOpen(false);
+            }}>
+              Export as SVG
+              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <KeyboardShortcutsHelp />
+
+        {inFullscreen ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIsFullscreen(false)}
+                >
+                  <Minimize2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Exit Fullscreen (Esc)</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <>
+            {/* Expand button - opens in dialog/widget */}
+            {onExpand && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onExpand();
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Expand</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {!onExpand && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setIsFullscreen(true)}
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Fullscreen (⇧⌘F)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {onDelete && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={onDelete}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete canvas</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
@@ -749,10 +1064,12 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
   const [editName, setEditName] = useState(canvasName);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update local state when canvasName prop changes
+  // Update local state when canvasName prop changes (only when not currently editing)
   useEffect(() => {
-    setEditName(canvasName);
-  }, [canvasName]);
+    if (!isEditingName) {
+      setEditName(canvasName);
+    }
+  }, [canvasName, isEditingName]);
 
   // Focus input when editing starts - use timeout to handle TipTap re-render timing
   useEffect(() => {
@@ -787,256 +1104,41 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
     }
   }, [handleSaveName, canvasName]);
 
-  // Canvas Header component - reused in both views
-  const CanvasHeader = ({ inFullscreen = false }: { inFullscreen?: boolean }) => (
-    <div
-      className="flex items-center justify-between px-4 py-2.5 border-b bg-white dark:bg-zinc-900 shrink-0 z-50"
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
-        {isEditingName ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onBlur={handleSaveName}
-            onKeyDown={handleNameKeyDown}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onFocus={(e) => e.stopPropagation()}
-            data-canvas-name-input="true"
-            className="font-medium text-sm bg-transparent focus:outline-none min-w-0 flex-1 px-1 border border-transparent focus:border-primary/30 rounded"
-          />
-        ) : (
-          <span
-            className={cn(
-              "font-medium text-sm truncate cursor-text",
-              onCanvasNameChange && "hover:bg-muted/30 rounded px-1 py-0.5 -mx-1 -my-0.5 transition-colors"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              if (onCanvasNameChange) {
-                setIsEditingName(true);
-              }
-            }}
-            title={canvasName}
-          >
-            {canvasName}{inFullscreen ? ' - Fullscreen' : ''}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {/* AI Generate Dropdown */}
-        {onGenerateContent && (
-          <DropdownMenu
-            modal={true}
-            open={aiDropdownOpen}
-            onOpenChange={setAiDropdownOpen}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isGenerating}
-                className="gap-2 h-7"
-                onClick={(e) => handleDropdownTriggerClick(e, setAiDropdownOpen, aiDropdownOpen)}
-                onMouseDown={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                {isGenerating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                {isGenerating ? 'Generating...' : 'AI Generate'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
-              <CategorizedMenuItems
-                onGenerate={(type) => {
-                  handleGenerate(type);
-                  setAiDropdownOpen(false);
-                }}
-                isGenerating={isGenerating}
-                generatingType={generatingType}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {/* Templates Dropdown */}
-        <DropdownMenu
-          modal={true}
-          open={templatesDropdownOpen}
-          onOpenChange={setTemplatesDropdownOpen}
-        >
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 h-7"
-              onClick={(e) => handleDropdownTriggerClick(e, setTemplatesDropdownOpen, templatesDropdownOpen)}
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              Templates
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Quick Start Templates</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {CANVAS_TEMPLATES.filter(t => t.id !== 'blank').map((template) => (
-              <DropdownMenuItem
-                key={template.id}
-                onClick={() => {
-                  handleLoadTemplate(template.id);
-                  setTemplatesDropdownOpen(false);
-                }}
-                className="flex items-center gap-3"
-              >
-                <span className="text-lg">{template.thumbnail}</span>
-                <div>
-                  <div className="font-medium text-sm">{template.name}</div>
-                  <div className="text-xs text-muted-foreground">{template.description}</div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Export Dropdown */}
-        <DropdownMenu
-          modal={true}
-          open={exportDropdownOpen}
-          onOpenChange={setExportDropdownOpen}
-        >
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => handleDropdownTriggerClick(e, setExportDropdownOpen, exportDropdownOpen)}
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => {
-              handleExportPNG();
-              setExportDropdownOpen(false);
-            }}>
-              Export as PNG
-              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘E</kbd>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {
-              handleExportSVG();
-              setExportDropdownOpen(false);
-            }}>
-              Export as SVG
-              <kbd className="ml-auto text-xs text-muted-foreground">⇧⌘S</kbd>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <KeyboardShortcutsHelp />
-
-        {inFullscreen ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setIsFullscreen(false)}
-                >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Exit Fullscreen (Esc)</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <>
-            {/* Expand button - opens in dialog/widget */}
-            {onExpand && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onExpand();
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Expand</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {!onExpand && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setIsFullscreen(true)}
-                    >
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Fullscreen (⇧⌘F)</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {onDelete && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={onDelete}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete canvas</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
+  // Shared props for the stable EmbedCanvasHeader component
+  const sharedHeaderProps = {
+    canvasName,
+    isEditingName,
+    editName,
+    inputRef,
+    setEditName,
+    setIsEditingName,
+    handleSaveName,
+    handleNameKeyDown,
+    onCanvasNameChange,
+    isGenerating,
+    generatingType,
+    aiDropdownOpen,
+    setAiDropdownOpen,
+    templatesDropdownOpen,
+    setTemplatesDropdownOpen,
+    exportDropdownOpen,
+    setExportDropdownOpen,
+    onGenerateContent,
+    handleGenerate,
+    handleLoadTemplate,
+    handleExportPNG,
+    handleExportSVG,
+    setIsFullscreen,
+    onExpand,
+    onDelete,
+    handleDropdownTriggerClick,
+  };
 
   // Fullscreen mode
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <CanvasHeader inFullscreen={true} />
+        <EmbedCanvasHeader {...sharedHeaderProps} inFullscreen={true} />
 
         {/* Fullscreen Canvas */}
         <div className="flex-1 w-full">
@@ -1080,7 +1182,7 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
 
       {/* Canvas Header - Fixed at top as application header */}
       <div className="absolute top-0 left-0 right-0 z-50 rounded-t-lg overflow-hidden">
-        <CanvasHeader inFullscreen={false} />
+        <EmbedCanvasHeader {...sharedHeaderProps} inFullscreen={false} />
       </div>
 
       {/* Canvas Area - Positioned below header with proper offset */}
