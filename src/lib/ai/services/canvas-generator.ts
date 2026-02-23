@@ -122,7 +122,7 @@ export class CanvasGeneratorService {
     } = options;
 
     try {
-      // Extract minimal context for token efficiency
+      // Extract full PRD context for canvas generation
       const context = extractPRDContextForCanvas(prdContent, productDescription, type);
 
       // Build the prompt
@@ -132,7 +132,10 @@ export class CanvasGeneratorService {
       const offset = this.calculateElementOffset(existingElements);
       const hasExistingContent = existingElements.length > 0 && (offset.x > 0 || offset.y > 0);
 
-      let userPrompt = `${context}\n\n${typePrompt}`;
+      // Inject a unique seed so the AI generates fresh, varied content on every call
+      const uniqueSeed = `[Generation ID: ${Date.now()}-${Math.random().toString(36).slice(2, 8)}]`;
+
+      let userPrompt = `${uniqueSeed}\n\n${context}\n\n${typePrompt}`;
 
       // Note: We don't ask AI to offset - we apply offset after parsing
       // This produces more reliable results as AI sometimes ignores positioning instructions
@@ -140,7 +143,7 @@ export class CanvasGeneratorService {
         // Add context about existing elements to help AI understand what's already drawn
         const existingSummary = this.summarizeExistingElements(existingElements);
         if (existingSummary) {
-          userPrompt += `\n\nNote: Canvas already contains: ${existingSummary}. Generate complementary content.`;
+          userPrompt += `\n\nNote: Canvas already contains: ${existingSummary}. Generate DIFFERENT complementary content that does not duplicate what is already shown.`;
         }
       }
 

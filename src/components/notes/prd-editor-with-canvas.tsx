@@ -136,8 +136,10 @@ export function PRDEditorWithCanvas({
   // Now receives existingElements from PRDCanvas for proper positioning
   const handleGenerateContent = useCallback(
     async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
-      if (!prdPlainText.trim()) {
-        toast.error('Please add some PRD content before generating diagrams');
+      // Allow generation if we have either PRD text or a product description
+      const effectivePrdContent = prdPlainText.trim() || productDescription.trim();
+      if (!effectivePrdContent) {
+        toast.error('Please add some content to your PRD before generating diagrams');
         return null;
       }
 
@@ -151,20 +153,22 @@ export function PRDEditorWithCanvas({
         const bottomCanvasElements = existingElements.length > 0 ? existingElements : (canvasData?.elements || []);
         const allExistingElements = [...inlineElements, ...bottomCanvasElements];
 
-        // Build enhanced context
-        let enhancedPrdContent = prdPlainText;
+        // Build enhanced context — use effectivePrdContent to handle cases where
+        // prdPlainText hasn't been parsed yet but productDescription is available
+        const effectivePrdContent = prdPlainText.trim() || productDescription.trim();
+        let enhancedPrdContent = effectivePrdContent;
 
         if (allExistingElements.length > 0) {
           const existingContext = summarizeElements(allExistingElements);
           if (existingContext) {
-            enhancedPrdContent = `${prdPlainText}\n\n[Existing diagrams: ${existingContext}]`;
+            enhancedPrdContent = `${effectivePrdContent}\n\n[Existing diagrams: ${existingContext}]`;
           }
         }
 
         const result = await canvasGenerator.generateDiagram({
           type,
           prdContent: enhancedPrdContent,
-          productDescription: productDescription || prdPlainText.substring(0, 500),
+          productDescription: productDescription || effectivePrdContent.substring(0, 500),
           provider: activeProvider || undefined,
           existingElements: bottomCanvasElements, // Pass actual canvas elements for offset calculation
         });

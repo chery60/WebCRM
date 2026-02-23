@@ -17,7 +17,7 @@ import type { CanvasGenerationType } from '@/components/canvas/prd-canvas';
 // SYSTEM PROMPT - Optimized for token efficiency
 // ============================================================================
 
-export const CANVAS_SYSTEM_PROMPT = `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
+export const CANVAS_SYSTEM_PROMPT = `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks, NO comments (// or /* */ are forbidden inside JSON).
 
 RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
 [
@@ -82,85 +82,61 @@ CRITICAL: Output ONLY the JSON array. No other text before or after.`;
 // ============================================================================
 
 export const CANVAS_GENERATION_PROMPTS: Record<CanvasGenerationType, string> = {
-  'information-architecture': `Generate a COMPREHENSIVE and DETAILED Information Architecture (IA) diagram as JSON array. This must be a COMPLETE sitemap showing ALL pages and features from the provided context.
+  'information-architecture': `Generate a COMPREHENSIVE and DETAILED Information Architecture (IA) diagram as JSON array. This must be a COMPLETE sitemap derived EXCLUSIVELY from the PRD/note content provided above.
 
 CRITICAL REQUIREMENTS:
 1. Generate 50-80 total elements (shapes + arrows) for a comprehensive diagram
 2. EVERY shape MUST have a unique "id" property (e.g., "nav-home", "page-settings")
 3. EVERY arrow MUST have "startId" and "endId" properties to connect shapes
-4. Extract ALL sections, pages, and features from the PRD content provided
+4. READ the PRD content carefully and extract EVERY feature, page, module, and section mentioned
 5. Output the COMPLETE JSON array — do NOT stop or truncate mid-generation
-6. IMPORTANT: Generate UNIQUE and VARIED content each time based on the context provided. DO NOT repeat previous diagrams.
+6. DO NOT use generic placeholder names like "Feature A" or "Page 1" — use the ACTUAL names from the PRD
+7. Each generation must reflect the EXACT content of THIS specific PRD, not a generic app
 
 STRUCTURE - MULTI-LEVEL HIERARCHY:
 1. Title: "Information Architecture" (text, fontSize:24, x:450, y:30, id:"ia-title")
 
-2. Level 1 - Main Navigation (y:100): 6-8 primary sections
-   - Examples: "Dashboard", "Products", "Settings", "Reports", "Admin", "Analytics", "Help", "Profile"
+2. Level 1 - Main Navigation (y:100): 6-8 primary sections extracted from the PRD
+   - Use ACTUAL module/section names from the PRD content
    - Rectangle: width:160, height:70, backgroundColor:"#e3f2fd"
    - Position: x:100, x:300, x:500, x:700, x:900, x:1100, x:1300 (200px apart)
-   - IDs: "nav-dashboard", "nav-products", "nav-settings", etc.
+   - IDs: use descriptive IDs matching the actual content (e.g., "nav-crm", "nav-analytics")
 
 3. Level 2 - Sub-pages (y:230): 4-6 pages under EACH Level 1 section
-   - Extract from PRD features, user stories, and requirements
+   - Extract DIRECTLY from PRD features, user stories, and requirements
    - Rectangle: width:140, height:60, backgroundColor:"#e8f5e9"
    - Align under parent section, space 150px apart horizontally
-   - IDs: "page-user-list", "page-product-detail", "page-settings-profile", etc.
 
 4. Level 3 - Features/Components (y:360): 2-4 key features per Level 2 page
-   - Detailed functionality and components
+   - Detailed functionality and components from the PRD
    - Rectangle: width:120, height:50, backgroundColor:"#f3e5f5"
-   - Group under parent pages
-   - IDs: "feature-search", "feature-export", "feature-filter", etc.
 
-5. Arrows - Connect ALL relationships:
-   - Every Level 1 → Level 2 connection needs an arrow
-   - Every Level 2 → Level 3 connection needs an arrow
-   - Arrow x,y MUST be at the BOTTOM EDGE of the parent shape
-   - Arrow format: {"type":"arrow","x":<parent_center_x>,"y":<parent_y + parent_height>,"points":[[0,0],[0,<gap_to_child>]],"startId":"<parent_id>","endId":"<child_id>"}
+5. Arrows - Connect ALL relationships with startId/endId
 
 ARROW POSITIONING (CRITICAL):
-- For Level 1 → Level 2 arrows:
-  arrow.x = parent.x + parent.width/2 (center horizontally)
-  arrow.y = parent.y + parent.height (bottom edge of parent)
-  points: [[0,0],[0, child.y - (parent.y + parent.height)]]
-- For Level 2 → Level 3 arrows:
-  Same pattern: start at parent bottom edge, end at child top edge
-
-EXAMPLE STRUCTURE (follow this pattern):
-[
-  {"type":"text","x":450,"y":30,"text":"Information Architecture","fontSize":24,"id":"title"},
-  {"type":"rectangle","x":100,"y":100,"width":160,"height":70,"text":"Dashboard","backgroundColor":"#e3f2fd","id":"nav-dashboard"},
-  {"type":"rectangle","x":120,"y":230,"width":140,"height":60,"text":"Analytics","backgroundColor":"#e8f5e9","id":"page-analytics"},
-  {"type":"rectangle","x":100,"y":360,"width":120,"height":50,"text":"Charts","backgroundColor":"#f3e5f5","id":"feature-charts"},
-  {"type":"arrow","x":180,"y":170,"points":[[0,0],[0,60]],"startId":"nav-dashboard","endId":"page-analytics"},
-  {"type":"arrow","x":180,"y":290,"points":[[0,0],[0,70]],"startId":"page-analytics","endId":"feature-charts"}
-]
+- arrow.x = parent.x + parent.width/2, arrow.y = parent.y + parent.height
+- points: [[0,0],[0, child.y - (parent.y + parent.height)]]
 
 MANDATORY:
 - Minimum 50 elements total (25+ shapes, 25+ arrows)
-- Use the ENTIRE PRD context to extract all pages and features
+- ALL node labels must come from the ACTUAL PRD content provided
 - Every parent-child relationship MUST have a connecting arrow with startId/endId
-- IDs must match exactly between shapes and arrow bindings
 - Generate the COMPLETE array - do not stop early`,
 
-  'user-flow': `Generate a COMPREHENSIVE User Flow diagram showing the complete user journey as JSON array.
+  'user-flow': `Generate a COMPREHENSIVE User Flow diagram showing the complete user journey as JSON array. Base this ENTIRELY on the PRD/note content provided above.
 
-IMPORTANT: Generate UNIQUE and VARIED flows each time. Use different user scenarios, paths, and decision points based on the context provided. DO NOT repeat the exact same flow.
-
-STRUCTURE - MAP THE ENTIRE USER EXPERIENCE:
-1. Title: "User Flow" (text, fontSize:24, x:400, y:30, id:"flow-title")
+STRUCTURE - MAP THE ENTIRE USER EXPERIENCE FROM THE PRD:
+1. Title: "User Flow: [product name from PRD]" (text, fontSize:24, x:400, y:30, id:"flow-title")
 2. Start: Entry point (green ellipse, id:"start")
-3. Actions: 6-10 user action steps (blue rectangles)
-   - Extract ALL key user actions from PRD
-   - Include: onboarding, main tasks, interactions
-4. Decisions: 2-4 decision points (orange diamonds)
-   - Show branching logic and user choices
-5. End states: Multiple outcomes
-   - Success states (green ellipses)
-   - Error states (pink rectangles)
-   - Alternative paths (amber rectangles)
-6. Arrows: Connect ALL steps with proper bindings using startId/endId
+3. Actions: 8-12 user action steps (blue rectangles)
+   - Extract EVERY key user action from the PRD — use ACTUAL feature names, not generic ones
+   - Include: all onboarding steps, primary workflows, key interactions mentioned in PRD
+4. Decisions: 3-5 decision points (orange diamonds)
+   - Show REAL branching logic from the PRD (e.g., "Authenticated?", "Has Workspace?")
+5. End states: Multiple outcomes relevant to THIS product
+   - Success states (green ellipses) — name them after actual PRD outcomes
+   - Error states (pink rectangles) — use actual error scenarios from PRD
+6. Arrows: Connect ALL steps with startId/endId
 
 LAYOUT - MULTI-ROW FLOW:
 Row 1 (y:100): Start → Action 1 → Action 2 → Action 3
@@ -170,269 +146,229 @@ Row 4 (y:460): Alternative outcomes
 
 Horizontal spacing: x:100, x:280, x:460, x:640, x:820, x:1000 (180px apart)
 
-REQUIRED ELEMENTS WITH IDs:
-- Start: {"type":"ellipse","x":100,"y":100,"width":120,"height":60,"text":"Start","backgroundColor":"#e8f5e9","id":"start"}
-- Actions: {"type":"rectangle","x":280,"y":100,"width":160,"height":70,"text":"Login","backgroundColor":"#e3f2fd","id":"action-login"}
-- Decisions: {"type":"diamond","x":460,"y":95,"width":140,"height":80,"text":"Valid?","backgroundColor":"#fff3e0","id":"decision-validate"}
-- Arrows: {"type":"arrow","x":220,"y":130,"points":[[0,0],[60,0]],"startId":"start","endId":"action-login"}
-
 QUALITY TARGETS:
-- Minimum 25-35 elements for complete flow
-- Show ALL major user paths from PRD
-- Include error handling and edge cases
-- Connect every element with arrows (use startId/endId)
+- Minimum 30-40 elements for a complete flow
+- ALL labels must use ACTUAL feature/step names from the PRD — NO generic placeholders
+- Show ALL major user paths described in the PRD
+- Include every decision point, error state, and success outcome from the PRD
+- Connect every element with arrows (use startId/endId)`,
 
-Extract actual user actions, decisions, and outcomes from the PRD context.`,
-
-  'edge-cases': `Generate an Edge Cases & Error States diagram as JSON array.
-
-STRUCTURE:
-1. Title: "Edge Cases & Error Handling" (text, fontSize 24)
-2. Categories (left column): Input Validation, Network/API, User Actions, Data States
-3. Normal states (green rectangles): Expected behaviors
-4. Edge cases (orange rectangles): Boundary conditions
-5. Error states (pink rectangles): Failure scenarios
-6. Recovery actions (blue rectangles): How to handle each
-
-LAYOUT: 4 rows for categories, 3-4 columns for state types.
-Group related items. Use arrows to show error→recovery relationships.
-Max 16 elements. Focus on critical edge cases from PRD.`,
-
-  'competitive-analysis': `Generate a Competitive Analysis Matrix as JSON array.
+  'edge-cases': `Generate an Edge Cases & Error States diagram as JSON array. Extract ALL edge cases DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Title: "Competitive Analysis" (text, fontSize 24, top)
-2. Header row: "Features" label + 3-4 competitor names (rectangles)
-3. Feature rows: 4-5 key feature categories (left column)
-4. Comparison cells: ✓ (green), ~ (orange), ✗ (pink) for each competitor
-5. Our product column highlighted (blue background)
+1. Title: "Edge Cases & Error Handling" (text, fontSize 24, id:"title")
+2. Categories (left column, blue rectangles): Extract actual categories from the PRD (e.g., auth errors, data validation, network failures, permission issues)
+3. Normal states (green rectangles): Expected/happy-path behaviors from PRD
+4. Edge cases (orange rectangles): Boundary conditions specific to THIS product
+5. Error states (pink rectangles): Failure scenarios mentioned or implied in PRD
+6. Recovery actions (blue rectangles): How to handle each — use actual PRD guidance
+
+LAYOUT: Categories in left column (x:50), states in columns (x:250, x:450, x:650).
+Rows spaced 90px apart. Use arrows to show error→recovery relationships with startId/endId.
+Generate 20-30 elements covering ALL edge cases from the PRD. Use ACTUAL error names from the PRD.`,
+
+  'competitive-analysis': `Generate a Competitive Analysis Matrix as JSON array. Extract competitors and features DIRECTLY from the PRD/note content provided above.
+
+STRUCTURE:
+1. Title: "Competitive Analysis" (text, fontSize 24, top, id:"title")
+2. Header row: "Features" label + competitor names extracted from PRD (rectangles, y:100)
+   - Use ACTUAL competitor names mentioned in the PRD (e.g., "Salesforce", "HubSpot")
+   - If no competitors named, infer likely ones from the product domain in the PRD
+3. Feature rows: Key feature categories extracted from the PRD (left column, y:170+)
+   - Use ACTUAL features from the PRD, not generic ones
+4. Comparison cells: ✓ (green #e8f5e9), ~ (orange #fff3e0), ✗ (pink #fce4ec) for each competitor
+5. Our product column highlighted (blue #e3f2fd background) — named after the PRD product
 
 LAYOUT: Grid format, header at y:100, rows spaced 70px apart.
-Columns spaced 180px apart. Use consistent cell sizes (160x55).
-Max 20 elements. Extract competitors and features from PRD context.`,
+Columns spaced 200px apart. Cell sizes 180x55. 
+Generate 20-28 elements. ALL labels from the actual PRD content.`,
 
-  'data-model': `Generate a Data Model (ERD) diagram as JSON array.
+  'data-model': `Generate a Data Model (ERD) diagram as JSON array. Extract ALL entities DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Title: "Data Model" (text, fontSize 24)
-2. Entities: 4-6 main entities (rectangles with entity name)
-3. Attributes: Key fields listed in text below entity name
-4. Relationships: Arrows between related entities
-5. Cardinality: Labels on arrows (1:1, 1:N, N:N)
+1. Title: "Data Model" (text, fontSize 24, id:"title")
+2. Entities: 5-8 main entities extracted from the PRD (rectangles with entity name as id)
+   - Use ACTUAL entity names from the PRD (e.g., "User", "Workspace", "Pipeline", "Note")
+   - Show key attributes as text inside each entity rectangle
+3. Relationships: Arrows between related entities with startId/endId
+4. Cardinality labels: text elements showing 1:1, 1:N, N:N on relationships
 
-LAYOUT: Arrange entities to minimize crossing arrows.
-Primary entities in center, related entities around them.
-Use blue for main entities, green for reference data, purple for junction tables.
-Max 14 elements. Extract entities from PRD technical requirements.`,
+LAYOUT: Arrange entities to minimize crossing arrows. Primary entities in center row.
+Use #e3f2fd (blue) for core entities, #e8f5e9 (green) for reference data, #f3e5f5 (purple) for junction tables.
+Generate 18-28 elements. ALL entity and field names must come from the actual PRD.`,
 
-  'system-architecture': `Generate a COMPREHENSIVE System Architecture diagram as JSON array.
+  'system-architecture': `Generate a COMPREHENSIVE System Architecture diagram as JSON array. Base this ENTIRELY on the technical requirements from the PRD/note content provided above.
 
-IMPORTANT: Generate UNIQUE and VARIED architectures each time. Use different service compositions, layer organizations, and technology choices based on the context. DO NOT repeat the exact same architecture.
-
-STRUCTURE - SHOW COMPLETE TECHNICAL STACK:
+STRUCTURE - SHOW COMPLETE TECHNICAL STACK FROM PRD:
 1. Title: "System Architecture" (text, fontSize 24, x:400, y:30, id:"arch-title")
-2. Client Layer (y:100): All client applications
-   - Web App, Mobile App, Admin Panel (cyan rectangles)
-   - IDs: "client-web", "client-mobile", "client-admin"
-3. API Layer (y:230): API infrastructure
-   - API Gateway, Load Balancer, Auth Service (blue rectangles)
-   - IDs: "api-gateway", "load-balancer", "auth-service"
-4. Service Layer (y:360): All microservices/modules
-   - Extract ALL services from PRD (green rectangles)
-   - User Service, Product Service, Payment Service, etc.
-   - IDs: "service-user", "service-product", etc.
-5. Data Layer (y:490): Data storage
-   - Primary DB, Cache, Search Index, Queue (purple rectangles)
-   - IDs: "db-primary", "cache-redis", "search-elastic", "queue-rabbitmq"
-6. External Services (right column, x:1000): Third-party integrations
-   - Payment Gateway, Email Service, Analytics (orange rectangles)
-   - IDs: "external-stripe", "external-sendgrid", etc.
+2. Client Layer (y:100): All client applications mentioned in the PRD
+   - Use ACTUAL client types from PRD (web app, mobile, admin, etc.)
+3. API Layer (y:230): API infrastructure relevant to the PRD
+   - Include auth, gateway, load balancing as described in PRD
+4. Service Layer (y:360): ALL microservices/modules from the PRD
+   - Extract EVERY service mentioned (e.g., user service, messaging, analytics, AI service)
+   - Use ACTUAL service names from the PRD
+5. Data Layer (y:490): Data storage solutions from the PRD
+   - Use ACTUAL database/cache/queue technologies mentioned
+6. External Services (right column, x:1000): Third-party integrations from PRD
+   - Use ACTUAL integration names mentioned (Stripe, SendGrid, OpenAI, Supabase, etc.)
 7. Arrows: Show ALL data flows using startId/endId
-   - Client → API Gateway → Services → Database
-   - Services → External APIs
 
-LAYOUT:
-- Horizontal spacing: x:100, x:280, x:460, x:640, x:820 (180px apart)
-- External services column at x:1000
-- Vertical layers 130px apart
-- Connect ALL components with arrows showing request/data flow
-
+LAYOUT: Horizontal spacing 200px, vertical layers 130px apart.
 QUALITY TARGETS:
-- Minimum 30-40 elements for complete architecture
-- Show ALL technical components from PRD
-- Include ALL integrations and data flows
-- Every connection must have arrows with proper bindings`,
+- Minimum 30-40 elements — ALL names from the actual PRD
+- Show EVERY technical component, integration, and data flow from the PRD
+- Every connection must have arrows with startId/endId`,
 
-  'journey-map': `Generate a User Journey Map as JSON array.
-
-STRUCTURE:
-1. Title: "User Journey Map" (text, fontSize:24)
-2. Stages row: 5 journey stages (blue rectangles)
-3. Actions row: What user does at each stage (small text)
-4. Touchpoints row: Where interaction happens (green rectangles)
-5. Emotions row: 😊 😐 😟 indicators (text)
-6. Pain points row: Issues at each stage (pink rectangles)
-
-EXACT COORDINATES (follow precisely):
-Title: x:350, y:50, text:"User Journey Map", fontSize:24
-
-Stage Row (y:120) - Blue rectangles, width:140, height:50:
-- Stage 1: x:100, y:120, text:"Awareness"
-- Arrow: x:250, y:145, points:[[0,0],[30,0]]
-- Stage 2: x:290, y:120, text:"Consideration"
-- Arrow: x:440, y:145, points:[[0,0],[30,0]]
-- Stage 3: x:480, y:120, text:"Decision"
-- Arrow: x:630, y:145, points:[[0,0],[30,0]]
-- Stage 4: x:670, y:120, text:"Use"
-- Arrow: x:820, y:145, points:[[0,0],[30,0]]
-- Stage 5: x:860, y:120, text:"Advocacy"
-
-Touchpoints Row (y:220) - Green rectangles, width:140, height:45:
-- x:100, y:220, text:"[Touchpoint 1]"
-- x:290, y:220, text:"[Touchpoint 2]"
-- x:480, y:220, text:"[Touchpoint 3]"
-- x:670, y:220, text:"[Touchpoint 4]"
-- x:860, y:220, text:"[Touchpoint 5]"
-
-Pain Points Row (y:310) - Pink rectangles, width:140, height:45:
-- x:100, y:310, text:"[Pain 1]"
-- x:480, y:310, text:"[Pain 2]"
-- x:860, y:310, text:"[Pain 3]"
-
-Customize text based on PRD context. Max 22 elements.`,
-
-  'wireframe': `Generate a Wireframe layout diagram as JSON array.
+  'journey-map': `Generate a User Journey Map as JSON array. Extract ALL journey details DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Title: "Screen Wireframe" (text, fontSize 20)
-2. Container: Main screen frame (large rectangle, 400x600, brown stroke)
-3. Header: Top bar with logo and nav (rectangle, brown fill, y:inside top)
-4. Navigation: Side nav or bottom tabs (brown rectangles)
-5. Hero/Main content: Primary content area (large brown rectangle)
-6. Cards/Sections: Content blocks (brown rectangles with text)
-7. CTAs: Action buttons (small blue rectangles)
-8. Footer: Bottom section (brown rectangle)
+1. Title: "User Journey Map" (text, fontSize:24, id:"title")
+2. Stages row (y:120): 5-6 journey stages from the PRD (blue rectangles, width:140, height:50)
+   - Use ACTUAL journey stages relevant to THIS product (e.g., "Sign Up", "Onboard", "Create PRD", "Collaborate", "Export")
+3. Actions row (y:200): What user does at each stage — from PRD user stories (green rectangles)
+4. Touchpoints row (y:280): Where interaction happens — use actual PRD screens/features
+5. Emotions row (y:350): 😊 😐 😟 indicators as text elements
+6. Pain points row (y:420): Issues at each stage — extracted from PRD pain points/risks (pink rectangles)
 
-LAYOUT: All elements inside the main container.
-Use #efebe9 (brown) for placeholder content, #e3f2fd (blue) for interactive elements.
-Max 14 elements. Create wireframe based on PRD UI requirements.`,
+Stage spacing: x:100, x:290, x:480, x:670, x:860 (190px apart)
+Connect stages with horizontal arrows (startId/endId).
+Generate 25-35 elements. ALL text must reference ACTUAL PRD content — no generic placeholders.`,
 
-  'feature-priority': `Generate a Feature Priority Matrix (Eisenhower Matrix) as JSON array.
+  'wireframe': `Generate a Wireframe layout diagram as JSON array. Base this on the UI/screen descriptions in the PRD/note content provided above.
 
-STRUCTURE:
-1. Title: "Feature Priority Matrix" (text, fontSize 24, center top)
-2. Quadrant backgrounds (large rectangles):
-   - Top-left (x:100, y:120): "DO FIRST" - High Impact/Low Effort (green, #e8f5e9)
-   - Top-right (x:320, y:120): "SCHEDULE" - High Impact/High Effort (blue, #e3f2fd)
-   - Bottom-left (x:100, y:300): "DELEGATE" - Low Impact/Low Effort (orange, #fff3e0)
-   - Bottom-right (x:320, y:300): "ELIMINATE" - Low Impact/High Effort (pink, #fce4ec)
-3. Axis labels: "Impact →" (left), "Effort →" (bottom)
-4. Features: 4-6 feature items placed in appropriate quadrants (small rectangles)
+STRUCTURE — show the PRIMARY screen of the product described in the PRD:
+1. Title: "[Screen Name from PRD] Wireframe" (text, fontSize 20, id:"title")
+2. Container: Main screen frame (large rectangle 500x700, strokeColor:"#795548", id:"screen")
+3. Header: Top bar with the product's actual navigation items from PRD (rectangle, #efebe9)
+4. Sidebar/Nav: Navigation items matching the actual PRD features (brown rectangles)
+5. Main Content: Primary content area — represent the key feature from PRD (large #efebe9 rectangle)
+6. Content Blocks: Actual feature cards/sections from the PRD (brown rectangles with real labels)
+7. CTAs: Action buttons matching the PRD (small #e3f2fd rectangles with real button names)
+8. Status/Footer: Bottom section relevant to the PRD product
 
-LAYOUT: 2x2 grid, each quadrant 200x160px.
-Place actual features from PRD in correct quadrants based on analysis.
-Max 16 elements.`,
+ALL labels must use ACTUAL feature names, button names, and section names from the PRD.
+Generate 16-22 elements. Use the PRD to determine what the primary screen should show.`,
 
-  'stakeholder-map': `Generate a Stakeholder Map diagram as JSON array.
+  'feature-priority': `Generate a Feature Priority Matrix as JSON array. Extract ALL features DIRECTLY from the PRD/note content provided above and place them in the correct quadrants.
 
 STRUCTURE:
-1. Title: "Stakeholder Map" (text, fontSize 24)
-2. Center: Product/Project (large green ellipse, center)
-3. Inner ring (high influence): Core team members (blue rectangles, close to center)
-4. Middle ring (medium influence): Key stakeholders (purple rectangles)
-5. Outer ring (low influence): External parties (orange rectangles)
-6. Connections: Arrows showing relationships and communication flows
+1. Title: "Feature Priority Matrix" (text, fontSize 24, x:300, y:30, id:"title")
+2. Quadrant backgrounds (large rectangles, 220x180px each):
+   - Top-left (x:80, y:100, id:"q-do-first"): "DO FIRST" — High Impact/Low Effort (#e8f5e9)
+   - Top-right (x:320, y:100, id:"q-schedule"): "SCHEDULE" — High Impact/High Effort (#e3f2fd)
+   - Bottom-left (x:80, y:300, id:"q-delegate"): "DELEGATE" — Low Impact/Low Effort (#fff3e0)
+   - Bottom-right (x:320, y:300, id:"q-eliminate"): "ELIMINATE" — Low Impact/High Effort (#fce4ec)
+3. Axis labels: "↑ Impact" (left side text), "Effort →" (bottom text)
+4. Features: Place EVERY feature from the PRD in appropriate quadrants (small rectangles 160x45)
+   - Analyze each PRD feature and assign it based on described priority, phase, and complexity
+   - Use ACTUAL feature names from the PRD — no generic "Feature A/B/C"
 
-LAYOUT: Radial arrangement around center.
-Inner ring at ~150px from center, middle at ~280px, outer at ~400px.
-Label each stakeholder with role. Show key relationship arrows.
-Max 14 elements. Use stakeholders from PRD context.`,
+Generate 18-28 elements. Base ALL placements on the actual PRD priorities and requirements.`,
 
-  'risk-matrix': `Generate a Risk Assessment Matrix as JSON array.
-
-STRUCTURE:
-1. Title: "Risk Assessment Matrix" (text, fontSize 24)
-2. Grid background: 3x3 matrix of rectangles
-   - High Likelihood/High Impact: #fce4ec (pink) - Critical
-   - Medium combinations: #fff3e0 (orange) - Moderate
-   - Low combinations: #e8f5e9 (green) - Low priority
-3. Axis labels: "Likelihood →" (left), "Impact →" (bottom)
-4. Row labels: High, Medium, Low (left side)
-5. Column labels: Low, Medium, High (bottom)
-6. Risks: Place identified risks as small rectangles in appropriate cells
-
-LAYOUT: Grid starting at x:150, y:120. Cells 140x100px each.
-Color-code risks by severity. Add risk names as text.
-Max 18 elements. Extract risks from PRD context.`,
-
-  'sprint-planning': `Generate a Sprint Planning Board as JSON array.
+  'stakeholder-map': `Generate a Stakeholder Map diagram as JSON array. Extract ALL stakeholders DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Title: "Sprint Planning Board" (text, fontSize 24)
-2. Column headers: Backlog, To Do, In Progress, Done (gray rectangles, y:100)
-3. Column backgrounds: Vertical lanes (light gray rectangles)
-4. Task cards in each column:
-   - Backlog: 2-3 items (orange rectangles)
-   - To Do: 2-3 items (blue rectangles)
-   - In Progress: 1-2 items (amber rectangles)
-   - Done: 1-2 items (green rectangles)
-5. Each card shows: Task name + Story points (e.g., "3 SP")
+1. Title: "Stakeholder Map" (text, fontSize 24, id:"title")
+2. Center: The product name from PRD (large green ellipse, x:450, y:300, width:160, height:80, id:"center-product")
+3. Inner ring (high influence, y:~150-450, close to center): Core stakeholders from PRD
+   - Use ACTUAL roles/people mentioned in the PRD
+4. Middle ring (medium influence, further from center): Key stakeholders from PRD
+5. Outer ring (low influence, outermost): External parties relevant to the PRD
+6. Connections: Arrows from center to all stakeholders using startId/endId
 
-LAYOUT: Columns 160px wide, spaced 20px apart.
-Cards 140x60px, stacked vertically in each column.
-Max 18 elements. Use task names from PRD if available.`,
+LAYOUT: Radial arrangement. Inner ring ~180px from center, middle ~320px, outer ~480px.
+Use ACTUAL stakeholder names/roles from the PRD. 
+Generate 18-26 elements with proper arrow bindings connecting all stakeholders to center.`,
 
-  'api-design': `Generate an API Design diagram as JSON array.
+  'risk-matrix': `Generate a Risk Assessment Matrix as JSON array. Extract ALL risks DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Title: "API Endpoints" (text, fontSize 24)
-2. API Gateway: Main entry point (large blue rectangle, top center)
-3. Authentication: Auth layer (cyan rectangle, below gateway)
-4. Resource groups: Organized by entity
-   - GET endpoints (green rectangles): List, Get by ID
-   - POST endpoints (blue rectangles): Create
-   - PUT/PATCH endpoints (orange rectangles): Update
-   - DELETE endpoints (pink rectangles): Delete
-5. Arrows: Request flow from gateway to endpoints
+1. Title: "Risk Assessment Matrix" (text, fontSize 24, id:"title")
+2. Grid: 3x3 matrix of rectangles (140x100px each, starting x:200, y:150)
+   - High/High (x:480,y:150): Critical — #fce4ec
+   - High/Med (x:340,y:150): High — #fce4ec  
+   - High/Low (x:200,y:150): Medium — #fff3e0
+   - Med/High (x:480,y:250): High — #fff3e0
+   - Med/Med (x:340,y:250): Medium — #fff3e0
+   - Med/Low (x:200,y:250): Low — #e8f5e9
+   - Low/High (x:480,y:350): Medium — #e8f5e9
+   - Low/Med (x:340,y:350): Low — #e8f5e9
+   - Low/Low (x:200,y:350): Minimal — #e8f5e9
+3. Row labels: "High", "Med", "Low" Likelihood (left, x:80)
+4. Col labels: "Low", "Med", "High" Impact (top, y:120)
+5. Risk items: Place ACTUAL risks from the PRD as small text elements in appropriate cells
 
-LAYOUT: Gateway at top, auth below, endpoints grouped by resource.
-Each endpoint shows: METHOD /path (e.g., "GET /users")
-Max 16 elements. Design endpoints based on PRD data model.`,
+Generate 22-32 elements. ALL risk names must come from the actual PRD content.`,
 
-  'release-timeline': `Generate a Release Timeline/Roadmap as JSON array.
-
-STRUCTURE:
-1. Title: "Release Roadmap" (text, fontSize 24, top)
-2. Timeline: Horizontal arrow or line (y:120)
-3. Time markers: Q1, Q2, Q3, Q4 or Month names (text above timeline)
-4. Milestones: Diamond shapes at key dates (on timeline)
-5. Releases: Feature blocks below timeline
-   - Phase 1 features (green rectangles)
-   - Phase 2 features (blue rectangles)
-   - Phase 3 features (purple rectangles)
-6. Dependencies: Arrows between dependent features
-
-LAYOUT: Timeline spans full width at y:120.
-Features positioned below their target quarter.
-Use swim lanes for different teams/themes if needed.
-Max 18 elements. Use phases from PRD timeline.`,
-
-  'persona': `Generate a User Persona Card as JSON array.
+  'sprint-planning': `Generate a Sprint Planning Board as JSON array. Extract ALL tasks/features DIRECTLY from the PRD/note content provided above.
 
 STRUCTURE:
-1. Card background: Large rectangle (400x500, light gray stroke)
-2. Avatar: Ellipse placeholder (top center, cyan fill)
-3. Name & Title: "Sarah Johnson" + "Product Manager" (text, below avatar)
-4. Demographics: Age, Location, etc. (small text)
-5. Goals section: "Goals" header + 2-3 goals (green rectangle)
-6. Pain Points section: "Frustrations" header + 2-3 pains (pink rectangle)
-7. Behaviors section: "Key Behaviors" header + traits (blue rectangle)
-8. Quote: Memorable user quote in italics (text, bottom)
+1. Title: "Sprint Planning Board" (text, fontSize 24, id:"title")
+2. Column headers (y:80, gray rectangles, width:180, height:45):
+   - "Backlog" (x:50), "To Do" (x:250), "In Progress" (x:450), "Done" (x:650)
+3. Column backgrounds (y:130, light #f5f5f5 rectangles, 180x400):
+   - x:50, x:250, x:450, x:650
+4. Task cards — use ACTUAL feature/task names from the PRD:
+   - Backlog (x:60, orange #fff3e0): 3-4 items from PRD backlog/future phases
+   - To Do (x:260, blue #e3f2fd): 2-3 items from PRD current sprint
+   - In Progress (x:460, amber #fff8e1): 1-2 items currently being built per PRD
+   - Done (x:660, green #e8f5e9): 1-2 items completed per PRD
+5. Each card (width:160, height:65) shows: ACTUAL task name + story point estimate
 
-LAYOUT: Card-style vertical layout.
-Sections stacked vertically with clear spacing.
-Use consistent padding (20px) inside card.
-Max 12 elements. Create persona based on PRD target users.`,
+Generate 20-28 elements. ALL task names from the actual PRD — no generic "Task 1/2/3".`,
+
+  'api-design': `Generate an API Design diagram as JSON array. Extract ALL API endpoints DIRECTLY from the PRD/note content provided above.
+
+STRUCTURE:
+1. Title: "API Endpoints" (text, fontSize 24, id:"title")
+2. API Gateway: Main entry point (large #e3f2fd rectangle, x:350, y:50, width:200, height:60, id:"gateway")
+3. Auth Layer: Authentication middleware (#e0f2f1 rectangle, below gateway, id:"auth")
+4. Resource groups organized by the ACTUAL entities in the PRD:
+   - GET endpoints (green #e8f5e9): List and detail endpoints for PRD entities
+   - POST endpoints (blue #e3f2fd): Create endpoints
+   - PUT/PATCH endpoints (orange #fff3e0): Update endpoints
+   - DELETE endpoints (pink #fce4ec): Delete endpoints
+5. Arrows: Request flow from gateway → auth → resource groups, using startId/endId
+
+Use ACTUAL resource names from the PRD (e.g., /workspaces, /notes, /pipelines, /employees).
+Each endpoint label: "METHOD /actual-path" using real PRD entity names.
+Generate 22-32 elements with ALL names from the PRD.`,
+
+  'release-timeline': `Generate a Release Timeline/Roadmap as JSON array. Extract ALL phases, milestones and features DIRECTLY from the PRD/note content provided above.
+
+STRUCTURE:
+1. Title: "Release Roadmap" (text, fontSize 24, top, id:"title")
+2. Timeline: Horizontal line/arrow spanning full width (y:150, id:"timeline")
+3. Time markers: Use ACTUAL phases/quarters from the PRD (text above timeline)
+   - If PRD mentions phases, use those names exactly
+4. Milestones: Diamond shapes at key dates (on timeline, id:"milestone-X")
+   - Use ACTUAL milestone names from the PRD
+5. Feature blocks below timeline grouped by phase:
+   - Phase 1/MVP (green #e8f5e9): ACTUAL MVP features from PRD
+   - Phase 2 (blue #e3f2fd): ACTUAL Phase 2 features from PRD
+   - Phase 3 (purple #f3e5f5): ACTUAL Phase 3 features from PRD
+6. Dependency arrows between related features (startId/endId)
+
+Generate 22-32 elements. ALL feature names and phase names must come from the actual PRD.`,
+
+  'persona': `Generate a User Persona Card as JSON array. Extract ALL persona details DIRECTLY from the PRD/note content provided above.
+
+STRUCTURE:
+1. Card background: Large rectangle (500x550, strokeColor:"#e0e0e0", id:"card-bg")
+2. Avatar: Ellipse placeholder (top center, #e0f2f1 fill, id:"avatar")
+3. Name & Role: Use ACTUAL target user name/role from PRD (text elements)
+   - If PRD names a persona, use that name; otherwise derive from target audience
+4. Demographics: Age range, location, tech-savviness from PRD target audience description
+5. Goals section (green #e8f5e9 rectangle, id:"goals"): 
+   - List ACTUAL user goals from the PRD (what does the target user want to achieve?)
+6. Pain Points section (pink #fce4ec rectangle, id:"pains"):
+   - List ACTUAL frustrations/pain points from the PRD problem statement
+7. Key Behaviors section (blue #e3f2fd rectangle, id:"behaviors"):
+   - List ACTUAL behaviors described in the PRD for this user type
+8. Quote: A realistic quote this persona would say, derived from PRD pain points
+
+Generate 14-18 elements. ALL details must be grounded in the actual PRD content — no generic "Sarah Johnson".`,
 };
 
 // ============================================================================
@@ -448,145 +384,58 @@ export function extractPRDContextForCanvas(
   productDescription: string,
   generationType: CanvasGenerationType
 ): string {
-  // Increased context limit for more detailed diagrams (~2500-3000 tokens)
-  const maxContextLength = 8000;
+  // Generous context limit — we want the AI to have the full PRD
+  const maxContextLength = 12000;
 
-  let relevantSections = '';
+  // Keywords that are most relevant for each diagram type (used to boost relevant sections)
+  const keywordMap: Record<CanvasGenerationType, string[]> = {
+    'information-architecture': ['features', 'pages', 'navigation', 'screens', 'ui', 'functional requirements', 'user stories', 'modules', 'sections'],
+    'user-flow':                ['user journey', 'user stories', 'use cases', 'onboarding', 'workflow', 'steps', 'actions', 'flow', 'functional requirements'],
+    'edge-cases':               ['edge cases', 'error', 'validation', 'failure', 'exception', 'risk', 'constraint', 'non-functional'],
+    'competitive-analysis':     ['competitive', 'competitors', 'market', 'comparison', 'positioning', 'differentiator', 'problem'],
+    'data-model':               ['entity', 'data', 'schema', 'database', 'model', 'fields', 'relationships', 'tables', 'technical'],
+    'system-architecture':      ['architecture', 'system', 'services', 'infrastructure', 'api', 'integration', 'backend', 'technical', 'non-functional'],
+    'journey-map':              ['journey', 'experience', 'touchpoint', 'emotion', 'stage', 'persona', 'user story', 'pain point'],
+    'wireframe':                ['screen', 'layout', 'ui', 'component', 'page', 'button', 'form', 'navigation', 'design'],
+    'feature-priority':         ['feature', 'priority', 'mvp', 'phase', 'effort', 'impact', 'requirement', 'must have', 'nice to have'],
+    'stakeholder-map':          ['stakeholder', 'team', 'user', 'persona', 'role', 'responsibility', 'owner', 'department'],
+    'risk-matrix':              ['risk', 'constraint', 'assumption', 'dependency', 'mitigation', 'impact', 'likelihood'],
+    'sprint-planning':          ['task', 'sprint', 'story point', 'backlog', 'milestone', 'timeline', 'feature', 'deliverable'],
+    'api-design':               ['api', 'endpoint', 'rest', 'request', 'response', 'authentication', 'integration', 'technical'],
+    'release-timeline':         ['timeline', 'milestone', 'release', 'phase', 'roadmap', 'quarter', 'launch', 'deadline'],
+    'persona':                  ['persona', 'user', 'target audience', 'demographic', 'goal', 'pain point', 'behavior', 'motivation'],
+  };
 
-  // Extract relevant sections based on generation type
-  switch (generationType) {
-    case 'information-architecture':
-      relevantSections = extractSections(prdContent, [
-        'functional requirements',
-        'features',
-        'user stories',
-        'ui/ux',
-      ]);
-      break;
-    case 'user-flow':
-      relevantSections = extractSections(prdContent, [
-        'user stories',
-        'user journey',
-        'use cases',
-        'functional requirements',
-      ]);
-      break;
-    case 'edge-cases':
-      relevantSections = extractSections(prdContent, [
-        'edge cases',
-        'error',
-        'risks',
-        'non-functional',
-      ]);
-      break;
-    case 'competitive-analysis':
-      relevantSections = extractSections(prdContent, [
-        'competitive',
-        'market',
-        'problem statement',
-        'goals',
-      ]);
-      break;
-    case 'data-model':
-      relevantSections = extractSections(prdContent, [
-        'technical',
-        'data',
-        'requirements',
-        'architecture',
-      ]);
-      break;
-    case 'system-architecture':
-      relevantSections = extractSections(prdContent, [
-        'technical',
-        'architecture',
-        'integration',
-        'non-functional',
-      ]);
-      break;
-    case 'journey-map':
-      relevantSections = extractSections(prdContent, [
-        'user journey',
-        'user stories',
-        'personas',
-        'experience',
-      ]);
-      break;
-    case 'wireframe':
-      relevantSections = extractSections(prdContent, [
-        'ui/ux',
-        'features',
-        'user stories',
-        'screens',
-      ]);
-      break;
-    case 'feature-priority':
-      relevantSections = extractSections(prdContent, [
-        'features',
-        'requirements',
-        'goals',
-        'priorities',
-      ]);
-      break;
-    case 'stakeholder-map':
-      relevantSections = extractSections(prdContent, [
-        'stakeholders',
-        'users',
-        'personas',
-        'team',
-      ]);
-      break;
-    case 'risk-matrix':
-      relevantSections = extractSections(prdContent, [
-        'risks',
-        'constraints',
-        'assumptions',
-        'dependencies',
-      ]);
-      break;
-    case 'sprint-planning':
-      relevantSections = extractSections(prdContent, [
-        'tasks',
-        'features',
-        'milestones',
-        'timeline',
-      ]);
-      break;
-    case 'api-design':
-      relevantSections = extractSections(prdContent, [
-        'api',
-        'technical',
-        'integration',
-        'endpoints',
-      ]);
-      break;
-    case 'release-timeline':
-      relevantSections = extractSections(prdContent, [
-        'timeline',
-        'milestones',
-        'phases',
-        'roadmap',
-      ]);
-      break;
-    case 'persona':
-      relevantSections = extractSections(prdContent, [
-        'personas',
-        'users',
-        'target audience',
-        'stakeholders',
-      ]);
-      break;
+  const keywords = keywordMap[generationType] || [];
+
+  // Always start with the product description (full, not truncated)
+  let context = `PRODUCT DESCRIPTION:\n${productDescription}\n\n`;
+
+  // If we have PRD content, extract the most relevant sections first, then append the rest
+  if (prdContent && prdContent.trim()) {
+    const relevantSections = extractSections(prdContent, keywords);
+
+    if (relevantSections && relevantSections !== prdContent.slice(0, 150 * 5)) {
+      // We got targeted sections — include them prominently, then append rest of PRD
+      context += `MOST RELEVANT PRD SECTIONS FOR THIS DIAGRAM:\n${relevantSections}\n\n`;
+
+      // Also include the full PRD as additional context
+      const fullPRD = prdContent.trim();
+      const remainingBudget = maxContextLength - context.length - 200;
+      if (remainingBudget > 500) {
+        context += `FULL PRD CONTENT:\n${fullPRD.slice(0, remainingBudget)}`;
+      }
+    } else {
+      // No targeted sections found — use the full PRD content directly
+      const fullPRD = prdContent.trim();
+      const remainingBudget = maxContextLength - context.length - 200;
+      context += `PRD CONTENT:\n${fullPRD.slice(0, remainingBudget)}`;
+    }
   }
 
-  // Combine and truncate
-  let context = `Product: ${productDescription.slice(0, 200)}\n\n`;
-
-  if (relevantSections) {
-    context += `Context:\n${relevantSections}`;
-  }
-
-  // Truncate to max length
+  // Final truncation safety
   if (context.length > maxContextLength) {
-    context = context.slice(0, maxContextLength) + '...';
+    context = context.slice(0, maxContextLength) + '\n...[content truncated]';
   }
 
   return context;
@@ -796,6 +645,78 @@ function sanitizeElement(el: any): any {
   }
 
   return sanitized;
+}
+
+/**
+ * Strip JavaScript-style comments (// and /* *\/) from outside JSON string values.
+ * This handles the case where AI inserts comment lines between JSON elements.
+ * e.g.: {"type":"rectangle",...},\n// Level 1: Entry\n{"type":"ellipse",...}
+ */
+function stripJsonComments(jsonString: string): string {
+  let result = '';
+  let inString = false;
+  let escapeNext = false;
+  let i = 0;
+
+  while (i < jsonString.length) {
+    const char = jsonString[i];
+    const nextChar = jsonString[i + 1];
+
+    if (escapeNext) {
+      result += char;
+      escapeNext = false;
+      i++;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      result += char;
+      escapeNext = true;
+      i++;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      i++;
+      continue;
+    }
+
+    if (inString) {
+      result += char;
+      i++;
+      continue;
+    }
+
+    // Outside a string — check for comments
+    if (char === '/' && nextChar === '/') {
+      // Line comment — skip until end of line
+      i += 2;
+      while (i < jsonString.length && jsonString[i] !== '\n') {
+        i++;
+      }
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      // Block comment — skip until */
+      i += 2;
+      while (i < jsonString.length - 1) {
+        if (jsonString[i] === '*' && jsonString[i + 1] === '/') {
+          i += 2;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+
+    result += char;
+    i++;
+  }
+
+  return result;
 }
 
 /**
@@ -1013,24 +934,28 @@ export function parseCanvasResponse(response: string): any[] {
     debugLog('Extracted JSON array, length:', jsonString.length);
 
     // Step 3: Clean up common JSON issues
+    // CRITICAL: Strip // and /* */ comments FIRST — AI often inserts these between elements
+    jsonString = stripJsonComments(jsonString);
     // Remove trailing commas (common AI mistake)
     jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
 
     // Step 4: Parse the JSON with multiple recovery strategies
     let elements: any[];
     const parseStrategies = [
-      // Strategy 1: Direct parse
+      // Strategy 1: Direct parse (after comment stripping)
       () => JSON.parse(jsonString),
 
       // Strategy 2: Fix newlines inside strings
       () => JSON.parse(fixJsonStringValues(jsonString)),
 
-      // Strategy 3: Remove all newlines and extra spaces (compact JSON)
+      // Strategy 3: Strip comments + fix string values
+      () => JSON.parse(fixJsonStringValues(stripJsonComments(jsonString))),
+
+      // Strategy 4: Remove all newlines and extra spaces (compact JSON)
       () => {
-        let compacted = jsonString;
-        // First, replace newlines inside strings with escaped versions
+        let compacted = stripJsonComments(jsonString);
         compacted = fixJsonStringValues(compacted);
-        // Then collapse all whitespace outside strings
+        // Collapse all whitespace outside strings
         let result = '';
         let inStr = false;
         let escape = false;
@@ -1054,16 +979,14 @@ export function parseCanvasResponse(response: string): any[] {
             result += char;
           } else if (!/\s/.test(char)) {
             result += char;
-          } else if (result.length > 0 && !/[\[{,:]/.test(result[result.length - 1])) {
-            // Keep single space after values for readability, but it's not strictly needed
           }
         }
         return JSON.parse(result);
       },
 
-      // Strategy 4: Fix unquoted keys and single quotes
+      // Strategy 5: Fix unquoted keys and single quotes
       () => {
-        let fixed = fixJsonStringValues(jsonString);
+        let fixed = fixJsonStringValues(stripJsonComments(jsonString));
         // Fix unquoted property names
         fixed = fixed.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
         // Replace single quotes with double quotes (carefully)
@@ -1075,9 +998,9 @@ export function parseCanvasResponse(response: string): any[] {
         return JSON.parse(fixed);
       },
 
-      // Strategy 5: Try to repair truncated JSON
+      // Strategy 6: Try to repair truncated JSON
       () => {
-        const repaired = repairTruncatedJson(fixJsonStringValues(jsonString));
+        const repaired = repairTruncatedJson(fixJsonStringValues(stripJsonComments(jsonString)));
         return JSON.parse(repaired);
       },
     ];

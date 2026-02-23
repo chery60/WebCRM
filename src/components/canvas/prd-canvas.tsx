@@ -1097,8 +1097,49 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     </div>
   ), [handleExcalidrawAPI, excalidrawInitialData, stableOnChange, readOnly, uiOptions]);
 
+  // Canvas name editing state — ALL hooks must be above any conditional returns (Rules of Hooks)
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState(canvasName || 'PRD Canvas');
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync editName when canvasName prop changes
+  useEffect(() => {
+    setEditName(canvasName || 'PRD Canvas');
+  }, [canvasName]);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  // Handle name save
+  const handleSaveName = useCallback(() => {
+    const trimmedName = editName.trim();
+    const displayName = canvasName || 'PRD Canvas';
+    if (trimmedName && trimmedName !== displayName && onCanvasNameChange) {
+      onCanvasNameChange(trimmedName);
+    }
+    setIsEditingName(false);
+  }, [editName, canvasName, onCanvasNameChange]);
+
+  // Handle name key down
+  const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const displayName = canvasName || 'PRD Canvas';
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveName();
+    } else if (e.key === 'Escape') {
+      setEditName(displayName);
+      setIsEditingName(false);
+    }
+  }, [handleSaveName, canvasName]);
+
   // Collapsed mini view - Don't render Excalidraw here to avoid infinite loops
   // Only show collapsed view if collapsing is allowed AND currently collapsed
+  // IMPORTANT: This conditional return is AFTER all hooks (Rules of Hooks compliance)
   if (allowCollapse && isCollapsed) {
     return (
       <div
@@ -1181,48 +1222,9 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     );
   }
 
-  // Header component - completely redesigned for full-page mode
+  // Header component — defined as a stable render function (no hooks inside, uses parent state via closure)
   const CanvasHeader = ({ inFullPage = false }: { inFullPage?: boolean }) => {
-    // Determine display name
     const displayName = canvasName || 'PRD Canvas';
-
-    // State for inline editing canvas name
-    const [isEditingName, setIsEditingName] = useState(false);
-    const [editName, setEditName] = useState(displayName);
-    const nameInputRef = useRef<HTMLInputElement>(null);
-
-    // Update local state when canvasName prop changes
-    useEffect(() => {
-      setEditName(canvasName || 'PRD Canvas');
-    }, [canvasName]);
-
-    // Focus input when editing starts
-    useEffect(() => {
-      if (isEditingName && nameInputRef.current) {
-        nameInputRef.current.focus();
-        nameInputRef.current.select();
-      }
-    }, [isEditingName]);
-
-    // Handle name save
-    const handleSaveName = useCallback(() => {
-      const trimmedName = editName.trim();
-      if (trimmedName && trimmedName !== displayName && onCanvasNameChange) {
-        onCanvasNameChange(trimmedName);
-      }
-      setIsEditingName(false);
-    }, [editName, displayName, onCanvasNameChange]);
-
-    // Handle name key down
-    const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSaveName();
-      } else if (e.key === 'Escape') {
-        setEditName(displayName);
-        setIsEditingName(false);
-      }
-    }, [handleSaveName, displayName]);
 
     return (
       <div className={cn(
