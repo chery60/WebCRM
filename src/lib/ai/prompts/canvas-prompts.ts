@@ -21,39 +21,59 @@ export const CANVAS_SYSTEM_PROMPT = `You generate Excalidraw diagram elements as
 
 RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
 [
-  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
-  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
-  {"type":"arrow","x":290,"y":135,"points":[[0,0],[60,0]]}
+  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e","id":"title-1"},
+  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd","id":"shape-1"},
+  {"type":"arrow","x":290,"y":135,"points":[[0,0],[60,0]],"startId":"shape-1","endId":"shape-2"}
 ]
 
 ELEMENT TYPES:
-- rectangle: x, y, width, height, text, backgroundColor
-- ellipse: x, y, width, height, text, backgroundColor  
-- diamond: x, y, width, height, text, backgroundColor
-- arrow: x, y, points (array of [x,y] pairs) - x,y is the START position of the arrow
-- text: x, y, text, fontSize, strokeColor
+- rectangle: x, y, width, height, text, backgroundColor, id (required for binding)
+- ellipse: x, y, width, height, text, backgroundColor, id (required for binding)
+- diamond: x, y, width, height, text, backgroundColor, id (required for binding)
+- arrow: x, y, points (array of [x,y] pairs), startId, endId - x,y is the START position
+- text: x, y, text, fontSize, strokeColor, id (optional)
+
+ARROW BINDING (CRITICAL - CONNECT ARROWS TO SHAPES):
+1. EVERY arrow MUST have startId and endId properties
+2. startId = id of the shape where the arrow begins
+3. endId = id of the shape where the arrow ends
+4. Arrow points are RELATIVE to arrow's x,y position
+5. Example: {"type":"arrow","x":280,"y":135,"points":[[0,0],[70,0]],"startId":"box-1","endId":"box-2"}
+   This creates an arrow from box-1 to box-2, starting at (280,135) going right 70px
 
 LAYOUT RULES (CRITICAL - PREVENT OVERLAPPING):
-1. HORIZONTAL FLOW: Place shapes in a single row with consistent spacing
-   - Shape 1 at x:100, Shape 2 at x:350, Shape 3 at x:600, Shape 4 at x:850 (250px apart)
-   - Arrow between shapes: x = previous_shape_x + previous_shape_width + 10, points:[[0,0],[50,0]]
-2. VERTICAL SECTIONS: Different diagram sections MUST have 600px+ vertical gap
+1. HORIZONTAL FLOW: Place shapes in rows with consistent spacing
+   - Row 1: x:100, x:300, x:500, x:700, x:900 (200px apart)
+   - Row 2: x:100, x:300, x:500, x:700, x:900 (same x positions)
+   - Arrows connect shapes: calculate proper x,y based on shape positions
+2. VERTICAL SECTIONS: Different diagram sections MUST have 400px+ vertical gap
    - Section 1 starts at y:50
-   - Section 2 starts at y:650
-   - Section 3 starts at y:1250
+   - Section 2 starts at y:500
+   - Section 3 starts at y:950
 3. WITHIN A SECTION:
    - Title at y:section_start
    - Row 1 shapes at y:section_start + 80
-   - Row 2 shapes at y:section_start + 200 (120px gap between rows)
-   - Row 3 shapes at y:section_start + 320
+   - Row 2 shapes at y:section_start + 180 (100px gap between rows)
+   - Row 3 shapes at y:section_start + 280
 4. STANDARD SIZES:
    - Rectangles: width:160, height:70
    - Ellipses: width:120, height:60
    - Diamonds: width:140, height:90
 5. NEVER place two shapes with overlapping x,y coordinates
-6. Keep text SHORT - max 20 characters per shape
+6. Keep text CONCISE - max 25 characters per shape
+
+ELEMENT IDs:
+- Use descriptive IDs: "home-page", "user-flow-1", "api-gateway", etc.
+- IDs must be unique within the diagram
+- Arrows reference these IDs in startId/endId
 
 COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple), #e0f2f1 (teal), #fff8e1 (amber)
+
+QUALITY REQUIREMENTS:
+- Generate DETAILED, COMPREHENSIVE diagrams
+- Include ALL relevant information from the context
+- Create proper visual hierarchy
+- Connect all related elements with arrows
 
 CRITICAL: Output ONLY the JSON array. No other text before or after.`;
 
@@ -62,50 +82,107 @@ CRITICAL: Output ONLY the JSON array. No other text before or after.`;
 // ============================================================================
 
 export const CANVAS_GENERATION_PROMPTS: Record<CanvasGenerationType, string> = {
-  'information-architecture': `Generate a professional Information Architecture (IA) diagram as JSON array.
+  'information-architecture': `Generate a COMPREHENSIVE and DETAILED Information Architecture (IA) diagram as JSON array. This must be a COMPLETE sitemap showing ALL pages and features from the provided context.
 
-STRUCTURE:
-1. Title: "Information Architecture" (text, fontSize 24, top center)
-2. Level 1 - Main sections: 3-5 primary navigation items (blue rectangles, top row at y:100)
-3. Level 2 - Sub-pages: 2-3 pages under each main section (green rectangles, y:220)
-4. Level 3 - Features: Key features/components (purple rectangles, y:340)
-5. Arrows: Connect parent to children (vertical arrows)
+CRITICAL REQUIREMENTS:
+1. Generate 50-80 total elements (shapes + arrows) for a comprehensive diagram
+2. EVERY shape MUST have a unique "id" property (e.g., "nav-home", "page-settings")
+3. EVERY arrow MUST have "startId" and "endId" properties to connect shapes
+4. Extract ALL sections, pages, and features from the PRD content provided
+5. Output the COMPLETE JSON array — do NOT stop or truncate mid-generation
+6. IMPORTANT: Generate UNIQUE and VARIED content each time based on the context provided. DO NOT repeat previous diagrams.
 
-LAYOUT: Start at x:100, space sections 220px apart horizontally.
-Use consistent rectangle sizes: Level 1 (180x70), Level 2 (150x55), Level 3 (130x50).
-Max 18 elements total. Extract actual page names from the PRD context.`,
+STRUCTURE - MULTI-LEVEL HIERARCHY:
+1. Title: "Information Architecture" (text, fontSize:24, x:450, y:30, id:"ia-title")
 
-  'user-flow': `Generate a professional User Flow diagram as JSON array.
+2. Level 1 - Main Navigation (y:100): 6-8 primary sections
+   - Examples: "Dashboard", "Products", "Settings", "Reports", "Admin", "Analytics", "Help", "Profile"
+   - Rectangle: width:160, height:70, backgroundColor:"#e3f2fd"
+   - Position: x:100, x:300, x:500, x:700, x:900, x:1100, x:1300 (200px apart)
+   - IDs: "nav-dashboard", "nav-products", "nav-settings", etc.
 
-STRUCTURE:
-1. Title: "User Flow" (text, fontSize:24, x:100, y:50)
-2. Start: Entry point (green ellipse)
-3. Actions: 3-4 user action steps (blue rectangles)
-4. Decision: 1 decision point (orange diamond)
-5. End points: Success (green ellipse) and Error (pink rectangle)
-6. Arrows: Connect steps horizontally
+3. Level 2 - Sub-pages (y:230): 4-6 pages under EACH Level 1 section
+   - Extract from PRD features, user stories, and requirements
+   - Rectangle: width:140, height:60, backgroundColor:"#e8f5e9"
+   - Align under parent section, space 150px apart horizontally
+   - IDs: "page-user-list", "page-product-detail", "page-settings-profile", etc.
 
-EXACT COORDINATES (follow precisely - DO NOT DEVIATE):
-Row 1 (y:130):
-- Start ellipse: x:100, y:130, width:120, height:60, text:"Start"
-- Arrow: x:230, y:160, points:[[0,0],[50,0]]
-- Action 1: x:290, y:130, width:160, height:70, text:"[Action 1]"
-- Arrow: x:460, y:165, points:[[0,0],[50,0]]
-- Action 2: x:520, y:130, width:160, height:70, text:"[Action 2]"
+4. Level 3 - Features/Components (y:360): 2-4 key features per Level 2 page
+   - Detailed functionality and components
+   - Rectangle: width:120, height:50, backgroundColor:"#f3e5f5"
+   - Group under parent pages
+   - IDs: "feature-search", "feature-export", "feature-filter", etc.
 
-Row 2 (y:280):
-- Action 3: x:100, y:280, width:160, height:70, text:"[Action 3]"
-- Arrow: x:270, y:315, points:[[0,0],[50,0]]
-- Decision: x:330, y:270, width:140, height:90, text:"Decision?"
-- Arrow (right): x:480, y:315, points:[[0,0],[50,0]]
-- Success: x:540, y:280, width:120, height:60, text:"Success"
+5. Arrows - Connect ALL relationships:
+   - Every Level 1 → Level 2 connection needs an arrow
+   - Every Level 2 → Level 3 connection needs an arrow
+   - Arrow x,y MUST be at the BOTTOM EDGE of the parent shape
+   - Arrow format: {"type":"arrow","x":<parent_center_x>,"y":<parent_y + parent_height>,"points":[[0,0],[0,<gap_to_child>]],"startId":"<parent_id>","endId":"<child_id>"}
 
-Row 3 (y:430):
-- Arrow (down from decision): x:400, y:360, points:[[0,0],[0,50]]
-- Error: x:330, y:420, width:140, height:60, text:"Error"
+ARROW POSITIONING (CRITICAL):
+- For Level 1 → Level 2 arrows:
+  arrow.x = parent.x + parent.width/2 (center horizontally)
+  arrow.y = parent.y + parent.height (bottom edge of parent)
+  points: [[0,0],[0, child.y - (parent.y + parent.height)]]
+- For Level 2 → Level 3 arrows:
+  Same pattern: start at parent bottom edge, end at child top edge
 
-Replace [Action 1], [Action 2], [Action 3] with actual user actions from PRD context.
-Max 14 elements total.`,
+EXAMPLE STRUCTURE (follow this pattern):
+[
+  {"type":"text","x":450,"y":30,"text":"Information Architecture","fontSize":24,"id":"title"},
+  {"type":"rectangle","x":100,"y":100,"width":160,"height":70,"text":"Dashboard","backgroundColor":"#e3f2fd","id":"nav-dashboard"},
+  {"type":"rectangle","x":120,"y":230,"width":140,"height":60,"text":"Analytics","backgroundColor":"#e8f5e9","id":"page-analytics"},
+  {"type":"rectangle","x":100,"y":360,"width":120,"height":50,"text":"Charts","backgroundColor":"#f3e5f5","id":"feature-charts"},
+  {"type":"arrow","x":180,"y":170,"points":[[0,0],[0,60]],"startId":"nav-dashboard","endId":"page-analytics"},
+  {"type":"arrow","x":180,"y":290,"points":[[0,0],[0,70]],"startId":"page-analytics","endId":"feature-charts"}
+]
+
+MANDATORY:
+- Minimum 50 elements total (25+ shapes, 25+ arrows)
+- Use the ENTIRE PRD context to extract all pages and features
+- Every parent-child relationship MUST have a connecting arrow with startId/endId
+- IDs must match exactly between shapes and arrow bindings
+- Generate the COMPLETE array - do not stop early`,
+
+  'user-flow': `Generate a COMPREHENSIVE User Flow diagram showing the complete user journey as JSON array.
+
+IMPORTANT: Generate UNIQUE and VARIED flows each time. Use different user scenarios, paths, and decision points based on the context provided. DO NOT repeat the exact same flow.
+
+STRUCTURE - MAP THE ENTIRE USER EXPERIENCE:
+1. Title: "User Flow" (text, fontSize:24, x:400, y:30, id:"flow-title")
+2. Start: Entry point (green ellipse, id:"start")
+3. Actions: 6-10 user action steps (blue rectangles)
+   - Extract ALL key user actions from PRD
+   - Include: onboarding, main tasks, interactions
+4. Decisions: 2-4 decision points (orange diamonds)
+   - Show branching logic and user choices
+5. End states: Multiple outcomes
+   - Success states (green ellipses)
+   - Error states (pink rectangles)
+   - Alternative paths (amber rectangles)
+6. Arrows: Connect ALL steps with proper bindings using startId/endId
+
+LAYOUT - MULTI-ROW FLOW:
+Row 1 (y:100): Start → Action 1 → Action 2 → Action 3
+Row 2 (y:220): Action 4 → Decision 1 → Action 5 → Action 6
+Row 3 (y:340): Decision 2 → Success / Error paths
+Row 4 (y:460): Alternative outcomes
+
+Horizontal spacing: x:100, x:280, x:460, x:640, x:820, x:1000 (180px apart)
+
+REQUIRED ELEMENTS WITH IDs:
+- Start: {"type":"ellipse","x":100,"y":100,"width":120,"height":60,"text":"Start","backgroundColor":"#e8f5e9","id":"start"}
+- Actions: {"type":"rectangle","x":280,"y":100,"width":160,"height":70,"text":"Login","backgroundColor":"#e3f2fd","id":"action-login"}
+- Decisions: {"type":"diamond","x":460,"y":95,"width":140,"height":80,"text":"Valid?","backgroundColor":"#fff3e0","id":"decision-validate"}
+- Arrows: {"type":"arrow","x":220,"y":130,"points":[[0,0],[60,0]],"startId":"start","endId":"action-login"}
+
+QUALITY TARGETS:
+- Minimum 25-35 elements for complete flow
+- Show ALL major user paths from PRD
+- Include error handling and edge cases
+- Connect every element with arrows (use startId/endId)
+
+Extract actual user actions, decisions, and outcomes from the PRD context.`,
 
   'edge-cases': `Generate an Edge Cases & Error States diagram as JSON array.
 
@@ -148,20 +225,43 @@ Primary entities in center, related entities around them.
 Use blue for main entities, green for reference data, purple for junction tables.
 Max 14 elements. Extract entities from PRD technical requirements.`,
 
-  'system-architecture': `Generate a System Architecture diagram as JSON array.
+  'system-architecture': `Generate a COMPREHENSIVE System Architecture diagram as JSON array.
 
-STRUCTURE:
-1. Title: "System Architecture" (text, fontSize 24)
-2. Client Layer (top, y:100): Web App, Mobile App (cyan rectangles)
-3. API Layer (y:220): API Gateway, Auth Service (blue rectangles)
-4. Service Layer (y:340): Core services (green rectangles)
-5. Data Layer (bottom, y:460): Databases, Cache (purple rectangles)
-6. External Services (right side): Third-party integrations (orange rectangles)
-7. Arrows: Data flow between layers
+IMPORTANT: Generate UNIQUE and VARIED architectures each time. Use different service compositions, layer organizations, and technology choices based on the context. DO NOT repeat the exact same architecture.
 
-LAYOUT: Horizontal layers, services spread across each layer.
-Show request flow with downward arrows, response flow with upward.
-Max 16 elements. Use actual services mentioned in PRD.`,
+STRUCTURE - SHOW COMPLETE TECHNICAL STACK:
+1. Title: "System Architecture" (text, fontSize 24, x:400, y:30, id:"arch-title")
+2. Client Layer (y:100): All client applications
+   - Web App, Mobile App, Admin Panel (cyan rectangles)
+   - IDs: "client-web", "client-mobile", "client-admin"
+3. API Layer (y:230): API infrastructure
+   - API Gateway, Load Balancer, Auth Service (blue rectangles)
+   - IDs: "api-gateway", "load-balancer", "auth-service"
+4. Service Layer (y:360): All microservices/modules
+   - Extract ALL services from PRD (green rectangles)
+   - User Service, Product Service, Payment Service, etc.
+   - IDs: "service-user", "service-product", etc.
+5. Data Layer (y:490): Data storage
+   - Primary DB, Cache, Search Index, Queue (purple rectangles)
+   - IDs: "db-primary", "cache-redis", "search-elastic", "queue-rabbitmq"
+6. External Services (right column, x:1000): Third-party integrations
+   - Payment Gateway, Email Service, Analytics (orange rectangles)
+   - IDs: "external-stripe", "external-sendgrid", etc.
+7. Arrows: Show ALL data flows using startId/endId
+   - Client → API Gateway → Services → Database
+   - Services → External APIs
+
+LAYOUT:
+- Horizontal spacing: x:100, x:280, x:460, x:640, x:820 (180px apart)
+- External services column at x:1000
+- Vertical layers 130px apart
+- Connect ALL components with arrows showing request/data flow
+
+QUALITY TARGETS:
+- Minimum 30-40 elements for complete architecture
+- Show ALL technical components from PRD
+- Include ALL integrations and data flows
+- Every connection must have arrows with proper bindings`,
 
   'journey-map': `Generate a User Journey Map as JSON array.
 
@@ -348,11 +448,11 @@ export function extractPRDContextForCanvas(
   productDescription: string,
   generationType: CanvasGenerationType
 ): string {
-  // Limit total context to ~500 tokens
-  const maxContextLength = 1500;
-  
+  // Increased context limit for more detailed diagrams (~2500-3000 tokens)
+  const maxContextLength = 8000;
+
   let relevantSections = '';
-  
+
   // Extract relevant sections based on generation type
   switch (generationType) {
     case 'information-architecture':
@@ -476,36 +576,39 @@ export function extractPRDContextForCanvas(
       ]);
       break;
   }
-  
+
   // Combine and truncate
   let context = `Product: ${productDescription.slice(0, 200)}\n\n`;
-  
+
   if (relevantSections) {
     context += `Context:\n${relevantSections}`;
   }
-  
+
   // Truncate to max length
   if (context.length > maxContextLength) {
     context = context.slice(0, maxContextLength) + '...';
   }
-  
+
   return context;
 }
 
 /**
- * Extract sections from PRD content that match keywords
+ * Extract sections from PRD content that match keywords.
+ * Falls back to returning full content if no markdown headers are found.
  */
 function extractSections(content: string, keywords: string[]): string {
   const lines = content.split('\n');
   const relevantLines: string[] = [];
   let inRelevantSection = false;
   let sectionDepth = 0;
-  
+  let hasAnyHeaders = false;
+
   for (const line of lines) {
     const lowerLine = line.toLowerCase();
-    
-    // Check for section headers
+
+    // Check for section headers (markdown-style)
     if (line.startsWith('#')) {
+      hasAnyHeaders = true;
       const isRelevant = keywords.some(kw => lowerLine.includes(kw));
       if (isRelevant) {
         inRelevantSection = true;
@@ -521,9 +624,18 @@ function extractSections(content: string, keywords: string[]): string {
       relevantLines.push(line);
     }
   }
-  
-  // Limit to ~300 tokens worth of content
-  return relevantLines.slice(0, 20).join('\n');
+
+  // If no headers were found at all (plain text input), or if no relevant
+  // sections matched, fall back to returning the full content.
+  // This handles the case where editor.state.doc.textContent is passed
+  // without markdown formatting.
+  if (!hasAnyHeaders || relevantLines.length === 0) {
+    const nonEmptyLines = lines.filter(l => l.trim());
+    return nonEmptyLines.slice(0, 150).join('\n');
+  }
+
+  // Increased limit for more comprehensive diagrams (~2000 tokens worth of content)
+  return relevantLines.slice(0, 150).join('\n');
 }
 
 // ============================================================================
@@ -568,31 +680,31 @@ function findMatchingBracket(str: string, startIndex: number): number {
   if (startIndex < 0 || startIndex >= str.length || str[startIndex] !== '[') {
     return -1;
   }
-  
+
   let depth = 0;
   let inString = false;
   let escapeNext = false;
-  
+
   for (let i = startIndex; i < str.length; i++) {
     const char = str[i];
-    
+
     if (escapeNext) {
       escapeNext = false;
       continue;
     }
-    
+
     if (char === '\\' && inString) {
       escapeNext = true;
       continue;
     }
-    
+
     if (char === '"' && !escapeNext) {
       inString = !inString;
       continue;
     }
-    
+
     if (inString) continue;
-    
+
     if (char === '[') {
       depth++;
     } else if (char === ']') {
@@ -602,7 +714,7 @@ function findMatchingBracket(str: string, startIndex: number): number {
       }
     }
   }
-  
+
   return -1; // No matching bracket found
 }
 
@@ -612,7 +724,7 @@ function findMatchingBracket(str: string, startIndex: number): number {
 function isValidElement(el: any): boolean {
   if (!el || typeof el !== 'object') return false;
   if (!el.type || typeof el.type !== 'string') return false;
-  
+
   // Type-specific validation
   switch (el.type) {
     case 'arrow':
@@ -624,13 +736,13 @@ function isValidElement(el: any): boolean {
       if (el.text !== undefined && typeof el.text !== 'string') return false;
       break;
   }
-  
+
   // Coordinates should be numbers if present
   if (el.x !== undefined && typeof el.x !== 'number') return false;
   if (el.y !== undefined && typeof el.y !== 'number') return false;
   if (el.width !== undefined && typeof el.width !== 'number') return false;
   if (el.height !== undefined && typeof el.height !== 'number') return false;
-  
+
   return true;
 }
 
@@ -639,15 +751,15 @@ function isValidElement(el: any): boolean {
  */
 function sanitizeElement(el: any): any {
   const sanitized = { ...el };
-  
+
   // Ensure coordinates are valid numbers
   if (typeof sanitized.x !== 'number' || !isFinite(sanitized.x)) sanitized.x = 100;
   if (typeof sanitized.y !== 'number' || !isFinite(sanitized.y)) sanitized.y = 100;
-  
+
   // Ensure dimensions are positive
   if (typeof sanitized.width === 'number' && sanitized.width <= 0) sanitized.width = 100;
   if (typeof sanitized.height === 'number' && sanitized.height <= 0) sanitized.height = 60;
-  
+
   // Sanitize points array for arrows
   if (sanitized.type === 'arrow' && sanitized.points) {
     if (!Array.isArray(sanitized.points) || sanitized.points.length < 2) {
@@ -665,24 +777,24 @@ function sanitizeElement(el: any): any {
       });
     }
   }
-  
+
   // Sanitize text content
   if (sanitized.text !== undefined) {
     sanitized.text = String(sanitized.text).slice(0, 500); // Limit text length
   }
-  
+
   // Sanitize colors - ensure they're valid hex or named colors
   const colorProps = ['strokeColor', 'backgroundColor'];
   for (const prop of colorProps) {
     if (sanitized[prop] && typeof sanitized[prop] === 'string') {
       // Basic validation: should start with # or be a known color
-      if (!sanitized[prop].match(/^#[0-9A-Fa-f]{3,8}$/) && 
-          !['transparent', 'white', 'black'].includes(sanitized[prop])) {
+      if (!sanitized[prop].match(/^#[0-9A-Fa-f]{3,8}$/) &&
+        !['transparent', 'white', 'black'].includes(sanitized[prop])) {
         delete sanitized[prop]; // Let defaults apply
       }
     }
   }
-  
+
   return sanitized;
 }
 
@@ -691,7 +803,7 @@ function sanitizeElement(el: any): any {
  */
 function extractJsonFromResponse(response: string): string {
   let jsonString = response.trim();
-  
+
   // Handle escaped JSON (double-encoded)
   if (jsonString.includes('\\"') || (jsonString.includes('\\n') && !jsonString.startsWith('['))) {
     try {
@@ -709,7 +821,7 @@ function extractJsonFromResponse(response: string): string {
         .replace(/\\\\/g, '\\');
     }
   }
-  
+
   // Remove markdown code blocks
   if (jsonString.includes('```')) {
     const openFenceMatch = jsonString.match(/```(?:json|JSON)?\s*\n?/);
@@ -723,7 +835,7 @@ function extractJsonFromResponse(response: string): string {
       }
     }
   }
-  
+
   return jsonString;
 }
 
@@ -736,29 +848,29 @@ function fixJsonStringValues(jsonString: string): string {
   let result = '';
   let inString = false;
   let escapeNext = false;
-  
+
   for (let i = 0; i < jsonString.length; i++) {
     const char = jsonString[i];
     const charCode = char.charCodeAt(0);
-    
+
     if (escapeNext) {
       result += char;
       escapeNext = false;
       continue;
     }
-    
+
     if (char === '\\' && inString) {
       result += char;
       escapeNext = true;
       continue;
     }
-    
+
     if (char === '"' && !escapeNext) {
       result += char;
       inString = !inString;
       continue;
     }
-    
+
     // If we're inside a string, escape control characters
     if (inString && charCode < 32) {
       switch (char) {
@@ -786,7 +898,7 @@ function fixJsonStringValues(jsonString: string): string {
       result += char;
     }
   }
-  
+
   return result;
 }
 
@@ -800,27 +912,27 @@ function repairTruncatedJson(jsonString: string): string {
   let inString = false;
   let escapeNext = false;
   let lastCompleteObjectEnd = -1;
-  
+
   for (let i = 0; i < jsonString.length; i++) {
     const char = jsonString[i];
-    
+
     if (escapeNext) {
       escapeNext = false;
       continue;
     }
-    
+
     if (char === '\\' && inString) {
       escapeNext = true;
       continue;
     }
-    
+
     if (char === '"' && !escapeNext) {
       inString = !inString;
       continue;
     }
-    
+
     if (inString) continue;
-    
+
     if (char === '{' || char === '[') {
       depth++;
     } else if (char === '}' || char === ']') {
@@ -831,13 +943,13 @@ function repairTruncatedJson(jsonString: string): string {
       }
     }
   }
-  
+
   // If we found complete objects but the array isn't closed, close it
   if (lastCompleteObjectEnd > 0 && depth > 0) {
     debugLog('Repairing truncated JSON, cutting at position:', lastCompleteObjectEnd);
     return jsonString.substring(0, lastCompleteObjectEnd + 1) + ']';
   }
-  
+
   return jsonString;
 }
 
@@ -862,31 +974,31 @@ export function parseCanvasResponse(response: string): any[] {
     debugWarn('Empty or invalid response received, returning empty array');
     return [];
   }
-  
+
   // Trim and check for empty string after trimming
   const trimmedResponse = response.trim();
   if (!trimmedResponse) {
     debugWarn('Response is empty after trimming, returning empty array');
     return [];
   }
-  
+
   try {
     debugLog('Parsing canvas response, length:', trimmedResponse.length);
-    
+
     // Step 1: Extract and clean the JSON string
     let jsonString = extractJsonFromResponse(trimmedResponse);
-    
+
     // Step 2: Find the JSON array with proper bracket matching
     const arrayStart = jsonString.indexOf('[');
-    
+
     if (arrayStart === -1) {
       debugError('No JSON array found in response');
       return [];
     }
-    
+
     // Use proper bracket matching to find the end (handles nested arrays)
     let arrayEnd = findMatchingBracket(jsonString, arrayStart);
-    
+
     if (arrayEnd === -1) {
       // Fallback to lastIndexOf if bracket matching fails
       debugWarn('Bracket matching failed, using fallback');
@@ -896,23 +1008,23 @@ export function parseCanvasResponse(response: string): any[] {
         return [];
       }
     }
-    
+
     jsonString = jsonString.substring(arrayStart, arrayEnd + 1);
     debugLog('Extracted JSON array, length:', jsonString.length);
-    
+
     // Step 3: Clean up common JSON issues
     // Remove trailing commas (common AI mistake)
     jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
-    
+
     // Step 4: Parse the JSON with multiple recovery strategies
     let elements: any[];
     const parseStrategies = [
       // Strategy 1: Direct parse
       () => JSON.parse(jsonString),
-      
+
       // Strategy 2: Fix newlines inside strings
       () => JSON.parse(fixJsonStringValues(jsonString)),
-      
+
       // Strategy 3: Remove all newlines and extra spaces (compact JSON)
       () => {
         let compacted = jsonString;
@@ -948,7 +1060,7 @@ export function parseCanvasResponse(response: string): any[] {
         }
         return JSON.parse(result);
       },
-      
+
       // Strategy 4: Fix unquoted keys and single quotes
       () => {
         let fixed = fixJsonStringValues(jsonString);
@@ -962,17 +1074,17 @@ export function parseCanvasResponse(response: string): any[] {
         }
         return JSON.parse(fixed);
       },
-      
+
       // Strategy 5: Try to repair truncated JSON
       () => {
         const repaired = repairTruncatedJson(fixJsonStringValues(jsonString));
         return JSON.parse(repaired);
       },
     ];
-    
+
     let parseSuccess = false;
     let lastError: any = null;
-    
+
     for (let i = 0; i < parseStrategies.length; i++) {
       try {
         elements = parseStrategies[i]();
@@ -988,40 +1100,46 @@ export function parseCanvasResponse(response: string): any[] {
         }
       }
     }
-    
+
     if (!parseSuccess) {
       debugError('All parse strategies failed. Last error:', lastError);
       debugError('JSON excerpt (first 500 chars):', jsonString.substring(0, 500));
       return [];
     }
-    
+
     // Step 5: Validate result
     if (!Array.isArray(elements!)) {
       debugError('Parsed result is not an array');
       return [];
     }
-    
+
     if (elements!.length === 0) {
       debugWarn('Parsed array is empty');
       return [];
     }
-    
+
     debugLog(`Parsed ${elements!.length} source elements`);
-    
+    console.log('🎨 [CanvasParser] RAW AI RESPONSE ELEMENT COUNT:', elements!.length);
+    console.log('🎨 [CanvasParser] First 5 elements:', elements!.slice(0, 5));
+    console.log('🎨 [CanvasParser] Last 5 elements:', elements!.slice(-5));
+
     // Step 6: Filter, validate, sanitize, and convert to Excalidraw format
     const validElements = elements!.filter((el, idx) => {
       const valid = isValidElement(el);
       if (!valid) {
         debugWarn(`Skipping invalid element at index ${idx}:`, el);
+        console.log('❌ [CanvasParser] INVALID ELEMENT:', el);
       }
       return valid;
     });
-    
+
+    console.log('✅ [CanvasParser] VALID ELEMENTS COUNT:', validElements.length, '/', elements!.length);
+
     if (validElements.length === 0) {
       debugError('No valid elements found after validation');
       return [];
     }
-    
+
     const excalidrawElements = validElements
       .map(el => sanitizeElement(el))
       .flatMap((el, index) => {
@@ -1032,14 +1150,306 @@ export function parseCanvasResponse(response: string): any[] {
           return [];
         }
       });
-    
+
     debugLog(`Successfully converted to ${excalidrawElements.length} Excalidraw elements`);
-    return excalidrawElements;
-    
+
+    // Count element types
+    const typeCounts: Record<string, number> = {};
+    excalidrawElements.forEach(el => {
+      typeCounts[el.type] = (typeCounts[el.type] || 0) + 1;
+    });
+    debugLog('Element type counts:', typeCounts);
+
+    // Post-process to resolve arrow bindings
+    const elementsWithBindings = resolveArrowBindings(excalidrawElements);
+
+    return elementsWithBindings;
+
   } catch (error) {
     debugError('Unexpected error parsing canvas response:', error);
     return [];
   }
+}
+
+/**
+ * Resolve arrow bindings by connecting arrows to shapes based on IDs from AI response.
+ * This processes _tempStartId and _tempEndId to create proper Excalidraw bindings.
+ * 
+ * @param elements - Array of Excalidraw elements with potential temporary binding IDs
+ * @returns Array of elements with resolved bindings
+ */
+function resolveArrowBindings(elements: any[]): any[] {
+  // Build a map of element IDs to their array indices for quick lookup
+  const idToIndexMap = new Map<string, number>();
+
+  // First pass: Build ID to index map
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    // Check if element has a user-provided ID stored during conversion
+    if (el._originalId) {
+      idToIndexMap.set(el._originalId, i);
+    }
+  }
+
+  debugLog(`Resolving arrow bindings. Found ${idToIndexMap.size} elements with IDs`);
+
+  // Second pass: Process arrows and create bindings
+  let arrowsProcessed = 0;
+  let bindingsCreated = 0;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+
+    if (el.type !== 'arrow') {
+      continue;
+    }
+
+    arrowsProcessed++;
+
+    let startShape: any = null;
+    let endShape: any = null;
+
+    // Resolve start binding
+    if (el._tempStartId) {
+      const targetIndex = idToIndexMap.get(el._tempStartId);
+      if (targetIndex !== undefined) {
+        const targetElement = elements[targetIndex];
+        startShape = targetElement;
+        const binding = calculateBinding(el, targetElement, 'start');
+        if (binding) {
+          el.startBinding = binding;
+          bindingsCreated++;
+
+          // Add this arrow to the target element's boundElements
+          if (!targetElement.boundElements) {
+            targetElement.boundElements = [];
+          }
+          // Avoid duplicate entries
+          if (!targetElement.boundElements.some((b: any) => b.id === el.id)) {
+            targetElement.boundElements.push({ type: 'arrow', id: el.id });
+          }
+
+          debugLog(`✓ Start binding: arrow ${el.id.substring(0, 20)}... -> ${el._tempStartId}`);
+        }
+      } else {
+        debugWarn(`✗ Start binding target not found: "${el._tempStartId}"`);
+      }
+      delete el._tempStartId;
+    }
+
+    // Resolve end binding
+    if (el._tempEndId) {
+      const targetIndex = idToIndexMap.get(el._tempEndId);
+      if (targetIndex !== undefined) {
+        const targetElement = elements[targetIndex];
+        endShape = targetElement;
+        const binding = calculateBinding(el, targetElement, 'end');
+        if (binding) {
+          el.endBinding = binding;
+          bindingsCreated++;
+
+          // Add this arrow to the target element's boundElements
+          if (!targetElement.boundElements) {
+            targetElement.boundElements = [];
+          }
+          // Avoid duplicate entries
+          if (!targetElement.boundElements.some((b: any) => b.id === el.id)) {
+            targetElement.boundElements.push({ type: 'arrow', id: el.id });
+          }
+
+          debugLog(`✓ End binding: arrow ${el.id.substring(0, 20)}... -> ${el._tempEndId}`);
+        }
+      } else {
+        debugWarn(`✗ End binding target not found: "${el._tempEndId}"`);
+      }
+      delete el._tempEndId;
+    }
+
+    // CRITICAL FIX: Recalculate arrow x,y and points to snap precisely to shape edges.
+    // The AI generates approximate positions, but we need exact positions for the arrows
+    // to visually connect to the shapes.
+    if (startShape && endShape) {
+      recalculateArrowPosition(el, startShape, endShape);
+    } else if (startShape) {
+      // Only start shape found — fix the start position, keep endpoint relative
+      const startCenter = getShapeEdgePoint(startShape, endShape || { x: el.x + (el.points?.[1]?.[0] || 100), y: el.y + (el.points?.[1]?.[1] || 0) });
+      const endAbsX = el.x + (el.points?.[el.points.length - 1]?.[0] || 100);
+      const endAbsY = el.y + (el.points?.[el.points.length - 1]?.[1] || 0);
+      el.x = startCenter.x;
+      el.y = startCenter.y;
+      el.points = [[0, 0], [endAbsX - startCenter.x, endAbsY - startCenter.y]];
+      el.lastCommittedPoint = el.points[el.points.length - 1];
+      el.width = Math.max(Math.abs(el.points[1][0]), 1);
+      el.height = Math.max(Math.abs(el.points[1][1]), 1);
+    } else if (endShape) {
+      // Only end shape found — fix the endpoint
+      const endCenter = getShapeEdgePoint(endShape, { x: el.x, y: el.y });
+      const startAbsX = el.x;
+      const startAbsY = el.y;
+      el.points = [[0, 0], [endCenter.x - startAbsX, endCenter.y - startAbsY]];
+      el.lastCommittedPoint = el.points[el.points.length - 1];
+      el.width = Math.max(Math.abs(el.points[1][0]), 1);
+      el.height = Math.max(Math.abs(el.points[1][1]), 1);
+    }
+  }
+
+  debugLog(`Arrow binding resolution complete: ${arrowsProcessed} arrows processed, ${bindingsCreated} bindings created`);
+  return elements;
+}
+
+/**
+ * Recalculate arrow position and points to snap precisely between two shapes.
+ * Computes edges of source and target shapes and sets arrow start/end to those edges.
+ */
+function recalculateArrowPosition(arrow: any, startShape: any, endShape: any): void {
+  const startCenter = {
+    x: (startShape.x || 0) + (startShape.width || 100) / 2,
+    y: (startShape.y || 0) + (startShape.height || 60) / 2,
+  };
+  const endCenter = {
+    x: (endShape.x || 0) + (endShape.width || 100) / 2,
+    y: (endShape.y || 0) + (endShape.height || 60) / 2,
+  };
+
+  // Determine the exit point on the start shape and entry point on the end shape
+  const startEdge = getShapeEdgePoint(startShape, endCenter);
+  const endEdge = getShapeEdgePoint(endShape, startCenter);
+
+  // Set arrow origin to the start edge point
+  arrow.x = startEdge.x;
+  arrow.y = startEdge.y;
+
+  // Points are relative to arrow's x,y
+  const dx = endEdge.x - startEdge.x;
+  const dy = endEdge.y - startEdge.y;
+
+  arrow.points = [[0, 0], [dx, dy]];
+  arrow.lastCommittedPoint = [dx, dy];
+  arrow.width = Math.max(Math.abs(dx), 1);
+  arrow.height = Math.max(Math.abs(dy), 1);
+}
+
+/**
+ * Calculate the edge point of a shape closest to a target point.
+ * Returns the point on the shape's boundary that faces toward the target.
+ */
+function getShapeEdgePoint(
+  shape: any,
+  target: { x: number; y: number }
+): { x: number; y: number } {
+  const sx = shape.x || 0;
+  const sy = shape.y || 0;
+  const sw = shape.width || 100;
+  const sh = shape.height || 60;
+  const cx = sx + sw / 2;
+  const cy = sy + sh / 2;
+
+  const dx = target.x - cx;
+  const dy = target.y - cy;
+
+  // Avoid division by zero
+  if (dx === 0 && dy === 0) {
+    return { x: cx, y: sy + sh }; // Default to bottom center
+  }
+
+  // For ellipses, use parametric edge calculation
+  if (shape.type === 'ellipse') {
+    const rx = sw / 2;
+    const ry = sh / 2;
+    const angle = Math.atan2(dy, dx);
+    return {
+      x: cx + rx * Math.cos(angle),
+      y: cy + ry * Math.sin(angle),
+    };
+  }
+
+  // For rectangles and diamonds, find the intersection with the shape boundary
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  // Determine which edge the line exits through
+  // Compare the slope of the line to center with the diagonal of the rectangle
+  const aspectRatio = (sh / 2) / (sw / 2);
+  const lineSlope = absDy / (absDx || 0.001);
+
+  if (lineSlope > aspectRatio) {
+    // Exits through top or bottom edge
+    const signY = dy > 0 ? 1 : -1;
+    const edgeY = cy + signY * sh / 2;
+    const edgeX = cx + (dx / (absDy || 1)) * (sh / 2);
+    return { x: edgeX, y: edgeY };
+  } else {
+    // Exits through left or right edge
+    const signX = dx > 0 ? 1 : -1;
+    const edgeX = cx + signX * sw / 2;
+    const edgeY = cy + (dy / (absDx || 1)) * (sw / 2);
+    return { x: edgeX, y: edgeY };
+  }
+}
+
+/**
+ * Calculate the binding point for an arrow to a shape.
+ * Determines which edge of the shape the arrow should connect to and the focus point.
+ * 
+ * @param arrow - The arrow element
+ * @param target - The target shape element
+ * @param side - Whether this is the 'start' or 'end' of the arrow
+ * @returns Binding object with elementId, focus, and gap
+ */
+function calculateBinding(arrow: any, target: any, side: 'start' | 'end'): any {
+  if (!target || !arrow.points || arrow.points.length < 2) {
+    return null;
+  }
+
+  // Get arrow position (absolute)
+  const arrowX = arrow.x || 0;
+  const arrowY = arrow.y || 0;
+
+  // Get the arrow point we're binding (relative to arrow.x, arrow.y)
+  const pointIndex = side === 'start' ? 0 : arrow.points.length - 1;
+  const [relativeX, relativeY] = arrow.points[pointIndex];
+  const absoluteX = arrowX + relativeX;
+  const absoluteY = arrowY + relativeY;
+
+  // Get target shape bounds
+  const targetX = target.x || 0;
+  const targetY = target.y || 0;
+  const targetWidth = target.width || 100;
+  const targetHeight = target.height || 60;
+  const targetCenterX = targetX + targetWidth / 2;
+  const targetCenterY = targetY + targetHeight / 2;
+
+  // Calculate which edge of the target shape is closest to the arrow point
+  const dx = absoluteX - targetCenterX;
+  const dy = absoluteY - targetCenterY;
+
+  // Determine primary direction (which edge)
+  const isHorizontal = Math.abs(dx) > Math.abs(dy);
+
+  let focus = 0; // Center of edge by default
+
+  if (isHorizontal) {
+    // Connecting to left or right edge
+    // Focus ranges from -1 (top) to 1 (bottom)
+    const edgeY = targetCenterY;
+    const relativePosition = (absoluteY - targetY) / targetHeight;
+    focus = (relativePosition - 0.5) * 2; // Convert 0-1 to -1 to 1
+  } else {
+    // Connecting to top or bottom edge
+    // Focus ranges from -1 (left) to 1 (right)
+    const edgeX = targetCenterX;
+    const relativePosition = (absoluteX - targetX) / targetWidth;
+    focus = (relativePosition - 0.5) * 2; // Convert 0-1 to -1 to 1
+  }
+
+  // Clamp focus to valid range
+  focus = Math.max(-1, Math.min(1, focus));
+
+  return {
+    elementId: target.id,
+    focus: Number(focus.toFixed(3)),
+    gap: 8, // Standard gap between arrow and shape
+  };
 }
 
 /**
@@ -1051,6 +1461,11 @@ export function parseCanvasResponse(response: string): any[] {
  * - The container shape should have boundElements referencing the text
  * - Text x,y should be at the center of the container for proper positioning
  * - Text needs angle: 0 property
+ * 
+ * ARROW BINDING:
+ * - Arrows can have startId/endId from AI response
+ * - These will be processed in a second pass to create proper bindings
+ * - Bindings connect arrows to shapes with elementId and focus point
  */
 function convertToExcalidrawElement(el: any, index: number): any[] {
   const timestamp = Date.now();
@@ -1073,6 +1488,8 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
     updated: timestamp,
     link: null,
     locked: false,
+    // Store the original ID from AI response for binding resolution
+    ...(el.id ? { _originalId: el.id } : {}),
   };
 
   const elements: any[] = [];
@@ -1095,7 +1512,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
     // - The width should accommodate the text, height is based on fontSize
     const textWidth = Math.min(containerWidth - 16, text.length * fontSize * 0.6);
     const textHeight = fontSize * 1.25;
-    
+
     return {
       id: textId,
       type: 'text',
@@ -1140,9 +1557,9 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       const height = el.height || 60;
       const x = el.x || 100;
       const y = el.y || 100;
-      
+
       const textId = el.text ? `gen-${timestamp}-${index}-text` : null;
-      
+
       const rect = {
         ...baseElement,
         type: 'rectangle',
@@ -1156,7 +1573,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
         boundElements: textId ? [{ type: 'text', id: textId }] : [],
       };
       elements.push(rect);
-      
+
       // Add text label if present
       if (el.text && textId) {
         elements.push(createBoundTextElement(
@@ -1170,15 +1587,15 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       }
       break;
     }
-      
+
     case 'ellipse': {
       const width = el.width || 100;
       const height = el.height || 60;
       const x = el.x || 100;
       const y = el.y || 100;
-      
+
       const textId = el.text ? `gen-${timestamp}-${index}-text` : null;
-      
+
       const ellipse = {
         ...baseElement,
         type: 'ellipse',
@@ -1192,7 +1609,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
         boundElements: textId ? [{ type: 'text', id: textId }] : [],
       };
       elements.push(ellipse);
-      
+
       // Add text label if present
       if (el.text && textId) {
         elements.push(createBoundTextElement(
@@ -1206,15 +1623,15 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       }
       break;
     }
-      
+
     case 'diamond': {
       const width = el.width || 120;
       const height = el.height || 80;
       const x = el.x || 100;
       const y = el.y || 100;
-      
+
       const textId = el.text ? `gen-${timestamp}-${index}-text` : null;
-      
+
       const diamond = {
         ...baseElement,
         type: 'diamond',
@@ -1228,7 +1645,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
         boundElements: textId ? [{ type: 'text', id: textId }] : [],
       };
       elements.push(diamond);
-      
+
       // Add text label if present
       if (el.text && textId) {
         elements.push(createBoundTextElement(
@@ -1242,7 +1659,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       }
       break;
     }
-      
+
     case 'arrow': {
       // Ensure points array is valid and properly formatted
       let points: [number, number][] = [[0, 0], [100, 0]];
@@ -1254,7 +1671,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
           return [0, 0] as [number, number];
         });
       }
-      
+
       // Calculate width and height from points
       const minX = Math.min(...points.map(p => p[0]));
       const maxX = Math.max(...points.map(p => p[0]));
@@ -1262,10 +1679,12 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       const maxY = Math.max(...points.map(p => p[1]));
       const width = Math.max(Math.abs(maxX - minX), 1);
       const height = Math.max(Math.abs(maxY - minY), 1);
-      
+
       // lastCommittedPoint is required for Excalidraw to consider the element "normalized"
       const lastCommittedPoint = points[points.length - 1];
-      
+
+      // Store startId and endId temporarily for binding processing
+      // These will be converted to proper bindings in post-processing
       const arrow = {
         ...baseElement,
         type: 'arrow',
@@ -1283,11 +1702,14 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
         startArrowhead: null,
         endArrowhead: 'arrow',
         roundness: { type: 2 },
+        // Temporary properties for binding resolution
+        ...(el.startId ? { _tempStartId: el.startId } : {}),
+        ...(el.endId ? { _tempEndId: el.endId } : {}),
       };
       elements.push(arrow);
       break;
     }
-      
+
     case 'text': {
       const textEl = {
         ...baseElement,
@@ -1312,16 +1734,16 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
       elements.push(textEl);
       break;
     }
-      
+
     default: {
       // Default to rectangle for unknown types
       const width = el.width || 160;
       const height = el.height || 60;
       const x = el.x || 100;
       const y = el.y || 100;
-      
+
       const textId = el.text ? `gen-${timestamp}-${index}-text` : null;
-      
+
       const rect = {
         ...baseElement,
         type: 'rectangle',
@@ -1335,7 +1757,7 @@ function convertToExcalidrawElement(el: any, index: number): any[] {
         boundElements: textId ? [{ type: 'text', id: textId }] : [],
       };
       elements.push(rect);
-      
+
       // Add text label if present
       if (el.text && textId) {
         elements.push(createBoundTextElement(

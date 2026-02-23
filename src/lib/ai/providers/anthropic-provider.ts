@@ -137,7 +137,7 @@ export class AnthropicProvider implements AIServiceProvider {
       'improve-prd': 0.4,
       'generate-features': 0.4,
       'generate-tasks': 0.3,
-      'generate-canvas': 0.3,
+      'generate-canvas': 0.8,
     };
     return temperatures[type] ?? 0.7;
   }
@@ -157,7 +157,7 @@ export class AnthropicProvider implements AIServiceProvider {
       'improve-prd': 4000,
       'generate-features': 4000,
       'generate-tasks': 4000,
-      'generate-canvas': 8000,
+      'generate-canvas': 16000,
     };
     return tokens[type] ?? 2000;
   }

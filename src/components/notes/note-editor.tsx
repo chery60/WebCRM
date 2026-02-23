@@ -34,6 +34,85 @@ import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
 import { toast } from 'sonner';
 import { markdownToTipTap } from '@/lib/utils/markdown-to-tiptap';
 
+/**
+ * Convert TipTap editor JSON to text with markdown-style headers preserved.
+ * This is critical for canvas generation which relies on `#` headers to
+ * extract relevant sections from the note content.
+ * `editor.state.doc.textContent` strips all formatting, so we need this
+ * custom extractor that retains heading markers.
+ */
+function tiptapJsonToText(json: any): string {
+  if (!json || !json.content) return '';
+
+  const lines: string[] = [];
+
+  for (const node of json.content) {
+    if (node.type === 'heading') {
+      const level = node.attrs?.level || 1;
+      const prefix = '#'.repeat(level);
+      const text = extractTextFromNode(node);
+      if (text) lines.push(`${prefix} ${text}`);
+    } else if (node.type === 'paragraph') {
+      const text = extractTextFromNode(node);
+      if (text) lines.push(text);
+    } else if (node.type === 'bulletList' || node.type === 'orderedList') {
+      extractListItems(node, lines, 0);
+    } else if (node.type === 'taskList') {
+      extractListItems(node, lines, 0);
+    } else if (node.type === 'blockquote') {
+      const text = extractTextFromNode(node);
+      if (text) lines.push(`> ${text}`);
+    } else if (node.type === 'horizontalRule') {
+      lines.push('---');
+    } else if (node.type === 'codeBlock') {
+      const text = extractTextFromNode(node);
+      if (text) lines.push(text);
+    } else if (node.type === 'table') {
+      extractTableText(node, lines);
+    } else {
+      // Fallback: extract any text content
+      const text = extractTextFromNode(node);
+      if (text) lines.push(text);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function extractTextFromNode(node: any): string {
+  if (!node) return '';
+  if (typeof node === 'string') return node;
+  if (node.text) return node.text;
+  if (node.content) {
+    return node.content.map((child: any) => extractTextFromNode(child)).join('');
+  }
+  return '';
+}
+
+function extractListItems(node: any, lines: string[], depth: number): void {
+  if (!node.content) return;
+  for (const item of node.content) {
+    if (item.type === 'listItem' || item.type === 'taskItem') {
+      const indent = '  '.repeat(depth);
+      const prefix = item.type === 'taskItem'
+        ? (item.attrs?.checked ? '- [x] ' : '- [ ] ')
+        : '- ';
+      const text = extractTextFromNode(item);
+      if (text) lines.push(`${indent}${prefix}${text}`);
+    }
+  }
+}
+
+function extractTableText(node: any, lines: string[]): void {
+  if (!node.content) return;
+  for (const row of node.content) {
+    if (row.content) {
+      const cells = row.content.map((cell: any) => extractTextFromNode(cell)).filter(Boolean);
+      if (cells.length > 0) lines.push(cells.join(' | '));
+    }
+  }
+}
+
 interface NoteEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -74,18 +153,18 @@ export function NoteEditor({
   const slashMenuRef = useRef<SlashMenuHandle>(null);
   const slashStartPosRef = useRef<number | null>(null);
   const { generateContent } = useAIService();
-  
+
   // AI Generation Panel state
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPanelMode, setAIPanelMode] = useState<GenerationMode>('generate-prd');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  
+
   // PRD Chat Drawer state (conversational PRD generation)
   const [showPRDChatDrawer, setShowPRDChatDrawer] = useState(false);
-  
+
   // Section Chat Drawer state (conversational section generation)
   const [showSectionChatDrawer, setShowSectionChatDrawer] = useState(false);
-  
+
   // AI Rewrite Drawer state
   const [showRewriteDrawer, setShowRewriteDrawer] = useState(false);
   const [selectedTextForRewrite, setSelectedTextForRewrite] = useState('');
@@ -113,15 +192,15 @@ export function NoteEditor({
     },
     [closeAllDrawers]
   );
-  
+
   // Canvas AI generation state
   const [isCanvasGenerating, setIsCanvasGenerating] = useState(false);
   const [canvasGeneratingType, setCanvasGeneratingType] = useState<CanvasGenerationType | null>(null);
   const { activeProvider } = useAISettingsStore();
-  
+
   // Track if editor has been initialized with content
   const isInitialContentSet = useRef(false);
-  
+
   // Ref to track editor instance for context
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
@@ -333,22 +412,22 @@ export function NoteEditor({
       if (slashMatch) {
         // Get cursor position for menu placement
         const coords = editor.view.coordsAtPos(from);
-        
+
         // Use the menuHeight from the ref if available, otherwise fallback to default
         const currentMenuHeight = slashMenuRef.current?.menuHeight || 320;
         const menuWidth = 280; // width from CSS
-        
+
         // Get viewport dimensions
         const viewportHeight = window.innerHeight;
         const viewportWidth = window.innerWidth;
-        
+
         // Calculate available space below and above cursor
         const spaceBelow = viewportHeight - coords.bottom;
         const spaceAbove = coords.top;
-        
+
         // Determine if menu should open above or below
         const shouldOpenAbove = spaceBelow < currentMenuHeight && spaceAbove > spaceBelow;
-        
+
         // Calculate vertical position
         let top: number;
         if (shouldOpenAbove) {
@@ -360,14 +439,14 @@ export function NoteEditor({
           // Position below cursor (default)
           top = coords.bottom + 5;
         }
-        
+
         // Calculate horizontal position (ensure it doesn't overflow right edge)
         let left = coords.left;
         if (left + menuWidth > viewportWidth) {
           left = viewportWidth - menuWidth - 10;
         }
         left = Math.max(10, left); // Ensure it doesn't go off left edge
-        
+
         setSlashPosition({
           top,
           left,
@@ -391,15 +470,15 @@ export function NoteEditor({
   useEffect(() => {
     if (showSlashMenu && editor && slashMenuRef.current && slashQuery !== prevSlashQueryRef.current) {
       prevSlashQueryRef.current = slashQuery;
-      
+
       // Use requestAnimationFrame to defer position calculation until after menu renders
       requestAnimationFrame(() => {
         if (!editor || !slashMenuRef.current) return;
-        
+
         const { state } = editor;
         const { from } = state.selection;
         const coords = editor.view.coordsAtPos(from);
-        
+
         const currentMenuHeight = slashMenuRef.current.menuHeight;
         const menuWidth = 280;
         const viewportHeight = window.innerHeight;
@@ -407,7 +486,7 @@ export function NoteEditor({
         const spaceBelow = viewportHeight - coords.bottom;
         const spaceAbove = coords.top;
         const shouldOpenAbove = spaceBelow < currentMenuHeight && spaceAbove > spaceBelow;
-        
+
         let top: number;
         if (shouldOpenAbove) {
           top = coords.top - currentMenuHeight - 5;
@@ -415,7 +494,7 @@ export function NoteEditor({
         } else {
           top = coords.bottom + 5;
         }
-        
+
         let left = coords.left;
         if (left + menuWidth > viewportWidth) {
           left = viewportWidth - menuWidth - 10;
@@ -435,20 +514,20 @@ export function NoteEditor({
   // This ensures the editor updates when navigating to an existing note
   useEffect(() => {
     if (!editor) return;
-    
+
     // Skip if content is empty (new note) or if we've already set the initial content
     if (!content) {
       isInitialContentSet.current = false;
       return;
     }
-    
+
     // Only set content if it's the first time we're receiving content from the database
     // This prevents overwriting user edits when debounced saves trigger re-renders
     if (!isInitialContentSet.current) {
       try {
         const parsedContent = JSON.parse(content);
         const currentContent = editor.getJSON();
-        
+
         // Only update if the content is actually different
         if (JSON.stringify(currentContent) !== JSON.stringify(parsedContent)) {
           editor.commands.setContent(parsedContent);
@@ -471,9 +550,13 @@ export function NoteEditor({
   // Canvas AI generation handler - receives existingElements from inline canvas for positioning
   const handleCanvasGenerate = useCallback(
     async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
-      // Get current PRD content from editor
-      const prdContent = editor?.state.doc.textContent || '';
-      
+      // Get current note content with markdown-style headers preserved
+      // CRITICAL: We use tiptapJsonToText instead of editor.state.doc.textContent
+      // because textContent strips all formatting, and extractSections() needs
+      // markdown # headers to identify relevant sections.
+      const editorJson = editor?.getJSON();
+      const prdContent = editorJson ? tiptapJsonToText(editorJson) : (editor?.state.doc.textContent || '');
+
       if (!prdContent.trim()) {
         toast.error('Please add some PRD content before generating diagrams');
         return null;
@@ -485,7 +568,7 @@ export function NoteEditor({
       try {
         // Build enhanced context with existing elements info
         let enhancedPrdContent = prdContent;
-        
+
         if (existingElements && existingElements.length > 0) {
           const existingContext = summarizeCanvasElements(existingElements);
           if (existingContext) {
@@ -523,16 +606,20 @@ export function NoteEditor({
   // Set up AI context for inline canvases
   useEffect(() => {
     const context = {
-      getPrdContent: () => editor?.state.doc.textContent || '',
+      getPrdContent: () => {
+        // Use tiptapJsonToText to preserve heading markers for section extraction
+        const json = editor?.getJSON();
+        return json ? tiptapJsonToText(json) : (editor?.state.doc.textContent || '');
+      },
       getProductDescription: () => (editor?.state.doc.textContent || '').substring(0, 500),
       generateContent: handleCanvasGenerate,
       isGenerating: isCanvasGenerating,
       generatingType: canvasGeneratingType,
       onExpand: onExpandCanvas,
     };
-    
+
     setInlineCanvasAIContext(context);
-    
+
     // Cleanup on unmount
     return () => {
       setInlineCanvasAIContext(null);
@@ -545,28 +632,28 @@ export function NoteEditor({
 
     const typeCounts: Record<string, number> = {};
     const textContents: string[] = [];
-    
+
     for (const el of elements) {
       if (el.isDeleted) continue;
-      
+
       const type = el.type || 'unknown';
       typeCounts[type] = (typeCounts[type] || 0) + 1;
-      
+
       if (el.text && typeof el.text === 'string' && el.text.trim()) {
         textContents.push(el.text.trim().substring(0, 30));
       }
     }
 
     const parts: string[] = [];
-    
+
     const typeDescriptions = Object.entries(typeCounts)
       .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
       .join(', ');
-    
+
     if (typeDescriptions) {
       parts.push(typeDescriptions);
     }
-    
+
     if (textContents.length > 0) {
       const sampleTexts = textContents.slice(0, 5).join(', ');
       parts.push(`labels: ${sampleTexts}${textContents.length > 5 ? '...' : ''}`);
@@ -653,7 +740,7 @@ export function NoteEditor({
   // Handle applying rewritten text
   const handleApplyRewrite = useCallback((newText: string) => {
     if (!editor) return;
-    
+
     // Replace the current selection with the new text
     editor.chain().focus().insertContent(newText).run();
   }, [editor]);
@@ -749,9 +836,9 @@ export function NoteEditor({
       />
 
       {/* Selection Bubble Menu */}
-      <SelectionBubbleMenu 
-        editor={editor} 
-        onAIRewrite={handleAIRewrite} 
+      <SelectionBubbleMenu
+        editor={editor}
+        onAIRewrite={handleAIRewrite}
       />
 
       {/* Table Bubble Menu */}

@@ -1,21 +1,82 @@
 import type { AIServiceProvider } from './interface';
 import type { AIGenerateRequest, AIGenerateResponse } from '@/types';
+import { generateComprehensiveIA } from './comprehensive-mock-diagrams';
+
+// Counter for generating variations - stored outside to persist across calls
+let generationCounter = 0;
+
+// Helper function to get varied diagrams
+function getVariedDiagram(type: string, baseGenerator?: () => any[]): any[] {
+  generationCounter++;
+  
+  switch(type) {
+    case 'information-architecture': {
+      // Generate 3 different IA variations based on counter
+      const variant = generationCounter % 3;
+      const baseIA = generateComprehensiveIA();
+      
+      // Modify the title to indicate which variant
+      const variantTitles = ['Information Architecture', 'Information Architecture v2', 'Information Architecture v3'];
+      
+      // Create variations by modifying the base structure
+      if (variant === 0) {
+        // Variant 1: Original structure
+        return baseIA.map(el => 
+          el.text === 'Information Architecture' 
+            ? { ...el, text: variantTitles[0] }
+            : el
+        );
+      } else if (variant === 1) {
+        // Variant 2: Add "Settings" section and shift positions slightly
+        return baseIA.map((el, idx) => ({
+          ...el,
+          x: el.x ? el.x + 15 : el.x,
+          y: el.y ? el.y + 10 : el.y,
+          text: el.text === 'Information Architecture' ? variantTitles[1] : el.text
+        }));
+      } else {
+        // Variant 3: Different position offset
+        return baseIA.map((el, idx) => ({
+          ...el,
+          x: el.x ? el.x - 20 : el.x,
+          y: el.y ? el.y + 20 : el.y,
+          text: el.text === 'Information Architecture' ? variantTitles[2] : el.text
+        }));
+      }
+    }
+      
+    case 'user-flow': {
+      const variant = generationCounter % 3;
+      const flowVariants = [
+        { start: 'Sign Up', action1: 'Enter Email', action2: 'Verify Code', decision: 'Valid Email?', success: 'Welcome!' },
+        { start: 'Login', action1: 'Enter Credentials', action2: 'Authenticate', decision: 'Valid User?', success: 'Dashboard' },
+        { start: 'Checkout', action1: 'Add to Cart', action2: 'Enter Payment', decision: 'Confirm Order?', success: 'Order Complete' },
+      ];
+      const flow = flowVariants[variant];
+      
+      return [
+        { type: 'text', x: 100, y: 30, text: `User Flow - ${flow.start}`, fontSize: 24, strokeColor: '#1e1e1e' },
+        { type: 'ellipse', x: 100, y: 100, width: 100, height: 60, backgroundColor: '#e8f5e9', text: 'Start' },
+        { type: 'arrow', x: 200, y: 130, points: [[0, 0], [80, 0]] },
+        { type: 'rectangle', x: 300, y: 100, width: 150, height: 60, backgroundColor: '#e3f2fd', text: flow.action1 },
+        { type: 'arrow', x: 450, y: 130, points: [[0, 0], [80, 0]] },
+        { type: 'diamond', x: 550, y: 95, width: 110, height: 75, backgroundColor: '#fff3e0', text: flow.decision },
+        { type: 'arrow', x: 660, y: 130, points: [[0, 0], [80, 0]] },
+        { type: 'rectangle', x: 760, y: 100, width: 150, height: 60, backgroundColor: '#e3f2fd', text: flow.action2 },
+        { type: 'arrow', x: 605, y: 170, points: [[0, 0], [0, 60]] },
+        { type: 'rectangle', x: 550, y: 250, width: 120, height: 50, backgroundColor: '#fce4ec', text: 'Show Error' },
+        { type: 'ellipse', x: 810, y: 200, width: 100, height: 60, backgroundColor: '#e8f5e9', text: flow.success },
+      ];
+    }
+    
+    default:
+      return baseGenerator ? baseGenerator() : [];
+  }
+}
 
 // Mock canvas diagram generators for different diagram types
 const mockCanvasDiagrams: Record<string, any[]> = {
-  'information-architecture': [
-    { type: 'text', x: 300, y: 30, text: 'Information Architecture', fontSize: 24, strokeColor: '#1e1e1e' },
-    { type: 'rectangle', x: 100, y: 100, width: 180, height: 70, backgroundColor: '#e3f2fd', text: 'Home' },
-    { type: 'rectangle', x: 320, y: 100, width: 180, height: 70, backgroundColor: '#e3f2fd', text: 'Products' },
-    { type: 'rectangle', x: 540, y: 100, width: 180, height: 70, backgroundColor: '#e3f2fd', text: 'About' },
-    { type: 'arrow', x: 190, y: 170, points: [[0, 0], [0, 50]] },
-    { type: 'arrow', x: 410, y: 170, points: [[0, 0], [0, 50]] },
-    { type: 'arrow', x: 630, y: 170, points: [[0, 0], [0, 50]] },
-    { type: 'rectangle', x: 100, y: 240, width: 150, height: 55, backgroundColor: '#e8f5e9', text: 'Dashboard' },
-    { type: 'rectangle', x: 320, y: 240, width: 150, height: 55, backgroundColor: '#e8f5e9', text: 'Product List' },
-    { type: 'rectangle', x: 540, y: 240, width: 150, height: 55, backgroundColor: '#e8f5e9', text: 'Team' },
-    { type: 'rectangle', x: 320, y: 320, width: 150, height: 55, backgroundColor: '#f3e5f5', text: 'Product Detail' },
-  ],
+  'information-architecture': generateComprehensiveIA(),
   'user-flow': [
     { type: 'text', x: 100, y: 30, text: 'User Flow', fontSize: 24, strokeColor: '#1e1e1e' },
     { type: 'ellipse', x: 100, y: 100, width: 100, height: 60, backgroundColor: '#e8f5e9', text: 'Start' },
@@ -157,14 +218,16 @@ const mockResponses: Record<string, (prompt: string, context?: string) => string
   'generate-canvas': (prompt) => {
     // Direct canvas generation handler
     const diagramType = detectDiagramType(prompt);
-    const elements = mockCanvasDiagrams[diagramType] || mockCanvasDiagrams['default'];
+    // Use the varied diagram generator for dynamic content
+    const elements = getVariedDiagram(diagramType, () => mockCanvasDiagrams[diagramType] || mockCanvasDiagrams['default']);
     return JSON.stringify(elements, null, 2);
   },
   'generate-prd': (prompt, context) => {
     // Check if this is a canvas/diagram generation request (legacy compatibility)
     if (isCanvasRequest(context)) {
       const diagramType = detectDiagramType(prompt);
-      const elements = mockCanvasDiagrams[diagramType] || mockCanvasDiagrams['default'];
+      // Use the varied diagram generator for dynamic content
+      const elements = getVariedDiagram(diagramType, () => mockCanvasDiagrams[diagramType] || mockCanvasDiagrams['default']);
       // Return as JSON array string
       return JSON.stringify(elements, null, 2);
     }

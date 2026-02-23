@@ -497,7 +497,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
     },
   }));
 
-  // Stable callback for excalidraw API
+  // Ref for onChange to avoid dependency in handleExcalidrawAPI
+  const onChangeRefForAPI = useRef(onChange);
+  useEffect(() => {
+    onChangeRefForAPI.current = onChange;
+  }, [onChange]);
+
+  // Stable callback for excalidraw API - NO DEPENDENCIES to prevent infinite loops
   const handleExcalidrawAPI = useCallback((api: any) => {
     excalidrawAPIRef.current = api;
 
@@ -526,8 +532,8 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
           // Clear pending elements
           pendingElementsRef.current = null;
 
-          // Trigger onChange
-          onChange?.({
+          // Trigger onChange using ref to avoid dependency
+          onChangeRefForAPI.current?.({
             elements: newElements,
             appState: excalidrawAPIRef.current.getAppState(),
             files: excalidrawAPIRef.current.getFiles(),
@@ -540,7 +546,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         }
       }, 100);
     }
-  }, [onChange]);
+  }, []); // NO DEPENDENCIES - completely stable
 
   // Stable UI options
   const uiOptions = useMemo(() => ({

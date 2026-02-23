@@ -42,6 +42,8 @@ export function CanvasDialog({
   const isInitialMountRef = useRef(true);
   // Track the canvas ID to detect canvas changes
   const currentCanvasIdRef = useRef<string | null>(null);
+  // Track pending save to prevent multiple rapid saves
+  const pendingSaveRef = useRef<boolean>(false);
 
   // Handle canvas changes - store in ref AND immediately notify inline canvas for sync
   const handleCanvasChange = useCallback((data: CanvasData) => {
@@ -69,15 +71,18 @@ export function CanvasDialog({
       // But debounce this to avoid render loops
       const currentElementCount = data.elements?.length || 0;
       const previousCount = lastSyncedElementCountRef.current;
-      const isSignificantChange = currentElementCount > previousCount + 5; // Increase threshold
+      const isSignificantChange = currentElementCount > previousCount + 10; // Increased threshold to 10
       
-      if (isSignificantChange) {
+      if (isSignificantChange && !pendingSaveRef.current) {
         // Update ref BEFORE calling onSave to prevent re-triggering
         lastSyncedElementCountRef.current = currentElementCount;
+        pendingSaveRef.current = true;
+        console.log('[CanvasDialog] Saving significant change:', previousCount, '→', currentElementCount);
         // Use setTimeout to break the synchronous update cycle
         setTimeout(() => {
           onSave(data);
-        }, 0);
+          pendingSaveRef.current = false;
+        }, 100); // Increased delay to 100ms
       }
     }
   }, [canvas?.id, canvas?.name, onSave]);
@@ -101,6 +106,7 @@ export function CanvasDialog({
       currentCanvasIdRef.current = canvas?.id || null;
       pendingDataRef.current = null;
       hasChangesRef.current = false;
+      pendingSaveRef.current = false;
       // Reset element count tracking for new canvas
       lastSyncedElementCountRef.current = canvas?.data?.elements?.length || 0;
       // Mark as initial mount for this canvas

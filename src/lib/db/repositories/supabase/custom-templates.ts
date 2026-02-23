@@ -125,6 +125,13 @@ export async function createCustomTemplate(
   try {
     const row = mapTemplateToRow(template);
 
+    // If the id is not a valid UUID (e.g. starter template ids like 'starter-b2b-saas'),
+    // omit it so Supabase auto-generates a proper UUID for the new row.
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id || '');
+    if (!isValidUUID) {
+      delete row.id;
+    }
+
     const { data, error } = await supabase
       .from('custom_prd_templates')
       .insert({

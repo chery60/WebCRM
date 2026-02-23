@@ -262,7 +262,7 @@ export class GeminiProvider implements AIServiceProvider {
       'improve-prd': 0.4,
       'generate-features': 0.4,
       'generate-tasks': 0.3,
-      'generate-canvas': 0.3,
+      'generate-canvas': 0.8,
     };
     return temperatures[type] ?? 0.7;
   }
@@ -282,7 +282,7 @@ export class GeminiProvider implements AIServiceProvider {
       'improve-prd': 4000,
       'generate-features': 8192,
       'generate-tasks': 4000,
-      'generate-canvas': 8192,
+      'generate-canvas': 16000,
     };
     return tokens[type] ?? 2000;
   }

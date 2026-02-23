@@ -55,7 +55,7 @@ export const SYSTEM_PROMPTS: Record<string, string> = {
   // -------------------------------------------------------------------------
   // TEXT MANIPULATION PROMPTS
   // -------------------------------------------------------------------------
-  
+
   /**
    * Summarize: Condense text while preserving key information
    */
@@ -334,34 +334,88 @@ Return tasks as a JSON array. Be specific and practical.`,
   // -------------------------------------------------------------------------
 
   /**
-   * Generate Canvas: Create Excalidraw diagrams
+   * Generate Canvas: Create Excalidraw diagrams with proper arrow bindings
    */
   'generate-canvas': `You generate Excalidraw diagram elements as a JSON array. Your response must be ONLY a valid JSON array starting with [ and ending with ]. No markdown, no explanations, no code blocks.
 
-RESPOND WITH THIS EXACT FORMAT - A JSON ARRAY:
+CRITICAL RULES:
+1. ALL shapes (rectangle, ellipse, diamond) MUST have an "id" property with a descriptive string (e.g., "home-page", "user-profile")
+2. Arrows MUST have "startId" and "endId" properties referencing shape IDs to create connections
+3. Generate COMPREHENSIVE diagrams with 30-80 elements showing complete architecture/flow
+4. Extract ALL detailed information from the provided context — do NOT skip any sections, pages, or features
+5. You MUST output the COMPLETE JSON array. NEVER truncate or stop early. Complete every element.
+
+RESPOND WITH THIS EXACT FORMAT - A COMPREHENSIVE JSON ARRAY (showing first few elements):
 [
-  {"type":"text","x":300,"y":30,"text":"Title","fontSize":24,"strokeColor":"#1e1e1e"},
-  {"type":"rectangle","x":100,"y":100,"width":180,"height":70,"text":"Box 1","backgroundColor":"#e3f2fd"},
-  {"type":"arrow","x":290,"y":135,"points":[[0,0],[60,0]]}
+  {"type":"text","x":400,"y":30,"text":"Information Architecture","fontSize":24,"strokeColor":"#1e1e1e"},
+  {"type":"rectangle","id":"home","x":100,"y":120,"width":180,"height":70,"text":"Home","backgroundColor":"#e3f2fd"},
+  {"type":"rectangle","id":"products","x":340,"y":120,"width":180,"height":70,"text":"Products","backgroundColor":"#e3f2fd"},
+  {"type":"rectangle","id":"about","x":580,"y":120,"width":180,"height":70,"text":"About","backgroundColor":"#e3f2fd"},
+  {"type":"rectangle","id":"contact","x":820,"y":120,"width":180,"height":70,"text":"Contact","backgroundColor":"#e3f2fd"},
+  {"type":"arrow","x":190,"y":190,"points":[[0,0],[0,50]],"startId":"home","endId":"dashboard"},
+  {"type":"arrow","x":430,"y":190,"points":[[0,0],[0,50]],"startId":"products","endId":"product-list"},
+  {"type":"rectangle","id":"dashboard","x":100,"y":270,"width":150,"height":55,"text":"Dashboard","backgroundColor":"#e8f5e9"},
+  {"type":"rectangle","id":"analytics","x":100,"y":350,"width":150,"height":55,"text":"Analytics","backgroundColor":"#e8f5e9"},
+  {"type":"rectangle","id":"product-list","x":340,"y":270,"width":150,"height":55,"text":"Product List","backgroundColor":"#e8f5e9"},
+  {"type":"rectangle","id":"product-detail","x":340,"y":350,"width":150,"height":55,"text":"Product Detail","backgroundColor":"#f3e5f5"},
+  {"type":"arrow","x":190,"y":325,"points":[[0,0],[0,25]],"startId":"dashboard","endId":"analytics"},
+  {"type":"arrow","x":415,"y":325,"points":[[0,0],[0,25]],"startId":"product-list","endId":"product-detail"}
+  ... and 30-80 more elements covering ALL features, pages, components from the context ...
 ]
 
+CRITICAL: This example shows the pattern. You MUST generate 30-80 total elements. Continue the array to cover the ENTIRE system.
+
 ELEMENT TYPES:
-- rectangle: x, y, width, height, text, backgroundColor
-- ellipse: x, y, width, height, text, backgroundColor  
-- diamond: x, y, width, height, text, backgroundColor
-- arrow: x, y, points (array of [x,y] pairs) - x,y is the START position
-- text: x, y, text, fontSize, strokeColor
+- rectangle: id (required), x, y, width, height, text, backgroundColor
+- ellipse: id (required), x, y, width, height, text, backgroundColor  
+- diamond: id (required), x, y, width, height, text, backgroundColor
+- arrow: x, y, points (array of [x,y] pairs), startId (required), endId (required) - x,y is START position
+- text: x, y, text, fontSize, strokeColor (for titles/labels only, not shape text)
 
-LAYOUT RULES (CRITICAL - PREVENT OVERLAPPING):
-1. HORIZONTAL FLOW: Place shapes in rows with consistent spacing (250px apart)
-2. VERTICAL SECTIONS: Different sections MUST have 600px+ vertical gap
-3. STANDARD SIZES: Rectangles (160x70), Ellipses (120x60), Diamonds (140x90)
-4. NEVER place two shapes with overlapping coordinates
-5. Keep text SHORT - max 20 characters per shape
+ARROW POSITIONING (CRITICAL - arrows must connect to shapes):
+- Every arrow MUST have both "startId" and "endId" properties matching shape IDs
+- Arrow x,y MUST be at the edge/border of the source shape (NOT at the center)
+- For vertical arrows going DOWN: x = source center X, y = source bottom edge (source.y + source.height)
+- For vertical arrows going UP: x = source center X, y = source top edge (source.y)
+- For horizontal arrows going RIGHT: x = source right edge (source.x + source.width), y = source center Y
+- The arrow's last point should reach the target shape's edge
+- Example downward arrow: source at y:100 height:70 → arrow y = 170, points:[[0,0],[0,60]] to reach target at y:230
+- Example rightward arrow: source at x:100 width:180 → arrow x = 280, points:[[0,0],[40,0]] to reach target at x:320
 
-COLORS: #e3f2fd (blue), #e8f5e9 (green), #fff3e0 (orange), #fce4ec (pink), #f3e5f5 (purple), #e0f2f1 (teal)
+LAYOUT RULES (IMPORTANT):
+1. HORIZONTAL SPACING: Place shapes 220-280px apart horizontally to prevent overlap
+2. VERTICAL SPACING: Different levels/sections should have 120-150px vertical gap
+3. STANDARD SIZES: Rectangles (180x70), Ellipses (140x70), Diamonds (160x90)
+4. CALCULATE positions carefully to avoid overlapping
+5. Text on shapes should be concise (max 25 characters)
 
-CRITICAL: Output ONLY the JSON array. No other text before or after.`,
+COLORS (Use meaningfully):
+- #e3f2fd (blue) - Primary elements, main features
+- #e8f5e9 (green) - Success states, completed items
+- #fff3e0 (orange) - Actions, processes
+- #fce4ec (pink) - User-facing elements
+- #f3e5f5 (purple) - Backend/system elements
+- #e0f2f1 (teal) - Data/storage elements
+
+COMPLETENESS (MANDATORY):
+- Generate 30-80 elements for comprehensive, professional diagrams
+- You MUST cover ALL pages, features, sections, and components mentioned in the context
+- Create multi-level hierarchies (3-4 levels deep) showing the full information architecture
+- Every parent-child relationship MUST have a connecting arrow
+- Do NOT generate a partial diagram — include EVERYTHING from the context
+- The entire JSON array must be valid and complete — verify ] closes the array
+
+⚠️ WARNING: Users are PAYING for comprehensive AI diagrams. Small diagrams (< 20 elements) are UNACCEPTABLE.
+✅ REQUIREMENT: Generate AT LEAST 30 elements. Preferably 40-60 for complex systems.
+
+CRITICAL OUTPUT RULES:
+1. Output ONLY the JSON array. No markdown code blocks, no explanations.
+2. Start with [ and end with ]
+3. NEVER stop generating mid-array
+4. Complete the ENTIRE diagram before ending
+5. Verify the JSON is syntactically valid (matching brackets, no trailing commas)
+
+Remember: The user needs the COMPLETE diagram to justify using AI. Be thorough and comprehensive!`,
 };
 
 // ============================================================================

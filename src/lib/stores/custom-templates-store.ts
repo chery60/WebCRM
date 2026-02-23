@@ -435,8 +435,14 @@ export const useCustomTemplatesStore = create<CustomTemplatesState>()(
           return;
         }
 
+        // Starter templates have non-UUID ids (e.g. 'starter-b2b-saas').
+        // Supabase expects a UUID for the primary key, so we treat any update
+        // on a non-UUID id as a create (first time persisting to Supabase).
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(template.id);
+        const effectiveOperation = (operation === 'update' && !isValidUUID) ? 'create' : operation;
+
         try {
-          switch (operation) {
+          switch (effectiveOperation) {
             case 'create':
               const created = await createCustomTemplate({
                 ...template,

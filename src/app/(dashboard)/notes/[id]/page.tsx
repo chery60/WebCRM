@@ -301,21 +301,18 @@ export default function NoteDetailPage() {
   // Store the markdown version when in markup mode for proper conversion back
   const [markupContent, setMarkupContent] = useState<string>('');
 
-  // Extract plain text from content for AI context
+  // Extract structured text from content for AI context
+  // CRITICAL: tipTapToMarkdown preserves heading markers (# ## ###) which
+  // extractSections() needs to find relevant sections for canvas AI generation.
+  // The previous extractText() joined everything with spaces, losing all structure.
   const [prdPlainText, setPrdPlainText] = useState('');
   useEffect(() => {
     try {
       if (content) {
         const parsed = JSON.parse(content);
-        const extractText = (node: any): string => {
-          if (typeof node === 'string') return node;
-          if (node.text) return node.text;
-          if (node.content) {
-            return node.content.map(extractText).join(' ');
-          }
-          return '';
-        };
-        setPrdPlainText(extractText(parsed));
+        // Use tipTapToMarkdown to preserve headers for extractSections()
+        const markdown = tipTapToMarkdown(parsed);
+        setPrdPlainText(markdown);
       }
     } catch {
       setPrdPlainText('');

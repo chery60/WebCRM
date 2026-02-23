@@ -69,29 +69,40 @@ export function PRDEditorWithCanvas({
   const [viewMode, setViewMode] = useState<ViewMode>('document');
   const canvasRef = useRef<PRDCanvasRef>(null);
   const { activeProvider } = useAISettingsStore();
-  
+
   // Canvas generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState<CanvasGenerationType | null>(null);
   const [tokensUsed, setTokensUsed] = useState(0);
-  
-  // Extract plain text from content for AI context
+
+  // Extract structured text from content for AI context
+  // CRITICAL: Must preserve heading markers (# ## ###) for extractSections()
   const [prdPlainText, setPrdPlainText] = useState('');
-  
+
   useEffect(() => {
     try {
       if (content) {
         const parsed = JSON.parse(content);
-        // Extract text from TipTap JSON including inline canvas data
-        const extractText = (node: any): string => {
+        // Convert TipTap JSON to text preserving heading structure
+        const extractStructuredText = (node: any, depth: number = 0): string => {
           if (typeof node === 'string') return node;
           if (node.text) return node.text;
+
+          if (node.type === 'heading') {
+            const level = node.attrs?.level || 1;
+            const prefix = '#'.repeat(level);
+            const text = node.content?.map((child: any) => extractStructuredText(child, depth)).join('') || '';
+            return `${prefix} ${text}`;
+          }
+
           if (node.content) {
-            return node.content.map(extractText).join(' ');
+            return node.content.map((child: any) => extractStructuredText(child, depth)).join(
+              node.type === 'doc' ? '\n' : (node.type === 'paragraph' ? '' : ' ')
+            );
           }
           return '';
         };
-        setPrdPlainText(extractText(parsed));
+        setPrdPlainText(extractStructuredText(parsed));
       }
     } catch {
       setPrdPlainText('');
@@ -104,7 +115,7 @@ export function PRDEditorWithCanvas({
       if (!content) return [];
       const parsed = JSON.parse(content);
       const elements: any[] = [];
-      
+
       const extractCanvasData = (node: any) => {
         if (node.type === 'excalidraw' && node.attrs?.data?.elements) {
           elements.push(...node.attrs.data.elements);
@@ -113,7 +124,7 @@ export function PRDEditorWithCanvas({
           node.content.forEach(extractCanvasData);
         }
       };
-      
+
       extractCanvasData(parsed);
       return elements;
     } catch {
@@ -142,7 +153,7 @@ export function PRDEditorWithCanvas({
 
         // Build enhanced context
         let enhancedPrdContent = prdPlainText;
-        
+
         if (allExistingElements.length > 0) {
           const existingContext = summarizeElements(allExistingElements);
           if (existingContext) {
@@ -242,7 +253,7 @@ export function PRDEditorWithCanvas({
                   </TabsTrigger>
                 )}
               </TabsList>
-              
+
               {tokensUsed > 0 && (
                 <Badge variant="outline" className="text-xs">
                   ~{tokensUsed} tokens used
@@ -325,7 +336,7 @@ export function PRDEditorWithCanvas({
             onFeaturesGenerated={onFeaturesGenerated}
             onTasksGenerated={onTasksGenerated}
           />
-          
+
           <PRDCanvas
             ref={canvasRef}
             initialData={canvasData}

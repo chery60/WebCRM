@@ -152,6 +152,8 @@ export class CanvasGeneratorService {
       };
 
       console.log('CanvasGenerator: Making AI request for type:', type);
+      console.log('CanvasGenerator: User prompt:', userPrompt);
+      console.log('CanvasGenerator: Context length:', context.length);
       console.log('CanvasGenerator: Request object:', JSON.stringify(request, null, 2).substring(0, 500));
       
       const response = await generateAIContent(request, provider);
@@ -159,7 +161,8 @@ export class CanvasGeneratorService {
       console.log('CanvasGenerator: Response received:', response);
       console.log('CanvasGenerator: Response content type:', typeof response.content);
       console.log('CanvasGenerator: Response content length:', response.content?.length || 0);
-      console.log('CanvasGenerator: Response first 500 chars:', response.content?.substring(0, 500));
+      console.log('CanvasGenerator: Response first 1000 chars:', response.content?.substring(0, 1000));
+      console.log('CanvasGenerator: Response last 500 chars:', response.content?.substring(response.content?.length - 500));
 
       // Parse the response into Excalidraw elements
       let elements = parseCanvasResponse(response.content);
