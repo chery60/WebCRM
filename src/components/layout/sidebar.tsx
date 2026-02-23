@@ -391,7 +391,7 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
               }}
             >
               <FileText className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
-              <span className="flex-1">PRD</span>
+              <span className="flex-1 truncate">PRD</span>
               <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isOpen && 'rotate-180')} />
             </div>
           </button>
@@ -433,26 +433,19 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div
-                      className="group relative"
+                      className="group relative flex items-center"
                       style={{ width: '100%', overflow: 'hidden' }}
                       onDragOver={(e) => handleDragOver(e, project.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, project.id)}
                     >
-                      <Link
-                        href={`/projects/${project.id}/settings`}
-                        onClick={() => {
-                          // Ensure project is expanded when navigating to settings
-                          if (!isExpanded) {
-                            setExpandedProjects(prev => {
-                              const next = new Set(prev);
-                              next.add(project.id);
-                              return next;
-                            });
-                          }
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          toggleProject(project.id);
                         }}
                         className={cn(
-                          'flex items-center transition-colors',
+                          'flex items-center transition-colors min-w-0 flex-1',
                           (isExpanded && (isProjectSettingsActive || isAnyPRDActive)) ? 'font-medium' : '',
                           dragOverTarget === project.id && 'ring-2 ring-primary bg-primary/10'
                         )}
@@ -463,17 +456,21 @@ function PRDNavSection({ collapsed }: { collapsed: boolean }) {
                             ? 'var(--sidebar-text-primary)'
                             : 'var(--sidebar-text-secondary)',
                           gap: '8px',
-                          paddingRight: '28px',
-                          width: '100%',
                           overflow: 'hidden',
+                          textAlign: 'left',
                         }}
                       >
-                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform shrink-0', !isExpanded && '-rotate-90')} style={{ flexShrink: 0 }} />
                         <FolderOpen className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{project.name}</span>
-                      </Link>
+                      </button>
 
-                      {/* More options button (visible on hover) */}
+                      {/* Chevron — visible by default, hidden on hover (replaced by ⋯) */}
+                      <ChevronDown
+                        className={cn('h-3.5 w-3.5 shrink-0 transition-all group-hover:opacity-0 group-hover:pointer-events-none', !isExpanded && '-rotate-90')}
+                        style={{ flexShrink: 0, color: 'var(--sidebar-text-secondary)' }}
+                      />
+
+                      {/* More options button (visible on hover, replaces chevron) */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
@@ -855,7 +852,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <ScrollArea className="flex-1">
-          <div className="flex flex-col" style={{ gap: '20px', paddingLeft: '24px', paddingRight: '24px', paddingTop: '24px' }}>
+          <div className="flex flex-col" style={{ gap: '20px', paddingLeft: '16px', paddingRight: '16px', paddingTop: '16px' }}>
             {/* Main navigation section */}
             <nav className="flex flex-col" style={{ gap: '20px' }}>
               {/* Notes with Projects */}

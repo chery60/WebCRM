@@ -195,13 +195,13 @@ function PipelineItem({
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="group relative" style={{ width: '100%', overflow: 'hidden' }}>
+        <div className="group relative flex items-center" style={{ width: '100%', overflow: 'hidden' }}>
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    'flex items-center transition-colors',
+                    'flex items-center transition-colors min-w-0 flex-1',
                     isPipelineActive && !isOpen ? 'font-medium' : ''
                   )}
                   style={{
@@ -211,20 +211,11 @@ function PipelineItem({
                       ? 'var(--sidebar-text-primary)'
                       : 'var(--sidebar-text-secondary)',
                     gap: '8px',
-                    paddingRight: '28px',
-                    width: '100%',
                     overflow: 'hidden',
                   }}
                 >
-                  <FolderKanban className="h-4 w-4" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                  <FolderKanban className="h-4 w-4 shrink-0" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, textAlign: 'left' }}>{pipeline.name}</span>
-                  <ChevronDown
-                    className={cn(
-                      'h-3.5 w-3.5 transition-transform',
-                      isOpen && 'rotate-180'
-                    )}
-                    style={{ flexShrink: 0 }}
-                  />
                 </button>
               </CollapsibleTrigger>
             </ContextMenuTrigger>
@@ -249,7 +240,16 @@ function PipelineItem({
             </ContextMenuContent>
           </ContextMenu>
 
-          {/* More options button */}
+          {/* Chevron — hidden on hover, replaced by ⋯ */}
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 transition-all group-hover:opacity-0 group-hover:pointer-events-none',
+              isOpen && 'rotate-180'
+            )}
+            style={{ flexShrink: 0, color: 'var(--sidebar-text-secondary)' }}
+          />
+
+          {/* More options button — shown on hover, replaces chevron */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -385,33 +385,49 @@ function PipelineItem({
 
       {/* Create Roadmap Dialog */}
       <Dialog open={showCreateRoadmapDialog} onOpenChange={setShowCreateRoadmapDialog}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Create New Roadmap</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="roadmapName">Roadmap Name</Label>
-            <Input
-              id="roadmapName"
-              value={newRoadmapName}
-              onChange={(e) => setNewRoadmapName(e.target.value)}
-              placeholder="Enter roadmap name"
-              className="mt-2"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreateRoadmap();
-                }
-              }}
-            />
+        <DialogContent
+          className="!w-[680px] !h-[560px] !max-w-none !p-0"
+          style={{
+            backgroundColor: 'rgb(248, 248, 247)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px',
+            color: 'rgb(52, 50, 45)',
+            fontSize: '16px',
+            lineHeight: '24px',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div className="flex flex-col h-full p-6">
+            <DialogHeader className="flex flex-col items-center text-center pb-4 flex-shrink-0">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-muted/50">
+                <Map className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <DialogTitle className="text-xl" style={{ color: 'rgb(52, 50, 45)' }}>Create roadmap</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 space-y-4 py-2 overflow-y-auto">
+              <div className="space-y-2">
+                <Label htmlFor="roadmapName" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
+                  Roadmap name
+                </Label>
+                <Input
+                  id="roadmapName"
+                  value={newRoadmapName}
+                  onChange={(e) => setNewRoadmapName(e.target.value)}
+                  placeholder="Enter the name"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateRoadmap(); }}
+                  style={{ fontSize: '16px', lineHeight: '24px', color: 'rgb(52, 50, 45)' }}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0 pt-4">
+              <Button variant="outline" onClick={() => setShowCreateRoadmapDialog(false)} className="flex-1 sm:flex-none" style={{ fontSize: '16px', lineHeight: '24px' }}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateRoadmap} disabled={!newRoadmapName.trim()} className="flex-1 sm:flex-none" style={{ fontSize: '16px', lineHeight: '24px' }}>
+                Create
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateRoadmapDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateRoadmap} disabled={!newRoadmapName.trim()}>
-              Create
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -591,7 +607,7 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
               }}
             >
               <GitBranch className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
-              <span className="flex-1">Pipelines</span>
+              <span className="flex-1 truncate">Pipelines</span>
               <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isOpen && 'rotate-180')} />
             </div>
           </button>
@@ -626,33 +642,49 @@ export function PipelineNavSection({ collapsed }: PipelineNavSectionProps) {
 
       {/* Create Pipeline Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Create New Pipeline</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="pipelineName">Pipeline Name</Label>
-            <Input
-              id="pipelineName"
-              value={newPipelineName}
-              onChange={(e) => setNewPipelineName(e.target.value)}
-              placeholder="Enter pipeline name"
-              className="mt-2"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreatePipeline();
-                }
-              }}
-            />
+        <DialogContent
+          className="!w-[680px] !h-[560px] !max-w-none !p-0"
+          style={{
+            backgroundColor: 'rgb(248, 248, 247)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px',
+            color: 'rgb(52, 50, 45)',
+            fontSize: '16px',
+            lineHeight: '24px',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div className="flex flex-col h-full p-6">
+            <DialogHeader className="flex flex-col items-center text-center pb-4 flex-shrink-0">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-muted/50">
+                <GitBranch className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <DialogTitle className="text-xl" style={{ color: 'rgb(52, 50, 45)' }}>Create pipeline</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 space-y-4 py-2 overflow-y-auto">
+              <div className="space-y-2">
+                <Label htmlFor="pipelineName" className="text-sm font-medium" style={{ color: 'rgb(52, 50, 45)' }}>
+                  Pipeline name
+                </Label>
+                <Input
+                  id="pipelineName"
+                  value={newPipelineName}
+                  onChange={(e) => setNewPipelineName(e.target.value)}
+                  placeholder="Enter the name"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreatePipeline(); }}
+                  style={{ fontSize: '16px', lineHeight: '24px', color: 'rgb(52, 50, 45)' }}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2 flex-shrink-0 pt-4">
+              <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="flex-1 sm:flex-none" style={{ fontSize: '16px', lineHeight: '24px' }}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreatePipeline} disabled={!newPipelineName.trim()} className="flex-1 sm:flex-none" style={{ fontSize: '16px', lineHeight: '24px' }}>
+                Create
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreatePipeline} disabled={!newPipelineName.trim()}>
-              Create
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

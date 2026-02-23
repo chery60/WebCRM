@@ -57,12 +57,21 @@ export function useCreatePipeline() {
 // Update pipeline
 export function useUpdatePipeline() {
   const queryClient = useQueryClient();
+  const { currentWorkspace } = useWorkspaceStore();
 
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Pipeline> }) =>
       pipelinesRepository.update(id, data),
-    onSuccess: (_, { id }) => {
+    onSuccess: (updatedPipeline, { id }) => {
+      // Optimistically update the cache so the UI reflects the change immediately
+      queryClient.setQueryData(
+        pipelineKeys.lists(currentWorkspace?.id),
+        (old: Pipeline[] | undefined) =>
+          old ? old.map((p) => (p.id === id ? { ...p, ...updatedPipeline } : p)) : old
+      );
       queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
+      // Invalidate both with and without workspaceId to cover all subscribers
+      queryClient.invalidateQueries({ queryKey: pipelineKeys.lists(currentWorkspace?.id) });
       queryClient.invalidateQueries({ queryKey: pipelineKeys.lists() });
     },
   });

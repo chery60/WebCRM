@@ -105,7 +105,7 @@ export function DirectMessagesSection({ onStartDM }: DirectMessagesSectionProps)
                         }}
                     >
                         <MessageCircle className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
-                        <span className="flex-1">Direct Messages</span>
+                        <span className="flex-1 truncate">Direct Messages</span>
                         <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isExpanded && 'rotate-180')} />
                     </div>
                 </button>

@@ -61,11 +61,19 @@ export function useCreateProject() {
 
 export function useUpdateProject() {
   const queryClient = useQueryClient();
+  const { currentWorkspace } = useWorkspaceStore();
 
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Omit<Project, 'id' | 'createdAt'>> }) =>
       projectsRepository.update(id, data),
-    onSuccess: (_, { id }) => {
+    onSuccess: (updatedProject, { id }) => {
+      // Optimistically update the cache so the UI reflects the change immediately
+      const workspaceId = currentWorkspace?.id;
+      queryClient.setQueryData(
+        ['projects', { workspaceId }],
+        (old: Project[] | undefined) =>
+          old ? old.map((p) => (p.id === id ? { ...p, ...updatedProject } : p)) : old
+      );
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['projects', id] });
     },
