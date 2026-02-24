@@ -673,6 +673,25 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
             const invitationUrl = `${window.location.origin}/invitation?token=${invitationToken}`;
             const employeeName = getEmployeeFullName(employee);
 
+            // Get workspace name for the email
+            let workspaceName = 'the workspace';
+            if (USE_SUPABASE && employee.workspaceId) {
+                try {
+                    const { getSupabaseClient: getClient } = await import('@/lib/supabase/client');
+                    const supabaseClient = getClient();
+                    if (supabaseClient) {
+                        const { data: ws } = await supabaseClient
+                            .from('workspaces')
+                            .select('name')
+                            .eq('id', employee.workspaceId)
+                            .single();
+                        if (ws?.name) workspaceName = ws.name;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+
             const response = await fetch('/api/invite', {
                 method: 'POST',
                 headers: {
@@ -684,6 +703,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
                     signupUrl: invitationUrl,
                     invitationToken: invitationToken,
                     senderName: 'Venture CRM Admin',
+                    workspaceId: employee.workspaceId,
+                    workspaceName,
                 }),
             });
 

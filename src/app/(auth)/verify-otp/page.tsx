@@ -12,6 +12,7 @@ function VerifyOTPContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const email = searchParams?.get('email') || '';
+    const invitationToken = searchParams?.get('invitation') || '';
 
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [error, setError] = useState<string | null>(null);
@@ -93,7 +94,12 @@ function VerifyOTPContent() {
             await verifyOtp(email, code);
             setSuccess('Verification successful! Redirecting...');
             setTimeout(() => {
-                router.push('/onboarding');
+                // If the user came from an invitation flow, go back to the invitation OTP page
+                if (invitationToken) {
+                    router.push(`/invitation?token=${invitationToken}`);
+                } else {
+                    router.push('/onboarding');
+                }
             }, 1000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Invalid or expired OTP. Please try again.');

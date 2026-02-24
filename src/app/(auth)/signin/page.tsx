@@ -40,7 +40,7 @@ function SignInContent() {
                 await fetchUserWorkspaces(currentUser.id);
             }
 
-            // If user was invited, redirect to accept the invitation
+            // If user was invited, redirect to invitation page (OTP entry step)
             if (invitationToken) {
                 router.push(`/invitation?token=${invitationToken}`);
             } else if (currentUser && !currentUser.hasCompletedOnboarding) {
@@ -50,17 +50,19 @@ function SignInContent() {
                 router.push('/notes');
             }
         } catch (err) {
-            // Check if error is due to invalid credentials (user not found)
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            
-            // If the error indicates invalid credentials, redirect to signup with email pre-filled
-            if (errorMessage.includes('Invalid login credentials') || 
+
+            // If credentials are invalid and we have an invitation token, redirect to signup
+            // so the new user can create an account and then come back to the invitation
+            if (errorMessage.includes('Invalid login credentials') ||
                 errorMessage.includes('User not found') ||
                 errorMessage.includes('Email not confirmed')) {
-                // Redirect to signup page with email pre-filled
-                router.push(`/signup?email=${encodeURIComponent(email)}`);
+                if (invitationToken) {
+                    router.push(`/signup?invitation=${invitationToken}&email=${encodeURIComponent(email)}`);
+                } else {
+                    router.push(`/signup?email=${encodeURIComponent(email)}`);
+                }
             } else {
-                // For other errors, show generic error message
                 setError('Login failed. Please check your email and password.');
             }
         }

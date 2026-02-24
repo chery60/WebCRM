@@ -53,12 +53,16 @@ function SignUpContent() {
             if (requiresEmailConfirmation) {
                 // Store password temporarily so we can sign in after OTP verification
                 sessionStorage.setItem('pending_signup_password', password);
-                // Redirect to OTP verification page with email
-                router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
+                // Redirect to OTP verification page with email.
+                // Carry the invitation token so after email verification we go back to the invitation.
+                const otpRedirect = invitationToken
+                    ? `/verify-otp?email=${encodeURIComponent(email)}&invitation=${invitationToken}`
+                    : `/verify-otp?email=${encodeURIComponent(email)}`;
+                router.push(otpRedirect);
                 return;
             }
 
-            // If user was invited, redirect to accept the invitation
+            // If user was invited, redirect to accept the invitation (OTP entry step)
             if (invitationToken) {
                 router.push(`/invitation?token=${invitationToken}`);
             } else {
