@@ -806,6 +806,93 @@ export interface TaskTab {
   updatedAt: Date;
 }
 
+// ============================================
+// Component Library & Prototyping Types
+// ============================================
+
+export type LibraryImportSource = 'npm' | 'github' | 'storybook' | 'manual';
+
+export interface ComponentPropSchema {
+  name: string;
+  type: string;
+  required: boolean;
+  defaultValue?: string;
+  description?: string;
+}
+
+export interface LibraryComponent {
+  id: string;
+  libraryId: string;
+  name: string;
+  filePath: string;
+  codeContent: string;
+  category?: string;
+  description?: string;
+  propsSchema?: ComponentPropSchema[];
+  exampleUsage?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ComponentLibrary {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  packageName?: string;     // e.g. "@shadcn/ui", "antd", "@mui/material"
+  packageVersion?: string;  // e.g. "5.0.0"
+  repoUrl?: string;         // GitHub URL if imported from GitHub
+  storybookUrl?: string;    // Storybook/Chromatic URL
+  importSource: LibraryImportSource;
+  isPublic: boolean;
+  componentCount?: number;  // Cached count from join
+  components?: LibraryComponent[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ComponentLibraryFormData {
+  name: string;
+  description?: string;
+  packageName?: string;
+  packageVersion?: string;
+  repoUrl?: string;
+  storybookUrl?: string;
+  importSource: LibraryImportSource;
+  workspaceId: string;
+}
+
+// Prototype (AI-generated UI)
+export interface Prototype {
+  id: string;
+  workspaceId: string;
+  projectId?: string;
+  prdId?: string;
+  libraryId?: string;
+  name: string;
+  codeContent?: string;
+  chatHistory: PrototypeChatMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrototypeChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+// npm package metadata from registry
+export interface NpmPackageInfo {
+  name: string;
+  version: string;
+  description: string;
+  homepage?: string;
+  repository?: string;
+  keywords?: string[];
+  exports?: string[]; // discovered component names
+}
+
 // Calendar Event types
 export type EventRepeat = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type EventColor = 'yellow' | 'green' | 'pink' | 'purple' | 'blue';

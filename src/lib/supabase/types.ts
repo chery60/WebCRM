@@ -470,6 +470,129 @@ export interface Database {
                     updated_at?: string;
                 };
             };
+            component_libraries: {
+                Row: {
+                    id: string;
+                    workspace_id: string;
+                    name: string;
+                    description: string | null;
+                    package_name: string | null;
+                    package_version: string | null;
+                    repo_url: string | null;
+                    storybook_url: string | null;
+                    import_source: 'npm' | 'github' | 'storybook' | 'manual';
+                    is_public: boolean;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    workspace_id: string;
+                    name: string;
+                    description?: string | null;
+                    package_name?: string | null;
+                    package_version?: string | null;
+                    repo_url?: string | null;
+                    storybook_url?: string | null;
+                    import_source?: 'npm' | 'github' | 'storybook' | 'manual';
+                    is_public?: boolean;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    workspace_id?: string;
+                    name?: string;
+                    description?: string | null;
+                    package_name?: string | null;
+                    package_version?: string | null;
+                    repo_url?: string | null;
+                    storybook_url?: string | null;
+                    import_source?: 'npm' | 'github' | 'storybook' | 'manual';
+                    is_public?: boolean;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+            };
+            library_components: {
+                Row: {
+                    id: string;
+                    library_id: string;
+                    name: string;
+                    file_path: string;
+                    code_content: string;
+                    category: string | null;
+                    description: string | null;
+                    example_usage: string | null;
+                    props_schema: Json | null;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    library_id: string;
+                    name: string;
+                    file_path: string;
+                    code_content: string;
+                    category?: string | null;
+                    description?: string | null;
+                    example_usage?: string | null;
+                    props_schema?: Json | null;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    library_id?: string;
+                    name?: string;
+                    file_path?: string;
+                    code_content?: string;
+                    category?: string | null;
+                    description?: string | null;
+                    example_usage?: string | null;
+                    props_schema?: Json | null;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+            };
+            prototypes: {
+                Row: {
+                    id: string;
+                    workspace_id: string;
+                    project_id: string | null;
+                    prd_id: string | null;
+                    library_id: string | null;
+                    name: string;
+                    code_content: string;
+                    chat_history: Json;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    workspace_id: string;
+                    project_id?: string | null;
+                    prd_id?: string | null;
+                    library_id?: string | null;
+                    name: string;
+                    code_content?: string;
+                    chat_history?: Json;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    workspace_id?: string;
+                    project_id?: string | null;
+                    prd_id?: string | null;
+                    library_id?: string | null;
+                    name?: string;
+                    code_content?: string;
+                    chat_history?: Json;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+            };
         };
         Views: {
             [_ in never]: never;

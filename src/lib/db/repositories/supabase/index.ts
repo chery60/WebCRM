@@ -11,3 +11,4 @@ export { roadmapsRepository } from './roadmaps';
 export { featureRequestsRepository } from './feature-requests';
 export { projectsRepository } from './projects';
 export { taskTabsRepository } from './task-tabs';
+export { componentLibrariesRepository } from './component-libraries';
