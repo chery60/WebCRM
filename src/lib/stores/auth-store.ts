@@ -174,12 +174,24 @@ export const useAuthStore = create<AuthState>()(
                             throw new Error('Signup failed');
                         }
 
+                        // Supabase returns a user but NO session when email confirmation is enabled.
+                        // It also returns a user with an identities array when the email is already
+                        // registered but unconfirmed — in that case identities is empty.
+                        const isExistingUnconfirmed =
+                            data.user.identities && data.user.identities.length === 0;
+
+                        if (isExistingUnconfirmed) {
+                            // User already signed up but never confirmed — resend OTP instead of erroring
+                            console.warn('[signup] User already exists but unconfirmed, resending OTP.');
+                        }
+
                         // Don't create user profile here — defer to verifyOtp()
                         // Supabase auth.signUp() creates the auth user.
                         // The user profile in the 'users' table will be created only after
                         // successful OTP verification to ensure email ownership.
 
                         // Send OTP via our custom Nodemailer-based endpoint
+                        // This is our email_verification OTP — separate from the workspace_invite OTP
                         const otpResponse = await fetch('/api/send-otp', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -194,11 +206,11 @@ export const useAuthStore = create<AuthState>()(
 
                         console.log('✅ Signup successful. OTP sent via Nodemailer.');
 
-                        // Check if session exists (email confirmations disabled) or not (enabled)
-                        const requiresEmailConfirmation = !data.session;
+                        // Always require email confirmation via our custom OTP flow
+                        // (regardless of Supabase session state)
                         set({ currentUser: null, isAuthenticated: false });
 
-                        return { requiresEmailConfirmation };
+                        return { requiresEmailConfirmation: true };
                     }
 
                     // Dexie fallback
@@ -344,33 +356,59 @@ export const useAuthStore = create<AuthState>()(
                             }
                         }
 
-                        const employee = await employeesRepository.getByEmail(email);
+                        // Step 4: Auto-create default workspace if needed.
+                        // Skip workspace creation if the user arrived via an invitation link —
+                        // they will join an existing workspace on the /invitation page instead.
+                        //
+                        // Detect invitation: the signup page stores the invitation token in
+                        // sessionStorage under 'pending_invitation_token' before redirecting
+                        // to /verify-otp, so we can check it here reliably.
+                        const pendingInvitationToken = typeof window !== 'undefined'
+                            ? sessionStorage.getItem('pending_invitation_token')
+                            : null;
+                        const isInvitedUser = !!pendingInvitationToken;
 
-                        // Step 4: Auto-create default workspace if needed
                         if (session) {
                             try {
                                 const { data: existingWorkspaces } = await supabase
                                     .from('workspace_memberships')
                                     .select('workspace_id')
-                                    .eq('user_id', signedInUser.id);
+                                    .eq('user_id', signedInUser.id)
+                                    .eq('status', 'active');
 
                                 if (!existingWorkspaces || existingWorkspaces.length === 0) {
-                                    const firstName = userName?.split(' ')[0] || 'My';
-                                    const workspaceName = `${firstName}'s Workspace`;
-                                    const workspace = await supabaseWorkspacesRepository.create(
-                                        workspaceName,
-                                        signedInUser.id
-                                    );
-                                    if (workspace) {
-                                        useWorkspaceStore.getState().setCurrentWorkspace(workspace);
-                                        useWorkspaceStore.setState({
-                                            userWorkspaces: [workspace],
-                                        });
+                                    if (!isInvitedUser) {
+                                        // Regular signup — auto-create a personal workspace
+                                        const firstName = userName?.split(' ')[0] || 'My';
+                                        const workspaceName = `${firstName}'s Workspace`;
+                                        const workspace = await supabaseWorkspacesRepository.create(
+                                            workspaceName,
+                                            signedInUser.id
+                                        );
+                                        if (workspace) {
+                                            useWorkspaceStore.getState().setCurrentWorkspace(workspace);
+                                            useWorkspaceStore.setState({
+                                                userWorkspaces: [workspace],
+                                            });
+                                        }
                                     }
+                                    // else: invited user — skip default workspace creation;
+                                    // they will join via /invitation OTP page
+                                } else {
+                                    // Already has active workspace memberships — load them into store
+                                    await useWorkspaceStore.getState().fetchUserWorkspaces(signedInUser.id);
                                 }
                             } catch (wsError) {
                                 console.warn('Could not auto-create default workspace:', wsError);
                             }
+                        }
+
+                        // Fetch employee record for name/avatar/role merging
+                        const employee = await employeesRepository.getByEmail(email);
+
+                        // Clean up invitation token from sessionStorage now that workspace step is done
+                        if (typeof window !== 'undefined') {
+                            sessionStorage.removeItem('pending_invitation_token');
                         }
 
                         const employeeName = (employee?.firstName && employee?.lastName)

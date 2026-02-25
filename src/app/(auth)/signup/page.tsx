@@ -53,6 +53,13 @@ function SignUpContent() {
             if (requiresEmailConfirmation) {
                 // Store password temporarily so we can sign in after OTP verification
                 sessionStorage.setItem('pending_signup_password', password);
+                // If this user was invited, store the token so auth-store knows
+                // NOT to auto-create a personal workspace after email verification
+                if (invitationToken) {
+                    sessionStorage.setItem('pending_invitation_token', invitationToken);
+                } else {
+                    sessionStorage.removeItem('pending_invitation_token');
+                }
                 // Redirect to OTP verification page with email.
                 // Carry the invitation token so after email verification we go back to the invitation.
                 const otpRedirect = invitationToken

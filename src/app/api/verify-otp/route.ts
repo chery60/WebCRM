@@ -28,12 +28,13 @@ export async function POST(request: Request) {
 
         const supabaseAdmin = getSupabaseAdmin();
 
-        // Look up the OTP in the pending_otps table
+        // Look up the OTP in the pending_otps table — only email_verification type
         const { data: otpRecord, error: lookupError } = await supabaseAdmin
             .from('pending_otps')
             .select('*')
             .eq('email', email)
             .eq('otp_code', otp)
+            .eq('type', 'email_verification')
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
@@ -79,11 +80,33 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Failed to verify email' }, { status: 500 });
         }
 
-        // Clean up used OTP
+        // Clean up used email_verification OTP only
         await supabaseAdmin
             .from('pending_otps')
             .delete()
-            .eq('email', email);
+            .eq('email', email)
+            .eq('type', 'email_verification');
+
+        // Check for orphaned public.users records from previous signups
+        const { data: existingPublicUser } = await supabaseAdmin
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (existingPublicUser && existingPublicUser.id !== authUser.id) {
+            console.log(`Found orphaned public.users record for ${email}. Updating ID to match new auth user.`);
+            // Try updating the ID first to preserve relationships
+            const { error: updateIdError } = await supabaseAdmin
+                .from('users')
+                .update({ id: authUser.id })
+                .eq('id', existingPublicUser.id);
+
+            if (updateIdError) {
+                console.warn('Could not update orphaned user ID, deleting instead:', updateIdError.message);
+                await supabaseAdmin.from('users').delete().eq('id', existingPublicUser.id);
+            }
+        }
 
         console.log(`✅ Email verified for ${email}`);
 

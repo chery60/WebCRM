@@ -19,6 +19,9 @@ interface MessagingState {
     messages: Message[];
     threadMessages: Map<string, Message[]>;
 
+    // Unread counts: keyed by conversationId or channelId → unread message count
+    unreadCounts: Map<string, number>;
+
     // UI State
     isLoadingChannels: boolean;
     isLoadingMessages: boolean;
@@ -38,8 +41,11 @@ interface MessagingState {
 
     // Actions - Direct Messages
     fetchConversations: (workspaceId: string, userId: string) => Promise<void>;
-    getOrCreateConversation: (workspaceId: string, otherUserEmail: string, currentUserEmail: string) => Promise<DirectMessageConversation | null>;
+    getOrCreateConversation: (workspaceId: string, otherUserId: string, currentUserId: string) => Promise<DirectMessageConversation | null>;
     setCurrentConversation: (conversation: DirectMessageConversation | null) => void;
+
+    // Real-time subscription for new DM conversations (for recipient's sidebar)
+    subscribeToNewConversations: (workspaceId: string, userId: string) => () => void;
 
     // Actions - Messages
     fetchChannelMessages: (channelId: string) => Promise<void>;
@@ -50,6 +56,10 @@ interface MessagingState {
     deleteMessage: (messageId: string) => Promise<void>;
     addReaction: (messageId: string, emoji: string, userId: string) => Promise<void>;
     removeReaction: (messageId: string, emoji: string, userId: string) => Promise<void>;
+
+    // Unread count actions
+    markConversationAsRead: (conversationId: string) => void;
+    markChannelAsRead: (channelId: string, userId: string) => void;
 
     // Real-time subscriptions
     subscribeToChannelMessages: (channelId: string) => () => void;
@@ -68,6 +78,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     currentConversation: null,
     messages: [],
     threadMessages: new Map(),
+    unreadCounts: new Map(),
     isLoadingChannels: false,
     isLoadingMessages: false,
     isSendingMessage: false,
@@ -150,10 +161,20 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     },
 
     setCurrentChannel: (channel: Channel | null) => {
-        set({ currentChannel: channel, currentConversation: null, messages: [] });
+        set(state => {
+            // Clear unread count for this channel
+            const newCounts = new Map(state.unreadCounts);
+            if (channel) newCounts.set(channel.id, 0);
+            return { currentChannel: channel, currentConversation: null, messages: [], unreadCounts: newCounts };
+        });
         if (channel) {
             get().fetchChannelMessages(channel.id);
             get().fetchChannelMembers(channel.id);
+            // Update last_read_at in DB so count is persisted across sessions
+            const { currentUser } = get() as any;
+            if (currentUser) {
+                supabaseChannelRepository.updateLastRead(channel.id, currentUser.id).catch(() => {});
+            }
         }
     },
 
@@ -227,10 +248,33 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     },
 
     setCurrentConversation: (conversation: DirectMessageConversation | null) => {
-        set({ currentConversation: conversation, currentChannel: null, messages: [] });
+        set(state => {
+            // Clear unread count for this conversation
+            const newCounts = new Map(state.unreadCounts);
+            if (conversation) newCounts.set(conversation.id, 0);
+            return { currentConversation: conversation, currentChannel: null, messages: [], unreadCounts: newCounts };
+        });
         if (conversation) {
             get().fetchDirectMessages(conversation.id);
         }
+    },
+
+    markConversationAsRead: (conversationId: string) => {
+        set(state => {
+            const newCounts = new Map(state.unreadCounts);
+            newCounts.set(conversationId, 0);
+            return { unreadCounts: newCounts };
+        });
+    },
+
+    markChannelAsRead: (channelId: string, userId: string) => {
+        set(state => {
+            const newCounts = new Map(state.unreadCounts);
+            newCounts.set(channelId, 0);
+            return { unreadCounts: newCounts };
+        });
+        // Persist last_read_at to DB
+        supabaseChannelRepository.updateLastRead(channelId, userId).catch(() => {});
     },
 
     // Messages
@@ -318,9 +362,25 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
 
             // Add to messages if not a thread reply
             if (!data.parentMessageId) {
-                set(state => ({
-                    messages: [...state.messages, message],
-                }));
+                set(state => {
+                    const updatedState: Partial<MessagingState> = {
+                        messages: [...state.messages, message],
+                    };
+
+                    // If this is a DM, optimistically update the conversation's lastMessageAt
+                    // so it floats to the top of the list without waiting for realtime
+                    if (data.receiverId) {
+                        const now = new Date();
+                        updatedState.conversations = state.conversations.map(c => {
+                            const isThisConv =
+                                (c.user1Id === data.senderId && c.user2Id === data.receiverId) ||
+                                (c.user1Id === data.receiverId && c.user2Id === data.senderId);
+                            return isThisConv ? { ...c, lastMessageAt: now } : c;
+                        });
+                    }
+
+                    return updatedState;
+                });
             } else {
                 // Add to thread messages
                 const parentId = data.parentMessageId;
@@ -446,6 +506,17 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
                         if (state.messages.some(m => m.id === newMessage.id)) {
                             return state;
                         }
+
+                        const isCurrentChannel = state.currentChannel?.id === channelId;
+                        const newCounts = new Map(state.unreadCounts);
+
+                        if (!isCurrentChannel) {
+                            // Increment unread count — user is not viewing this channel
+                            newCounts.set(channelId, (newCounts.get(channelId) || 0) + 1);
+                            return { unreadCounts: newCounts };
+                        }
+
+                        // User is viewing this channel — add message but no badge
                         return {
                             messages: [...state.messages, {
                                 id: newMessage.id,
@@ -476,44 +547,218 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     },
 
     subscribeToDirectMessages: (conversationId: string) => {
-        // Similar to channel subscription but for DMs
+        // Subscribe to DMs for this specific conversation.
+        // We filter by the conversation's sender_id/receiver_id pair obtained from
+        // the current conversation state so only relevant messages are appended.
         const supabase = getSupabaseClient();
-        const subscription = supabase
-            .channel(`dm-${conversationId}`)
+
+        // Get conversation details from state to build proper filters
+        const conversation = get().conversations.find(c => c.id === conversationId)
+            || get().currentConversation;
+
+        if (!conversation) {
+            // Fallback: subscribe broadly and filter in handler
+            const subscription = supabase
+                .channel(`dm-${conversationId}`)
+                .on('postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'messages' },
+                    (payload) => {
+                        const newMessage = payload.new as any;
+                        if (newMessage.channel_id !== null) return; // Skip channel messages
+                        set(state => {
+                            if (state.messages.some(m => m.id === newMessage.id)) return state;
+                            const conv = state.currentConversation;
+                            if (!conv) return state;
+                            // Only add if it belongs to this conversation
+                            const belongs =
+                                (newMessage.sender_id === conv.user1Id && newMessage.receiver_id === conv.user2Id) ||
+                                (newMessage.sender_id === conv.user2Id && newMessage.receiver_id === conv.user1Id);
+                            if (!belongs) return state;
+
+                            const isCurrentConv = state.currentConversation?.id === conversationId;
+                            const newCounts = new Map(state.unreadCounts);
+                            if (!isCurrentConv) {
+                                newCounts.set(conversationId, (newCounts.get(conversationId) || 0) + 1);
+                                return { unreadCounts: newCounts };
+                            }
+                            return {
+                                messages: [...state.messages, {
+                                    id: newMessage.id,
+                                    workspaceId: newMessage.workspace_id,
+                                    channelId: newMessage.channel_id,
+                                    senderId: newMessage.sender_id,
+                                    receiverId: newMessage.receiver_id,
+                                    content: newMessage.content,
+                                    parentMessageId: newMessage.parent_message_id,
+                                    threadCount: newMessage.thread_count || 0,
+                                    attachments: newMessage.attachments || [],
+                                    reactions: newMessage.reactions || [],
+                                    isEdited: newMessage.is_edited,
+                                    editedAt: newMessage.edited_at ? new Date(newMessage.edited_at) : undefined,
+                                    createdAt: new Date(newMessage.created_at),
+                                    updatedAt: new Date(newMessage.updated_at),
+                                    isDeleted: newMessage.is_deleted,
+                                }],
+                            };
+                        });
+                    }
+                )
+                .subscribe();
+            return () => { subscription.unsubscribe(); };
+        }
+
+        // Subscribe with sender/receiver filters so only messages for this conversation arrive.
+        // Supabase realtime supports a single `filter` per subscription, so we create two
+        // subscriptions — one per direction — and merge results.
+        const user1 = conversation.user1Id;
+        const user2 = conversation.user2Id;
+
+        const handleNewMessage = (payload: any) => {
+            const newMessage = payload.new as any;
+            if (newMessage.channel_id !== null) return;
+            set(state => {
+                if (state.messages.some(m => m.id === newMessage.id)) return state;
+
+                const isCurrentConv = state.currentConversation?.id === conversationId;
+                const newCounts = new Map(state.unreadCounts);
+
+                if (!isCurrentConv) {
+                    // Increment unread count — user is not viewing this conversation
+                    newCounts.set(conversationId, (newCounts.get(conversationId) || 0) + 1);
+                    return { unreadCounts: newCounts };
+                }
+
+                // User is viewing this conversation — append message, no badge
+                return {
+                    messages: [...state.messages, {
+                        id: newMessage.id,
+                        workspaceId: newMessage.workspace_id,
+                        channelId: newMessage.channel_id,
+                        senderId: newMessage.sender_id,
+                        receiverId: newMessage.receiver_id,
+                        content: newMessage.content,
+                        parentMessageId: newMessage.parent_message_id,
+                        threadCount: newMessage.thread_count || 0,
+                        attachments: newMessage.attachments || [],
+                        reactions: newMessage.reactions || [],
+                        isEdited: newMessage.is_edited,
+                        editedAt: newMessage.edited_at ? new Date(newMessage.edited_at) : undefined,
+                        createdAt: new Date(newMessage.created_at),
+                        updatedAt: new Date(newMessage.updated_at),
+                        isDeleted: newMessage.is_deleted,
+                    }],
+                };
+            });
+        };
+
+        // Direction 1: user1 → user2
+        const sub1 = supabase
+            .channel(`dm-${conversationId}-fwd`)
             .on('postgres_changes',
                 {
                     event: 'INSERT',
                     schema: 'public',
-                    table: 'messages'
+                    table: 'messages',
+                    filter: `sender_id=eq.${user1}`,
                 },
                 (payload) => {
-                    const newMessage = payload.new as any;
-                    // Only add if it's part of this conversation
-                    set(state => {
-                        if (state.messages.some(m => m.id === newMessage.id)) {
-                            return state;
-                        }
-                        return {
-                            messages: [...state.messages, {
-                                id: newMessage.id,
-                                workspaceId: newMessage.workspace_id,
-                                channelId: newMessage.channel_id,
-                                senderId: newMessage.sender_id,
-                                receiverId: newMessage.receiver_id,
-                                content: newMessage.content,
-                                parentMessageId: newMessage.parent_message_id,
-                                threadCount: newMessage.thread_count || 0,
-                                attachments: newMessage.attachments || [],
-                                reactions: newMessage.reactions || [],
-                                isEdited: newMessage.is_edited,
-                                editedAt: newMessage.edited_at ? new Date(newMessage.edited_at) : undefined,
-                                createdAt: new Date(newMessage.created_at),
-                                updatedAt: new Date(newMessage.updated_at),
-                                isDeleted: newMessage.is_deleted,
-                            }],
-                        };
-                    });
+                    const msg = payload.new as any;
+                    if (msg.receiver_id === user2) handleNewMessage(payload);
                 }
+            )
+            .subscribe();
+
+        // Direction 2: user2 → user1
+        const sub2 = supabase
+            .channel(`dm-${conversationId}-rev`)
+            .on('postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `sender_id=eq.${user2}`,
+                },
+                (payload) => {
+                    const msg = payload.new as any;
+                    if (msg.receiver_id === user1) handleNewMessage(payload);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            sub1.unsubscribe();
+            sub2.unsubscribe();
+        };
+    },
+
+    // Subscribe to new DM conversations so the recipient's sidebar updates in real-time
+    subscribeToNewConversations: (workspaceId: string, userId: string) => {
+        const supabase = getSupabaseClient();
+
+        const handleNewConversation = (payload: any) => {
+            const row = payload.new as any;
+            // Only handle conversations in this workspace involving this user
+            if (row.workspace_id !== workspaceId) return;
+            if (row.user1_id !== userId && row.user2_id !== userId) return;
+
+            const newConversation: DirectMessageConversation = {
+                id: row.id,
+                workspaceId: row.workspace_id,
+                user1Id: row.user1_id,
+                user2Id: row.user2_id,
+                createdAt: new Date(row.created_at),
+                updatedAt: new Date(row.updated_at),
+                lastMessageAt: row.last_message_at ? new Date(row.last_message_at) : undefined,
+            };
+
+            set(state => {
+                // Avoid duplicates
+                if (state.conversations.some(c => c.id === newConversation.id)) return state;
+                // If this user did NOT create the conversation, set unread count to 1
+                // so they know someone reached out to them
+                const newCounts = new Map(state.unreadCounts);
+                const isInitiator = row.user1_id === userId || row.user2_id === userId;
+                // We mark as unread only if the current user is the recipient (not initiator).
+                // Since we can't know who pressed "New Message" from the DB row alone,
+                // we set 1 unread as a notification signal — it clears when they open the chat.
+                newCounts.set(newConversation.id, 1);
+                return { conversations: [newConversation, ...state.conversations], unreadCounts: newCounts };
+            });
+        };
+
+        const handleUpdatedConversation = (payload: any) => {
+            const row = payload.new as any;
+            if (row.workspace_id !== workspaceId) return;
+            if (row.user1_id !== userId && row.user2_id !== userId) return;
+
+            set(state => ({
+                conversations: state.conversations.map(c =>
+                    c.id === row.id
+                        ? { ...c, lastMessageAt: row.last_message_at ? new Date(row.last_message_at) : c.lastMessageAt, updatedAt: new Date(row.updated_at) }
+                        : c
+                ),
+            }));
+        };
+
+        const subscription = supabase
+            .channel(`new-dm-conversations-${userId}`)
+            .on('postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'direct_message_conversations',
+                    filter: `workspace_id=eq.${workspaceId}`,
+                },
+                handleNewConversation
+            )
+            .on('postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'direct_message_conversations',
+                    filter: `workspace_id=eq.${workspaceId}`,
+                },
+                handleUpdatedConversation
             )
             .subscribe();
 
@@ -531,6 +776,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
             currentConversation: null,
             messages: [],
             threadMessages: new Map(),
+            unreadCounts: new Map(),
         });
     },
 }));

@@ -47,7 +47,7 @@ interface ChannelsSectionProps {
 export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
     const router = useRouter();
     const [isExpanded, setIsExpanded] = useState(false);
-    const { channels, currentChannel, setCurrentChannel, fetchChannels, updateChannel, deleteChannel, isLoadingChannels } = useMessagingStore();
+    const { channels, currentChannel, setCurrentChannel, fetchChannels, updateChannel, deleteChannel, isLoadingChannels, unreadCounts } = useMessagingStore();
     const { currentWorkspace } = useWorkspaceStore();
     const { currentUser } = useAuthStore();
 
@@ -110,6 +110,9 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
         }
     };
 
+    // Total unread across all channels (shown on the header when collapsed)
+    const totalChannelUnread = channels.reduce((sum, c) => sum + (unreadCounts.get(c.id) || 0), 0);
+
     return (
         <>
             <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -131,6 +134,15 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
                         >
                             <Hash className="h-5 w-5 shrink-0" style={{ width: '20px', height: '20px' }} />
                             <span className="flex-1 truncate">Channels</span>
+                            {/* Total unread badge on header — visible when section is collapsed */}
+                            {!isExpanded && totalChannelUnread > 0 && (
+                                <span
+                                    className="inline-flex items-center justify-center rounded-full bg-red-500 text-white font-semibold shrink-0"
+                                    style={{ minWidth: '18px', height: '18px', fontSize: '10px', padding: '0 4px' }}
+                                >
+                                    {totalChannelUnread > 99 ? '99+' : totalChannelUnread}
+                                </span>
+                            )}
                             <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', isExpanded && 'rotate-180')} />
                         </div>
                     </button>
@@ -139,7 +151,9 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
                     className="flex flex-col w-full overflow-hidden"
                     style={{ gap: '8px', paddingLeft: '28px', paddingTop: '8px' }}
                 >
-                    {channels.map((channel) => (
+                    {channels.map((channel) => {
+                        const unread = unreadCounts.get(channel.id) || 0;
+                        return (
                         <ContextMenu key={channel.id}>
                             <ContextMenuTrigger asChild>
                                 <div
@@ -157,11 +171,14 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
                                             fontSize: '14px',
                                             color: currentChannel?.id === channel.id
                                                 ? 'var(--sidebar-text-primary)'
-                                                : 'var(--sidebar-text-secondary)',
+                                                : unread > 0
+                                                    ? 'var(--sidebar-text-primary)'
+                                                    : 'var(--sidebar-text-secondary)',
                                             gap: '8px',
                                             paddingRight: '28px',
                                             width: '100%',
                                             overflow: 'hidden',
+                                            fontWeight: unread > 0 ? 600 : undefined,
                                         }}
                                     >
                                         {channel.isPrivate ? (
@@ -172,6 +189,15 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, textAlign: 'left' }}>
                                             {channel.name}
                                         </span>
+                                        {/* Per-channel unread badge */}
+                                        {unread > 0 && (
+                                            <span
+                                                className="inline-flex items-center justify-center rounded-full bg-red-500 text-white font-semibold shrink-0"
+                                                style={{ minWidth: '16px', height: '16px', fontSize: '9px', padding: '0 3px' }}
+                                            >
+                                                {unread > 99 ? '99+' : unread}
+                                            </span>
+                                        )}
                                     </button>
 
                                     {/* More options button (visible on hover) */}
@@ -217,7 +243,8 @@ export function ChannelsSection({ onCreateChannel }: ChannelsSectionProps) {
                                 </ContextMenuItem>
                             </ContextMenuContent>
                         </ContextMenu>
-                    ))}
+                        );
+                    })}
 
                     {channels.length === 0 && !isLoadingChannels && (
                         <div

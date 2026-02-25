@@ -7,13 +7,11 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Building2, CheckCircle, XCircle, Clock, Loader2, KeyRound, Mail } from 'lucide-react';
+import { Building2, CheckCircle, XCircle, Clock, Loader2, KeyRound, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PageStatus =
     | 'loading'
@@ -21,57 +19,18 @@ type PageStatus =
     | 'expired'
     | 'already_member'
     | 'accepted'
-    | 'needs_auth'      // not signed in → show sign-up / sign-in buttons
-    | 'enter_otp';      // signed in → show OTP entry form
+    | 'needs_auth'   // not signed in → show sign-up / sign-in buttons
+    | 'enter_otp';   // signed in → show OTP entry form
 
 interface InvitationInfo {
     workspaceName: string;
-    workspaceIcon?: string;
+    workspaceIcon?: string | null;
     role: string;
     email: string;
+    workspaceId: string;
 }
 
-// ─── Helper: fetch invitation details from Supabase ──────────────────────────
-
-async function fetchInvitationInfo(token: string): Promise<{
-    status: PageStatus;
-    info?: InvitationInfo;
-    workspaceId?: string;
-}> {
-    try {
-        const { getSupabaseClient } = await import('@/lib/supabase/client');
-        const supabase = getSupabaseClient();
-        if (!supabase) return { status: 'invalid' };
-
-        const { data: invitation, error } = await supabase
-            .from('workspace_invitations')
-            .select('*, workspaces(name, icon)')
-            .eq('token', token)
-            .maybeSingle();
-
-        if (error || !invitation) return { status: 'invalid' };
-
-        if (invitation.status === 'accepted') return { status: 'accepted' };
-        if (invitation.status !== 'pending') return { status: 'invalid' };
-        if (new Date(invitation.expires_at) < new Date()) return { status: 'expired' };
-
-        const ws = invitation.workspaces as any;
-        return {
-            status: 'loading', // caller will determine the next step
-            info: {
-                workspaceName: ws?.name || 'the workspace',
-                workspaceIcon: ws?.icon,
-                role: invitation.role,
-                email: invitation.email,
-            },
-            workspaceId: invitation.workspace_id,
-        };
-    } catch {
-        return { status: 'invalid' };
-    }
-}
-
-// ─── Main content component ───────────────────────────────────────────────────
+// ─── Main content (must be inside Suspense because useSearchParams is used) ───
 
 function InvitationContent() {
     const router = useRouter();
@@ -83,7 +42,6 @@ function InvitationContent() {
 
     const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
     const [invInfo, setInvInfo] = useState<InvitationInfo | null>(null);
-    const [workspaceId, setWorkspaceId] = useState<string>('');
 
     // OTP entry state
     const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -91,7 +49,18 @@ function InvitationContent() {
     const [otpError, setOtpError] = useState<string | null>(null);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-    // ── Load invitation details ──────────────────────────────────────────────
+    // Resend state
+    const [isResending, setIsResending] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    // Cooldown timer
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+        return () => clearTimeout(timer);
+    }, [resendCooldown]);
+
+    // ── Load invitation details via server API (no client-side Supabase, no RLS issues) ──
     useEffect(() => {
         if (!hasHydrated) return;
 
@@ -101,43 +70,54 @@ function InvitationContent() {
                 return;
             }
 
-            const result = await fetchInvitationInfo(token);
-
-            if (result.status === 'invalid') { setPageStatus('invalid'); return; }
-            if (result.status === 'expired') { setPageStatus('expired'); return; }
-            if (result.status === 'accepted') { setPageStatus('accepted'); return; }
-
-            setInvInfo(result.info!);
-            setWorkspaceId(result.workspaceId!);
-
-            if (!isAuthenticated || !currentUser) {
-                // Not logged in — need to sign up or sign in first
-                setPageStatus('needs_auth');
-                return;
-            }
-
-            // Logged in — check if already a member
             try {
-                const { getSupabaseClient } = await import('@/lib/supabase/client');
-                const supabase = getSupabaseClient();
-                if (supabase) {
-                    const { data: membership } = await supabase
-                        .from('workspace_memberships')
-                        .select('id')
-                        .eq('workspace_id', result.workspaceId!)
-                        .eq('user_id', currentUser.id)
-                        .eq('status', 'active')
-                        .maybeSingle();
+                // Call our server-side route that uses service-role client (bypasses RLS)
+                const res = await fetch(`/api/invitation-lookup?token=${encodeURIComponent(token)}`);
+                const data = await res.json();
 
-                    if (membership) {
+                if (!res.ok || data.error) {
+                    setPageStatus('invalid');
+                    return;
+                }
+
+                if (data.status === 'invalid') { setPageStatus('invalid'); return; }
+                if (data.status === 'expired') { setPageStatus('expired'); return; }
+                if (data.status === 'accepted') { setPageStatus('accepted'); return; }
+
+                // Valid invitation
+                const info: InvitationInfo = {
+                    workspaceName: data.workspaceName,
+                    workspaceIcon: data.workspaceIcon,
+                    role: data.role,
+                    email: data.email,
+                    workspaceId: data.workspaceId,
+                };
+                setInvInfo(info);
+
+                if (!isAuthenticated || !currentUser) {
+                    setPageStatus('needs_auth');
+                    return;
+                }
+
+                // Logged in — check if already a member (also via API to avoid RLS issues)
+                try {
+                    const memberRes = await fetch(
+                        `/api/invitation-lookup?token=${encodeURIComponent(token)}&checkMember=${currentUser.id}`
+                    );
+                    const memberData = await memberRes.json();
+                    if (memberData.isMember) {
                         setPageStatus('already_member');
                         return;
                     }
+                } catch {
+                    // fall through to OTP
                 }
-            } catch { /* fall through to OTP */ }
 
-            // Logged in, not a member yet — show OTP entry
-            setPageStatus('enter_otp');
+                setPageStatus('enter_otp');
+            } catch (err) {
+                console.error('[invitation page] Error loading invitation:', err);
+                setPageStatus('invalid');
+            }
         }
 
         init();
@@ -171,7 +151,7 @@ function InvitationContent() {
         inputRefs.current[Math.min(pasted.length, 5)]?.focus();
     };
 
-    // ── Verify OTP ───────────────────────────────────────────────────────────
+    // ── Verify workspace OTP ─────────────────────────────────────────────────
     const handleVerifyOtp = async () => {
         const otp = otpDigits.join('');
         if (otp.length < 6) {
@@ -206,14 +186,46 @@ function InvitationContent() {
                 return;
             }
 
-            // Refresh workspaces and go to dashboard
+            // Success — refresh workspaces and navigate to dashboard
             await fetchUserWorkspaces(currentUser.id);
             toast.success(`Welcome to ${invInfo?.workspaceName || 'the workspace'}! 🎉`);
-            router.push('/notes');
+            router.push('/');
         } catch {
             setOtpError('Something went wrong. Please try again.');
         } finally {
             setIsVerifying(false);
+        }
+    };
+
+    // ── Resend workspace OTP ─────────────────────────────────────────────────
+    const handleResendCode = async () => {
+        if (isResending || resendCooldown > 0) return;
+
+        setIsResending(true);
+        setOtpError(null);
+
+        try {
+            const res = await fetch('/api/resend-workspace-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invitationToken: token }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                toast.error(data.error || 'Failed to resend code. Please try again.');
+                return;
+            }
+
+            toast.success(`A new workspace code has been sent to ${invInfo?.email}`);
+            setOtpDigits(['', '', '', '', '', '']);
+            inputRefs.current[0]?.focus();
+            setResendCooldown(60);
+        } catch {
+            toast.error('Something went wrong. Please try again.');
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -225,16 +237,17 @@ function InvitationContent() {
         .toUpperCase()
         .slice(0, 2) || 'W';
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────
     // Render
-    // ─────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────
 
+    // Loading
     if (pageStatus === 'loading') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-                <Card className="w-full max-w-md">
-                    <CardContent className="flex flex-col items-center justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Card className="w-full max-w-md shadow-lg">
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                         <p className="mt-4 text-muted-foreground">Loading invitation…</p>
                     </CardContent>
                 </Card>
@@ -242,71 +255,80 @@ function InvitationContent() {
         );
     }
 
+    // Invalid / Expired
     if (pageStatus === 'invalid' || pageStatus === 'expired') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-                <Card className="w-full max-w-md">
-                    <CardContent className="flex flex-col items-center justify-center py-12">
+                <Card className="w-full max-w-md shadow-lg">
+                    <CardContent className="flex flex-col items-center justify-center py-14">
                         {pageStatus === 'expired' ? (
                             <>
-                                <div className="h-16 w-16 rounded-full bg-yellow-100 flex items-center justify-center mb-4">
+                                <div className="h-16 w-16 rounded-full bg-yellow-100 flex items-center justify-center mb-5">
                                     <Clock className="h-8 w-8 text-yellow-600" />
                                 </div>
                                 <h2 className="text-xl font-semibold mb-2">Invitation Expired</h2>
-                                <p className="text-muted-foreground text-center mb-6">
+                                <p className="text-muted-foreground text-center text-sm mb-6">
                                     This invitation link has expired. Please ask the workspace admin to send a new one.
                                 </p>
                             </>
                         ) : (
                             <>
-                                <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                                <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mb-5">
                                     <XCircle className="h-8 w-8 text-red-600" />
                                 </div>
                                 <h2 className="text-xl font-semibold mb-2">Invalid Invitation</h2>
-                                <p className="text-muted-foreground text-center mb-6">
+                                <p className="text-muted-foreground text-center text-sm mb-6">
                                     This invitation link is invalid or has already been used.
                                 </p>
                             </>
                         )}
-                        <Link href="/signin"><Button>Go to Sign In</Button></Link>
+                        <Link href="/signin">
+                            <Button>Go to Sign In</Button>
+                        </Link>
                     </CardContent>
                 </Card>
             </div>
         );
     }
 
+    // Already a member
     if (pageStatus === 'already_member') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-                <Card className="w-full max-w-md">
-                    <CardContent className="flex flex-col items-center justify-center py-12">
-                        <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                <Card className="w-full max-w-md shadow-lg">
+                    <CardContent className="flex flex-col items-center justify-center py-14">
+                        <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-5">
                             <CheckCircle className="h-8 w-8 text-green-600" />
                         </div>
                         <h2 className="text-xl font-semibold mb-2">Already a Member</h2>
-                        <p className="text-muted-foreground text-center mb-6">
+                        <p className="text-muted-foreground text-center text-sm mb-6">
                             You're already a member of <strong>{invInfo?.workspaceName}</strong>.
                         </p>
-                        <Link href="/notes"><Button>Go to Dashboard</Button></Link>
+                        <Link href="/">
+                            <Button>Go to Dashboard</Button>
+                        </Link>
                     </CardContent>
                 </Card>
             </div>
         );
     }
 
+    // Already accepted
     if (pageStatus === 'accepted') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-                <Card className="w-full max-w-md">
-                    <CardContent className="flex flex-col items-center justify-center py-12">
-                        <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                <Card className="w-full max-w-md shadow-lg">
+                    <CardContent className="flex flex-col items-center justify-center py-14">
+                        <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-5">
                             <CheckCircle className="h-8 w-8 text-green-600" />
                         </div>
-                        <h2 className="text-xl font-semibold mb-2">Invitation Already Accepted</h2>
-                        <p className="text-muted-foreground text-center mb-6">
-                            This invitation has already been accepted.
+                        <h2 className="text-xl font-semibold mb-2">Already Accepted</h2>
+                        <p className="text-muted-foreground text-center text-sm mb-6">
+                            This invitation has already been accepted. Sign in to access the workspace.
                         </p>
-                        <Link href="/notes"><Button>Go to Dashboard</Button></Link>
+                        <Link href="/signin">
+                            <Button>Sign In</Button>
+                        </Link>
                     </CardContent>
                 </Card>
             </div>
@@ -317,42 +339,46 @@ function InvitationContent() {
     if (pageStatus === 'needs_auth') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
+                <Card className="w-full max-w-md shadow-lg">
+                    <CardHeader className="text-center pb-2">
                         <div className="flex justify-center mb-4">
-                            <Avatar className="h-16 w-16 rounded-xl">
-                                <AvatarImage src={invInfo?.workspaceIcon} />
-                                <AvatarFallback className="rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xl">
+                            <Avatar className="h-16 w-16 rounded-2xl">
+                                <AvatarImage src={invInfo?.workspaceIcon ?? undefined} />
+                                <AvatarFallback className="rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xl font-bold">
                                     {workspaceInitials}
                                 </AvatarFallback>
                             </Avatar>
                         </div>
-                        <CardTitle>You're invited to join</CardTitle>
-                        <CardDescription className="text-lg font-semibold text-foreground">
-                            {invInfo?.workspaceName}
+                        <CardTitle className="text-xl">You've been invited!</CardTitle>
+                        <CardDescription className="text-base font-medium text-foreground mt-1">
+                            Join <span className="font-semibold">{invInfo?.workspaceName}</span> on Venture CRM
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 pt-4">
                         <p className="text-center text-muted-foreground text-sm">
-                            To accept this invitation, please create an account or sign in.
-                            You'll then enter the workspace access code from your invitation email.
+                            To accept this invitation, create an account or sign in.
+                            You'll then enter the workspace access code sent to <strong>{invInfo?.email}</strong>.
                         </p>
-                        <div className="flex flex-col gap-3">
-                            {/* New users: sign up first, then come back here */}
-                            <Link href={`/signup?invitation=${token}`}>
+
+                        <div className="flex flex-col gap-3 pt-2">
+                            {/* New user: sign up, then come back to enter OTP */}
+                            <Link href={`/signup?invitation=${token}&email=${encodeURIComponent(invInfo?.email || '')}`} className="w-full">
                                 <Button className="w-full" size="lg">
                                     Create Account
                                 </Button>
                             </Link>
-                            {/* Existing users: sign in, then come back here */}
-                            <Link href={`/signin?invitation=${token}`}>
+
+                            {/* Existing user: sign in, then come back to enter OTP */}
+                            <Link href={`/signin?invitation=${token}`} className="w-full">
                                 <Button variant="outline" className="w-full" size="lg">
-                                    Sign In
+                                    Sign In to Existing Account
                                 </Button>
                             </Link>
                         </div>
+
                         <p className="text-center text-xs text-muted-foreground pt-2">
-                            You'll be asked for a workspace access code after signing in.
+                            The invitation was sent to <strong>{invInfo?.email}</strong>.
+                            Make sure to sign in with that email address.
                         </p>
                     </CardContent>
                 </Card>
@@ -360,59 +386,54 @@ function InvitationContent() {
         );
     }
 
-    // ── Authenticated: show OTP entry ────────────────────────────────────────
+    // ── Signed in: enter workspace OTP ───────────────────────────────────────
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader className="text-center">
+            <Card className="w-full max-w-md shadow-lg">
+                <CardHeader className="text-center pb-2">
                     <div className="flex justify-center mb-4">
-                        <Avatar className="h-20 w-20 rounded-2xl">
-                            <AvatarImage src={invInfo?.workspaceIcon} />
-                            <AvatarFallback className="rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl">
+                        <Avatar className="h-16 w-16 rounded-2xl">
+                            <AvatarImage src={invInfo?.workspaceIcon ?? undefined} />
+                            <AvatarFallback className="rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xl font-bold">
                                 {workspaceInitials}
                             </AvatarFallback>
                         </Avatar>
                     </div>
-                    <CardTitle className="text-2xl">Join {invInfo?.workspaceName}</CardTitle>
-                    <CardDescription>
-                        Enter the 6-digit workspace access code from your invitation email to continue.
+                    <CardTitle className="text-xl">Enter Workspace Code</CardTitle>
+                    <CardDescription className="mt-1">
+                        Enter the 6-digit code from your invitation email to join{' '}
+                        <span className="font-semibold text-foreground">{invInfo?.workspaceName}</span>
                     </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-6">
-                    {/* OTP hint */}
-                    <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                        <Mail className="h-4 w-4 mt-0.5 shrink-0" />
-                        <p>
-                            We sent a 6-digit access code to <strong>{invInfo?.email}</strong> along with your invitation.
-                        </p>
+                <CardContent className="space-y-6 pt-4">
+                    {/* OTP digit inputs */}
+                    <div className="flex justify-center gap-2" onPaste={handleDigitPaste}>
+                        {otpDigits.map((digit, i) => (
+                            <input
+                                key={i}
+                                ref={(el) => { inputRefs.current[i] = el; }}
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleDigitChange(i, e.target.value)}
+                                onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                                className={`w-12 h-14 text-center text-xl font-bold border-2 rounded-lg outline-none transition-colors
+                                    ${otpError
+                                        ? 'border-red-400 bg-red-50 focus:border-red-500'
+                                        : 'border-gray-200 bg-white focus:border-black'
+                                    }`}
+                            />
+                        ))}
                     </div>
 
-                    {/* 6-digit OTP input */}
-                    <div className="space-y-3">
-                        <Label className="text-sm font-medium">Workspace Access Code</Label>
-                        <div className="flex gap-2 justify-center">
-                            {otpDigits.map((digit, i) => (
-                                <Input
-                                    key={i}
-                                    ref={el => { inputRefs.current[i] = el; }}
-                                    type="text"
-                                    inputMode="numeric"
-                                    maxLength={1}
-                                    value={digit}
-                                    onChange={e => handleDigitChange(i, e.target.value)}
-                                    onKeyDown={e => handleDigitKeyDown(i, e)}
-                                    onPaste={i === 0 ? handleDigitPaste : undefined}
-                                    className={`w-11 h-12 text-center text-lg font-bold ${otpError ? 'border-red-500' : ''}`}
-                                    autoFocus={i === 0}
-                                />
-                            ))}
-                        </div>
-                        {otpError && (
-                            <p className="text-sm text-red-500 text-center">{otpError}</p>
-                        )}
-                    </div>
+                    {/* Error message */}
+                    {otpError && (
+                        <p className="text-sm text-red-600 text-center -mt-2">{otpError}</p>
+                    )}
 
+                    {/* Verify button */}
                     <Button
                         onClick={handleVerifyOtp}
                         disabled={isVerifying || otpDigits.join('').length < 6}
@@ -427,26 +448,57 @@ function InvitationContent() {
                         ) : (
                             <>
                                 <KeyRound className="mr-2 h-4 w-4" />
-                                Verify & Join Workspace
+                                Join Workspace
                             </>
                         )}
                     </Button>
 
                     <p className="text-center text-xs text-muted-foreground">
-                        Signed in as <strong>{currentUser?.email}</strong>.{' '}
-                        <Link href="/notes" className="underline">Go to dashboard instead</Link>
+                        Check your email at <strong>{invInfo?.email}</strong> for the 6-digit code.
                     </p>
+
+                    {/* Resend code */}
+                    <div className="text-center">
+                        <p className="text-sm text-muted-foreground">
+                            Didn't receive the code?{' '}
+                            {resendCooldown > 0 ? (
+                                <span className="text-muted-foreground">
+                                    Resend in {resendCooldown}s
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={handleResendCode}
+                                    disabled={isResending}
+                                    className="inline-flex items-center gap-1 font-medium text-black hover:underline disabled:opacity-50"
+                                >
+                                    {isResending ? (
+                                        <>
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Sending…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RefreshCw className="h-3 w-3" />
+                                            Resend workspace code
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
         </div>
     );
 }
 
+// ─── Page wrapper with Suspense ───────────────────────────────────────────────
+
 export default function InvitationPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+                <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
             </div>
         }>
             <InvitationContent />

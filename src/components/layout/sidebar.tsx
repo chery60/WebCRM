@@ -115,6 +115,8 @@ const databaseNavItems: NavItem[] = [
 
 const bottomNavItems: NavItem[] = [
   // { title: 'Integrations', href: '/integrations', icon: Puzzle }, // TODO: Scoped out for later
+  { title: 'Repositories', href: '/repositories', icon: FolderOpen },
+  { title: 'Prototypes', href: '/prototypes', icon: LayoutDashboard },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 

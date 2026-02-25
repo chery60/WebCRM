@@ -87,7 +87,7 @@ interface EmployeeState {
     deactivateEmployees: (ids: string[], currentUserRole: string, currentUserId: string) => Promise<boolean>;
 
     // Invitation
-    sendInvitation: (employeeId: string, currentUserRole: string) => Promise<boolean>;
+    sendInvitation: (employeeId: string, currentUserRole: string, invitedBy?: string) => Promise<boolean>;
 
     // Helpers
     getFilteredEmployees: () => Employee[];
@@ -313,21 +313,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
                 try {
                     // Pass workspaceId in the data
                     newEmployee = await employeesRepository.create({ ...data, workspaceId }, currentUserId);
-                    
-                    if (newEmployee) {
-                        // Create workspace invitation for the new employee
-                        const invitation = await supabaseWorkspacesRepository.createInvitation(
-                            workspaceId!,
-                            data.email,
-                            data.role || 'member',
-                            currentUserId
-                        );
-                        
-                        if (!invitation) {
-                            console.warn('[Employee Store] Employee created but workspace invitation failed');
-                            toast.warning('Employee created, but invitation email may not have been sent.');
-                        }
-                    }
+                    // Invitation is created server-side in /api/invite (called via sendInvitation below)
+                    // Do NOT call createInvitation here — it uses client-side Supabase which fails with auth errors
                 } catch (createError: any) {
                     // Handle specific database errors
                     const errorMessage = createError?.message || '';
@@ -409,8 +396,9 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
             toast.success('Employee added successfully');
 
             // Auto-send invitation (non-blocking - don't fail if this fails)
+            // Pass currentUserId as invitedBy so the server can set it on workspace_invitations
             try {
-                await get().sendInvitation(newEmployee.id, currentUserRole);
+                await get().sendInvitation(newEmployee.id, currentUserRole, currentUserId);
             } catch (inviteError) {
                 console.warn('Failed to send invitation, but employee was created successfully:', inviteError);
                 // Don't throw - employee creation succeeded
@@ -624,7 +612,12 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     },
 
     // Send invitation email
-    sendInvitation: async (employeeId, currentUserRole) => {
+    // The /api/invite route handles everything server-side:
+    //   - creates workspace_invitations record (with token)
+    //   - generates and stores OTP in pending_otps
+    //   - sends the email
+    // No client-side Supabase calls here to avoid auth token issues.
+    sendInvitation: async (employeeId, currentUserRole, invitedBy) => {
         if (currentUserRole !== 'admin' && currentUserRole !== 'owner') {
             toast.error('Only admins can send invitations');
             return false;
@@ -638,133 +631,59 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
             } else {
                 employee = await db.employees.get(employeeId);
             }
-            
+
             if (!employee) {
                 toast.error('Employee not found');
                 return false;
             }
 
-            // Get workspace invitation token (not employee invitation token)
-            let invitationToken = employee.invitationToken;
-            
-            if (USE_SUPABASE && employee.workspaceId) {
-                // Try to get the workspace invitation
-                const { getSupabaseClient } = await import('@/lib/supabase/client');
-                const supabase = getSupabaseClient();
-                
-                if (supabase) {
-                    const { data: invitation } = await supabase
-                        .from('workspace_invitations')
-                        .select('token')
-                        .eq('workspace_id', employee.workspaceId)
-                        .eq('email', employee.email)
-                        .eq('status', 'pending')
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-                    
-                    if (invitation?.token) {
-                        invitationToken = invitation.token;
-                    }
-                }
-            }
-
-            // Using 'invitation' param for workspace invitations
-            const invitationUrl = `${window.location.origin}/invitation?token=${invitationToken}`;
             const employeeName = getEmployeeFullName(employee);
 
-            // Get workspace name for the email
-            let workspaceName = 'the workspace';
-            if (USE_SUPABASE && employee.workspaceId) {
-                try {
-                    const { getSupabaseClient: getClient } = await import('@/lib/supabase/client');
-                    const supabaseClient = getClient();
-                    if (supabaseClient) {
-                        const { data: ws } = await supabaseClient
-                            .from('workspaces')
-                            .select('name')
-                            .eq('id', employee.workspaceId)
-                            .single();
-                        if (ws?.name) workspaceName = ws.name;
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-
+            // POST to /api/invite — fully server-side, uses admin Supabase client
+            // invitedBy is the admin's userId — required for workspace_invitations.invited_by (NOT NULL)
             const response = await fetch('/api/invite', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email: employee.email,
                     name: employeeName,
-                    signupUrl: invitationUrl,
-                    invitationToken: invitationToken,
                     senderName: 'Venture CRM Admin',
                     workspaceId: employee.workspaceId,
-                    workspaceName,
+                    workspaceName: '',
+                    employeeId: employee.id,
+                    invitedBy: invitedBy || employee.invitedBy,
                 }),
             });
 
             const data = await response.json().catch(() => ({}));
 
             if (!response.ok) {
-                console.error('Invitation API error:', data);
-                
-                // If it's an auth error, the user might need to refresh
-                if (response.status === 401) {
-                    console.warn('Authentication failed. User may need to sign in again.');
-                    console.log('=== INVITATION LINK (Auth Failed) ===');
-                    console.log(`To: ${employee.email}`);
-                    console.log(`Link: ${invitationUrl}`);
-                    console.log('=====================================');
-                    
-                    toast.warning('Employee added successfully, but could not send invitation email. Check console for invitation link.');
-                    return true; // Don't fail - employee was created successfully
-                }
-                
-                throw new Error(data.error || 'Failed to send invitation');
+                console.error('[sendInvitation] API error:', data);
+                toast.warning('Employee added, but failed to send invitation. Check server logs.');
+                return true; // Employee was already created — don't fail the whole flow
             }
 
-            // Check if email was actually sent
             if (data.emailSent === false) {
-                // Email service not configured, but invitation was created
-                console.log('=== INVITATION LINK (No Email Service) ===');
-                console.log(`To: ${employee.email}`);
-                console.log(`Link: ${invitationUrl}`);
-                console.log('==========================================');
-                
-                toast.success(`Employee added! Share this link: ${invitationUrl}`, {
-                    duration: 10000, // Show for 10 seconds
-                });
+                // SMTP not configured — show the link so the admin can share it manually
+                const link = data.invitationUrl || '';
+                console.log(`\n=== INVITATION LINK (no SMTP) ===`);
+                console.log(`To:   ${employee.email}`);
+                console.log(`Link: ${link}`);
+                console.log(`OTP:  ${data.otp || '(see server logs)'}`);
+                console.log(`=================================\n`);
+                toast.info(
+                    `No email service configured. Share this link with ${employee.email}: ${link}`,
+                    { duration: 12000 }
+                );
             } else {
                 toast.success(`Invitation email sent to ${employee.email}`);
             }
-            
+
             return true;
         } catch (error) {
-            console.error('Error sending invitation:', error);
-            
-            // Fallback: Show the invitation link even if email fails
-            if (employee) {
-                const fallbackUrl = `${window.location.origin}/invitation?token=${employee.invitationToken}`;
-                console.log('=== FALLBACK INVITATION LINK ===');
-                console.log(`To: ${employee.email}`);
-                console.log(`Link: ${fallbackUrl}`);
-                console.log('================================');
-                
-                // Don't show error - show warning with link instead
-                toast.warning(`Could not send email. Share this link with ${employee.email}: ${fallbackUrl}`, {
-                    duration: 10000,
-                });
-                
-                return true; // Return success since employee was created
-            }
-
-            toast.error('Failed to send invitation email');
-            return false;
+            console.error('[sendInvitation] Unexpected error:', error);
+            toast.warning('Employee added, but invitation could not be sent. Please try again.');
+            return true; // Employee creation succeeded
         }
     },
 

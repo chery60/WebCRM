@@ -39,19 +39,21 @@ export async function POST(request: Request) {
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 60 minutes
 
         // Store OTP in the pending_otps table
-        // First, delete any existing OTP for this email
+        // Only delete existing email_verification OTPs — never touch workspace_invite OTPs
         await supabaseAdmin
             .from('pending_otps')
             .delete()
-            .eq('email', email);
+            .eq('email', email)
+            .eq('type', 'email_verification');
 
-        // Insert the new OTP
+        // Insert the new email verification OTP
         const { error: insertError } = await supabaseAdmin
             .from('pending_otps')
             .insert({
                 email,
                 otp_code: otpCode,
                 expires_at: expiresAt,
+                type: 'email_verification',
             });
 
         if (insertError) {
