@@ -193,49 +193,73 @@ REQUIRED EDGES: gateway→auth, auth→each endpoint group.
 
 Use ACTUAL resource names from the PRD (e.g. /users, /workspaces, /notes).`,
 
-  'wireframe': `You are a senior UI/UX designer creating a low-fidelity wireframe from a PRD. Think spatially — model the screen as a hierarchy of real UI components positioned inside a frame, exactly like a Figma wireframe or v0/Lovable output.
+  'wireframe': `You are a senior UI/UX designer. Your task is to produce a detailed, accurate low-fidelity wireframe from the PRD below, following the same spatial and content principles used by v0 (Vercel) and Lovable.
 
-SCREEN MODEL:
-Pick the MOST IMPORTANT screen from the PRD and wireframe it completely with all its UI components.
+════════════════════════════════════════
+SCREEN SELECTION
+════════════════════════════════════════
+Pick the single MOST IMPORTANT screen from the PRD (e.g. the main dashboard, the core workflow screen, or the primary feature screen). Wireframe it completely with ALL its visible UI components.
 
-REQUIRED NODE GROUPS (include every group that applies to this screen):
-- "screen": The outer app frame — 1 node, label = screen name (e.g. "Dashboard Screen", "Settings Page")
-- "topbar": Full-width top navigation bar — 1 node, label = app name + nav links (e.g. "MyApp  |  Dashboard  Projects  Team  Settings  [Avatar]")
-- "sidebar": Left sidebar nav — 0-1 nodes, label = vertical list of nav items with icons (e.g. "📊 Overview\\n📁 Projects\\n👥 Team\\n⚙️ Settings")
-- "breadcrumb": Page title / breadcrumb bar — 0-1 nodes (e.g. "Projects > Alpha Launch > Settings")
-- "toolbar": Secondary action bar with search + filters — 0-1 nodes (e.g. "🔍 Search...   [+ New]   [Filter ▼]   [Sort ▼]")
-- "card": Metric / summary / content cards — 2-5 nodes, each labeled with REAL metric names + values from the PRD (e.g. "Total Projects\\n━━━━━━━━━━\\n12 active")
-- "table": Data table or list view — 0-2 nodes, label = real column headers from PRD (e.g. "Name | Status | Owner | Due Date | Actions")
-- "form": Input form / settings panel — 0-2 nodes, label = real field names (e.g. "Full Name\\nEmail Address\\nRole\\nNotifications")
-- "modal": Dialog / modal overlay — 0-1 nodes, label = modal title + key content (e.g. "Invite Team Member\\n━━━━━━━━━━\\nEmail: [________]")
-- "button": Primary CTA buttons — 1-4 nodes, use EXACT button labels from PRD (e.g. "+ Invite Member", "Save Changes", "Export CSV")
-- "badge": Status chips / tags — 0-4 nodes (e.g. "● Active", "⏸ Paused", "✓ Done", "🔴 Overdue")
-- "empty": Empty state — 0-1 nodes (e.g. "No projects yet\\nCreate your first project →")
-- "footer": Bottom bar — 0-1 nodes (e.g. "© 2025 MyApp  ·  Privacy  ·  Terms  ·  Help")
+════════════════════════════════════════
+NODE GROUPS — use EXACTLY these group names
+════════════════════════════════════════
+Include every group that applies to the chosen screen:
 
-SPATIAL HIERARCHY (edges reflect containment/relationship):
-- screen → topbar, sidebar, breadcrumb, toolbar, footer  (top-level layout zones)
-- toolbar → button  (action buttons inside toolbar)
-- card → badge  (status badges inside cards)
-- form → button  (submit button for form)
-- modal → button  (action buttons inside modal)
+• "screen"     — The outer app chrome / browser frame. 1 node. Label = screen name (e.g. "Dashboard", "Kanban Board", "Settings — Billing").
+• "topbar"     — Full-width top navigation bar. 1 node. Label = app logo + primary nav items + right-side icons, all on ONE line separated by spaces (e.g. "Acme  Dashboard  Projects  Team  Settings        🔔  👤 Admin").
+• "sidebar"    — Left vertical navigation. 0–1 nodes. Label = each nav item on its own line with icon (e.g. "📊 Overview\\n📁 Projects\\n🗂 Pipelines\\n👥 Team\\n⚙️ Settings\\n─────\\n🆘 Help").
+• "breadcrumb" — Page title / breadcrumb / section header. 0–1 nodes. Label = "Section > Sub-page" or just the H1 page title (e.g. "Projects > Alpha Launch > Settings").
+• "toolbar"    — Secondary action bar: search field + filter/sort controls + primary CTA. 0–1 nodes. Label = "🔍 Search [___________]    [+ New Project]    [Filter ▼]    [Sort: Name ▼]".
+• "card"       — KPI / metric / summary card. 2–5 nodes. EACH card label MUST use real metric names from the PRD + a plausible value, formatted with a divider (e.g. "Monthly Revenue\\n──────────\\n$48,200\\n▲ 12% vs last month"). Never use "Card 1".
+• "table"      — Data table or list panel. 0–2 nodes. Label = real column headers pipe-separated (e.g. "Project Name  |  Status  |  Owner  |  Due Date  |  ⋮").
+• "form"       — Input form / settings panel. 0–2 nodes. Label = each real field on its own line (e.g. "Full Name\\nWork Email\\nRole\\nDepartment\\nNotify by Email  [ ]"). Extract field names from the PRD.
+• "modal"      — Dialog overlay. 0–1 nodes. Label = modal title + horizontal rule + key fields/actions (e.g. "Invite Team Member\\n──────────────\\nEmail Address: [__________]\\nRole: [Admin ▼]").
+• "button"     — Action button. 1–5 nodes. Label = EXACT CTA text from the PRD (e.g. "+ Invite Member", "Save Changes", "Export CSV", "Delete Project"). Never use "Button".
+• "badge"      — Status chip / tag. 0–4 nodes. Label = status with icon (e.g. "● Active", "⏸ Paused", "✓ Complete", "🔴 Overdue", "🟡 In Review").
+• "empty"      — Empty / zero-state panel. 0–1 nodes. Label = headline + sub-action (e.g. "No projects yet\\nCreate your first project →").
+• "footer"     — Bottom status bar or footer links. 0–1 nodes. Label = copyright + links (e.g. "© 2025 Acme Inc  ·  Privacy Policy  ·  Terms  ·  Help Center").
 
-CONTENT RULES (from v0/Lovable best practices):
-1. Use ONLY real names from the PRD — never "Card 1", "Button A", "Content Area"
-2. If PRD mentions a dashboard → extract real KPI names (Revenue, Users, Conversions, etc.)
-3. If PRD mentions a table → extract real column headers from the PRD
-4. If PRD mentions forms → extract real field names (First Name, Email, Plan Type, etc.)
-5. If PRD mentions team/users → show real role names in the sidebar or topbar
-6. Every button must have a real action label from the PRD ("Save Changes" not "Button")
-7. Labels can use \\n for multi-line content inside a component
+════════════════════════════════════════
+SPATIAL HIERARCHY — edges encode containment
+════════════════════════════════════════
+Add edges for these containment relationships (add only those that exist in your output):
+  screen → topbar          (topbar lives inside screen)
+  screen → sidebar         (sidebar lives inside screen)
+  screen → breadcrumb      (breadcrumb lives inside screen)
+  screen → toolbar         (toolbar lives inside screen)
+  screen → footer          (footer lives inside screen)
+  toolbar → button         (action buttons live inside toolbar)
+  card → badge             (status badges live inside their card)
+  form → button            (submit/cancel buttons belong to form)
+  modal → button           (dialog action buttons)
 
-MINIMUM: Generate 12-20 nodes total covering the full screen layout.
+════════════════════════════════════════
+CONTENT RULES (from v0 / Lovable best practices)
+════════════════════════════════════════
+1. REAL NAMES ONLY — every label must come from the PRD. Never write "Card 1", "Button A", "Label", "Content Area", "Item 1".
+2. KPI cards → extract real metric names mentioned in the PRD (e.g. "Active Users", "Monthly Revenue", "Conversion Rate", "Open Tickets").
+3. Tables → extract real column headers from the PRD data model or feature description.
+4. Forms → extract real field names from the PRD (sign-up fields, settings fields, etc.).
+5. Buttons → use exact CTA labels ("Save Changes", "Send Invite", "Run Report", "Connect Integration").
+6. Sidebar → use actual feature/module names from the PRD navigation or IA section.
+7. Use \\n inside a label for multi-line content (each \\n becomes a new line in the wireframe box).
+8. Use ── or ═══ as divider lines inside card/modal labels for visual separation.
+9. Generate between 12 and 22 nodes total for a comprehensive, realistic wireframe.
 
-OUTPUT FORMAT — JSON only, no prose:
+════════════════════════════════════════
+OUTPUT — strict JSON only, no prose, no markdown fences
+════════════════════════════════════════
 {
   "title": "[Screen Name] Wireframe",
-  "nodes": [ ... ],
-  "edges": [ ... ]
+  "nodes": [
+    { "id": "screen-main", "label": "Dashboard", "group": "screen" },
+    { "id": "topbar-main", "label": "Acme  Dashboard  Projects  Team  Settings        🔔  👤 Admin", "group": "topbar" },
+    ...
+  ],
+  "edges": [
+    { "from": "screen-main", "to": "topbar-main" },
+    ...
+  ]
 }`,
 
   'edge-cases': `Extract edge cases and error handling scenarios from the PRD.

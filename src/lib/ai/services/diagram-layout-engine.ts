@@ -190,19 +190,19 @@ const LAYOUT_CONFIGS: Record<CanvasGenerationType, LayoutConfig> = {
         strategy: 'wireframe',
         defaultShape: 'rectangle',
         groups: {
-            screen:     { shape: 'rectangle', color: '#f8f9fa', width: 900, height: 680 },
-            topbar:     { shape: 'rectangle', color: '#e8eaf6', width: 880, height: 52 },
-            sidebar:    { shape: 'rectangle', color: '#ede7f6', width: 180, height: 580 },
-            breadcrumb: { shape: 'rectangle', color: '#f3f3f3', width: 680, height: 36 },
-            toolbar:    { shape: 'rectangle', color: '#f5f5f5', width: 680, height: 44 },
-            card:       { shape: 'rectangle', color: '#ffffff', width: 200, height: 100 },
-            table:      { shape: 'rectangle', color: '#fafafa', width: 680, height: 130 },
-            form:       { shape: 'rectangle', color: '#fff8e1', width: 340, height: 160 },
-            modal:      { shape: 'rectangle', color: '#ffffff', width: 360, height: 220 },
-            button:     { shape: 'rectangle', color: '#e3f2fd', width: 140, height: 38 },
-            badge:      { shape: 'rectangle', color: '#e8f5e9', width: 80,  height: 28 },
-            empty:      { shape: 'rectangle', color: '#fafafa', width: 340, height: 100 },
-            footer:     { shape: 'rectangle', color: '#eceff1', width: 880, height: 40 },
+            screen:     { shape: 'rectangle', color: '#ffffff', width: 1060, height: 760, fontSize: 13 },
+            topbar:     { shape: 'rectangle', color: '#1e293b', width: 1040, height: 56, fontSize: 13 },
+            sidebar:    { shape: 'rectangle', color: '#f1f5f9', width: 200,  height: 660, fontSize: 13 },
+            breadcrumb: { shape: 'rectangle', color: '#f8fafc', width: 810,  height: 38,  fontSize: 13 },
+            toolbar:    { shape: 'rectangle', color: '#f1f5f9', width: 810,  height: 48,  fontSize: 13 },
+            card:       { shape: 'rectangle', color: '#f8fafc', width: 220,  height: 110, fontSize: 12 },
+            table:      { shape: 'rectangle', color: '#ffffff', width: 810,  height: 160, fontSize: 12 },
+            form:       { shape: 'rectangle', color: '#fafafa', width: 380,  height: 200, fontSize: 12 },
+            modal:      { shape: 'rectangle', color: '#ffffff', width: 420,  height: 260, fontSize: 13 },
+            button:     { shape: 'rectangle', color: '#3b82f6', width: 150,  height: 40,  fontSize: 13 },
+            badge:      { shape: 'rectangle', color: '#dcfce7', width: 100,  height: 30,  fontSize: 11 },
+            empty:      { shape: 'rectangle', color: '#f8fafc', width: 400,  height: 120, fontSize: 13 },
+            footer:     { shape: 'rectangle', color: '#f1f5f9', width: 1040, height: 44,  fontSize: 12 },
         },
     },
     'edge-cases': {
@@ -297,6 +297,7 @@ export function layoutDiagram(
             x, y, width: w, height: h,
             backgroundColor: groupConfig.color,
             boundTextId: textId,
+            group: node.group,
         }));
 
         // Create bound text
@@ -306,12 +307,18 @@ export function layoutDiagram(
             x, y, width: w, height: h,
             text: node.label,
             fontSize: groupConfig.fontSize || 14,
+            group: node.group,
         }));
 
         idx++;
     }
 
     // 3. Arrow elements with proper bindings
+    // For wireframe diagrams, containment edges (screen→topbar etc.) are purely
+    // structural — skip drawing visible arrows for them so the canvas stays clean.
+    const isWireframe = diagramType === 'wireframe';
+    const wireframeContainerGroups = new Set(['screen', 'toolbar', 'card', 'form', 'modal']);
+
     for (const edge of graph.edges) {
         const fromId = idMap.get(edge.from);
         const toId = idMap.get(edge.to);
@@ -320,6 +327,16 @@ export function layoutDiagram(
         const fromEl = elements.find(e => e.id === fromId);
         const toEl = elements.find(e => e.id === toId);
         if (!fromEl || !toEl) continue;
+
+        // For wireframe: skip arrows from structural container groups
+        if (isWireframe) {
+            const fromNode = graph.nodes.find(n => n.id === edge.from);
+            if (fromNode && wireframeContainerGroups.has(fromNode.group)) {
+                // Don't draw an arrow — the spatial layout already communicates containment
+                idx++;
+                continue;
+            }
+        }
 
         const arrowId = `arrow-${timestamp}-${idx}`;
 
@@ -725,22 +742,20 @@ function layoutTable(
     return positions;
 }
 
-// ─── Wireframe (spatial UI layout — the core improvement) ────────────────────
+// ─── Wireframe (spatial UI layout) ───────────────────────────────────────────
 //
-// Models a real screen with proper spatial zones:
-//
-//  ┌─────────────────────────────────────────────────────────┐  ← screen
-//  │  [topbar: nav links]                              [🔔👤]  │
-//  ├──────────┬──────────────────────────────────────────────┤
-//  │ sidebar  │ [breadcrumb]                                  │
-//  │  nav 1   ├──────────────────────────────────────────────┤
-//  │  nav 2   │ [toolbar: search + actions]                   │
-//  │  nav 3   ├──────────────────────────────────────────────┤
-//  │          │ [card][card][card]   ← metrics row            │
-//  │          ├──────────────────────────────────────────────┤
-//  │          │ [table / form / empty]                        │
-//  └──────────┴──────────────────────────────────────────────┘
-//  [footer]
+//  ┌────────────────────────────────────────────────────────────┐ ← screen
+//  │  [topbar: logo  nav items  ...  🔔 👤]                      │
+//  ├─────────┬──────────────────────────────────────────────────┤
+//  │ sidebar │ [breadcrumb]                                      │
+//  │  nav 1  ├──────────────────────────────────────────────────┤
+//  │  nav 2  │ [toolbar: 🔍 search  [+New]  [Filter▼]  [Sort▼]] │
+//  │  nav 3  ├──────────────────────────────────────────────────┤
+//  │         │ [card]  [card]  [card]  [card]   ← KPI row        │
+//  │         ├──────────────────────────────────────────────────┤
+//  │         │ [table / form / empty state]                      │
+//  └─────────┴──────────────────────────────────────────────────┘
+//  [footer: © links]
 //
 // Modal floats centered over the screen when present.
 
@@ -750,50 +765,52 @@ function layoutWireframe(
 ): Map<string, { x: number; y: number }> {
     const positions = new Map<string, { x: number; y: number }>();
 
-    // ── Screen origin (everything is relative to this) ──────────────────────
-    const SCREEN_X = 60;
-    const SCREEN_Y = 60;
-    const SCREEN_W = 900;
-    const SCREEN_H = 680;
+    // ── Dimensions (match the updated GroupConfig sizes) ────────────────────
+    const SCREEN_X  = 40;
+    const SCREEN_Y  = 40;
+    const SCREEN_W  = config.groups['screen']?.width  || 1060;
+    const SCREEN_H  = config.groups['screen']?.height || 760;
+    const TOPBAR_H  = config.groups['topbar']?.height || 56;
+    const SIDEBAR_W = config.groups['sidebar']?.width || 200;
+    const FOOTER_H  = config.groups['footer']?.height || 44;
+    const PADDING   = 12;
 
-    const TOPBAR_H = 52;
-    const SIDEBAR_W = 180;
-    const FOOTER_H = 40;
-    const PADDING = 10;
-
-    // Content zone (right of sidebar, below topbar, above footer)
+    // Content zone flags
     const hasSidebar = graph.nodes.some(n => n.group === 'sidebar');
     const hasFooter  = graph.nodes.some(n => n.group === 'footer');
 
-    const contentX = SCREEN_X + (hasSidebar ? SIDEBAR_W + PADDING : PADDING);
-    const contentW = SCREEN_W - (hasSidebar ? SIDEBAR_W + PADDING : PADDING) - PADDING;
-    const contentY = SCREEN_Y + TOPBAR_H + PADDING;
+    // Content zone: right of sidebar, below topbar, above footer
+    const contentX  = SCREEN_X + (hasSidebar ? SIDEBAR_W + PADDING : PADDING);
+    const contentW  = SCREEN_W - (hasSidebar ? SIDEBAR_W + PADDING : PADDING) - PADDING;
+    const contentY  = SCREEN_Y + TOPBAR_H + PADDING;
     const contentMaxY = SCREEN_Y + SCREEN_H - (hasFooter ? FOOTER_H + PADDING : PADDING);
 
-    // Track running Y inside the content zone
+    // Running Y cursor inside content zone
     let runY = contentY;
 
+    // Track which button nodes have been positioned
+    const alreadyPositioned = new Set<string>();
+
     // ── 1. Screen container ─────────────────────────────────────────────────
-    const screenNodes = graph.nodes.filter(n => n.group === 'screen');
-    screenNodes.forEach(node => {
+    graph.nodes.filter(n => n.group === 'screen').forEach(node => {
         positions.set(node.id, { x: SCREEN_X, y: SCREEN_Y });
     });
 
-    // ── 2. Topbar (full-width, at top of screen) ────────────────────────────
-    const topbarNodes = graph.nodes.filter(n => n.group === 'topbar');
-    topbarNodes.forEach(node => {
+    // ── 2. Topbar — full-width strip at top ─────────────────────────────────
+    graph.nodes.filter(n => n.group === 'topbar').forEach(node => {
         positions.set(node.id, { x: SCREEN_X + PADDING, y: SCREEN_Y + PADDING });
     });
 
-    // ── 3. Sidebar (left column, below topbar) ──────────────────────────────
-    const sidebarNodes = graph.nodes.filter(n => n.group === 'sidebar');
-    sidebarNodes.forEach(node => {
-        positions.set(node.id, { x: SCREEN_X + PADDING, y: SCREEN_Y + TOPBAR_H + PADDING });
+    // ── 3. Sidebar — left column, below topbar ──────────────────────────────
+    graph.nodes.filter(n => n.group === 'sidebar').forEach(node => {
+        positions.set(node.id, {
+            x: SCREEN_X + PADDING,
+            y: SCREEN_Y + TOPBAR_H + PADDING,
+        });
     });
 
-    // ── 4. Footer (full-width, at bottom) ───────────────────────────────────
-    const footerNodes = graph.nodes.filter(n => n.group === 'footer');
-    footerNodes.forEach(node => {
+    // ── 4. Footer — full-width strip at bottom ──────────────────────────────
+    graph.nodes.filter(n => n.group === 'footer').forEach(node => {
         positions.set(node.id, {
             x: SCREEN_X + PADDING,
             y: SCREEN_Y + SCREEN_H - FOOTER_H - PADDING,
@@ -803,199 +820,205 @@ function layoutWireframe(
     // ── 5. Breadcrumb row ────────────────────────────────────────────────────
     const breadcrumbNodes = graph.nodes.filter(n => n.group === 'breadcrumb');
     if (breadcrumbNodes.length > 0) {
+        const bcH = config.groups['breadcrumb']?.height || 38;
         breadcrumbNodes.forEach(node => {
             positions.set(node.id, { x: contentX, y: runY });
         });
-        runY += 36 + PADDING;
+        runY += bcH + PADDING;
     }
 
     // ── 6. Toolbar row ────────────────────────────────────────────────────────
     const toolbarNodes = graph.nodes.filter(n => n.group === 'toolbar');
+    const toolbarH = config.groups['toolbar']?.height || 48;
     if (toolbarNodes.length > 0) {
         toolbarNodes.forEach(node => {
             positions.set(node.id, { x: contentX, y: runY });
         });
-        runY += 44 + PADDING;
+        // Toolbar-child buttons: right-aligned inside toolbar strip
+        const toolbarButtonIds = new Set(
+            graph.edges
+                .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'toolbar'))
+                .map(e => e.to)
+        );
+        const btnW = config.groups['button']?.width || 150;
+        const btnH = config.groups['button']?.height || 40;
+        let tbBtnX = contentX + contentW - btnW;
+        graph.nodes
+            .filter(n => n.group === 'button' && toolbarButtonIds.has(n.id))
+            .forEach(node => {
+                positions.set(node.id, {
+                    x: tbBtnX,
+                    y: runY + Math.round((toolbarH - btnH) / 2),
+                });
+                alreadyPositioned.add(node.id);
+                tbBtnX -= (btnW + 8);
+            });
+        runY += toolbarH + PADDING;
     }
 
-    // ── 7. Buttons in toolbar (inline after toolbar) ─────────────────────────
-    // Buttons that are children of toolbar get positioned to the right of it
-    const toolbarButtonEdges = graph.edges
-        .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'toolbar'))
-        .map(e => e.to);
-    const toolbarButtons = graph.nodes.filter(n => n.group === 'button' && toolbarButtonEdges.includes(n.id));
-    let btnX = contentX + contentW - 150;
-    toolbarButtons.forEach(node => {
-        // Place them right-aligned inside the toolbar row (above runY)
-        positions.set(node.id, { x: btnX, y: runY - 44 - PADDING + 3 });
-        btnX -= 150;
-    });
-
-    // ── 8. Metric cards row ───────────────────────────────────────────────────
+    // ── 7. KPI metric cards row ───────────────────────────────────────────────
     const cardNodes = graph.nodes.filter(n => n.group === 'card');
+    const cardW = config.groups['card']?.width  || 220;
+    const cardH = config.groups['card']?.height || 110;
+    const cardGap = 14;
+    const cardRowStartY = runY;
+
     if (cardNodes.length > 0) {
-        const cardW = config.groups['card']?.width || 200;
-        const cardH = config.groups['card']?.height || 100;
-        const cardGap = 14;
-        const totalCardsW = cardNodes.length * cardW + (cardNodes.length - 1) * cardGap;
-        // If cards don't all fit in one row, wrap
-        const maxCols = Math.floor(contentW / (cardW + cardGap));
+        const maxCardCols = Math.max(1, Math.floor(contentW / (cardW + cardGap)));
         cardNodes.forEach((node, i) => {
-            const col = i % maxCols;
-            const row = Math.floor(i / maxCols);
+            const col = i % maxCardCols;
+            const row = Math.floor(i / maxCardCols);
             positions.set(node.id, {
                 x: contentX + col * (cardW + cardGap),
-                y: runY + row * (cardH + cardGap),
+                y: cardRowStartY + row * (cardH + cardGap),
             });
         });
-        const rows = Math.ceil(cardNodes.length / maxCols);
-        runY += rows * (cardH + cardGap) + PADDING;
+        const cardRows = Math.ceil(cardNodes.length / maxCardCols);
+        runY += cardRows * (cardH + cardGap) + PADDING;
     }
 
-    // ── 8b. Badges inside cards (positioned over their parent card) ───────────
-    const cardBadgeEdges = graph.edges
+    // ── 7b. Badges — top-right corner of their parent card ────────────────────
+    const cardBadgeMap = new Map<string, string>(); // badgeId → cardId
+    graph.edges
         .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'card'))
-        .map(e => ({ from: e.from, to: e.to }));
-    const badgeNodes = graph.nodes.filter(n => n.group === 'badge');
-    const cardW2 = config.groups['card']?.width || 200;
-    const cardH2 = config.groups['card']?.height || 100;
-    const cardGap2 = 14;
-    const maxCols2 = Math.max(1, Math.floor(contentW / (cardW2 + cardGap2)));
+        .forEach(e => cardBadgeMap.set(e.to, e.from));
 
-    // Unparented badges go below cards
-    const parentedBadgeIds = new Set(cardBadgeEdges.map(e => e.to));
-    let badgeX = contentX;
-    let badgeY = runY;
-    badgeNodes.forEach(node => {
-        if (parentedBadgeIds.has(node.id)) {
-            // Find parent card position
-            const edge = cardBadgeEdges.find(e => e.to === node.id);
-            if (edge) {
-                const parentCardIdx = cardNodes.findIndex(c => c.id === edge.from);
-                if (parentCardIdx >= 0) {
-                    const col = parentCardIdx % maxCols2;
-                    const row = Math.floor(parentCardIdx / maxCols2);
-                    const cardPos = {
-                        x: contentX + col * (cardW2 + cardGap2),
-                        y: (cardNodes.length > 0 ? contentY : runY) + row * (cardH2 + cardGap2),
-                    };
-                    positions.set(node.id, {
-                        x: cardPos.x + cardW2 - 86,
-                        y: cardPos.y + 6,
-                    });
-                }
+    const maxCardCols2 = Math.max(1, Math.floor(contentW / (cardW + cardGap)));
+    let freeBadgeX = contentX;
+
+    graph.nodes.filter(n => n.group === 'badge').forEach(node => {
+        const parentCardId = cardBadgeMap.get(node.id);
+        if (parentCardId) {
+            const cardIdx = cardNodes.findIndex(c => c.id === parentCardId);
+            if (cardIdx >= 0) {
+                const col = cardIdx % maxCardCols2;
+                const row = Math.floor(cardIdx / maxCardCols2);
+                const badgeW = config.groups['badge']?.width || 100;
+                positions.set(node.id, {
+                    x: contentX + col * (cardW + cardGap) + cardW - badgeW - 6,
+                    y: cardRowStartY + row * (cardH + cardGap) + 6,
+                });
+                return;
             }
-        } else {
-            positions.set(node.id, { x: badgeX, y: badgeY });
-            badgeX += 90;
         }
+        // Free-standing badge: place in a row below cards
+        positions.set(node.id, { x: freeBadgeX, y: runY });
+        freeBadgeX += (config.groups['badge']?.width || 100) + 8;
     });
-    if (badgeNodes.some(n => !parentedBadgeIds.has(n.id))) {
-        runY += 38 + PADDING;
-    }
+    // Only advance runY if there are free-standing badges
+    const hasFreeBadges = graph.nodes
+        .filter(n => n.group === 'badge')
+        .some(n => !cardBadgeMap.has(n.id));
+    if (hasFreeBadges) runY += (config.groups['badge']?.height || 30) + PADDING;
 
-    // ── 9. Table ──────────────────────────────────────────────────────────────
+    // ── 8. Table ──────────────────────────────────────────────────────────────
     const tableNodes = graph.nodes.filter(n => n.group === 'table');
     if (tableNodes.length > 0) {
-        const tableH = config.groups['table']?.height || 130;
+        const tableH = config.groups['table']?.height || 160;
         tableNodes.forEach((node, i) => {
             positions.set(node.id, { x: contentX, y: runY + i * (tableH + PADDING) });
         });
         runY += tableNodes.length * (tableH + PADDING) + PADDING;
     }
 
-    // ── 10. Form ──────────────────────────────────────────────────────────────
+    // ── 9. Form panels ────────────────────────────────────────────────────────
     const formNodes = graph.nodes.filter(n => n.group === 'form');
     if (formNodes.length > 0) {
-        const formH = config.groups['form']?.height || 160;
-        const formW = config.groups['form']?.width || 340;
+        const formH = config.groups['form']?.height || 200;
+        const formW = config.groups['form']?.width  || 380;
         formNodes.forEach((node, i) => {
-            positions.set(node.id, {
-                x: contentX + i * (formW + PADDING),
-                y: runY,
-            });
+            positions.set(node.id, { x: contentX + i * (formW + PADDING), y: runY });
         });
-        runY += formH + PADDING;
+        // Form-child buttons: below the form
+        const formButtonIds = new Set(
+            graph.edges
+                .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'form'))
+                .map(e => e.to)
+        );
+        const btnW2 = config.groups['button']?.width || 150;
+        let fbX = contentX;
+        graph.nodes
+            .filter(n => n.group === 'button' && formButtonIds.has(n.id) && !alreadyPositioned.has(n.id))
+            .forEach(node => {
+                positions.set(node.id, { x: fbX, y: runY + formH + PADDING });
+                alreadyPositioned.add(node.id);
+                fbX += btnW2 + 10;
+            });
+        runY += formH + (formButtonIds.size > 0 ? (config.groups['button']?.height || 40) + PADDING * 2 : PADDING);
     }
 
-    // ── 11. Form submit buttons ───────────────────────────────────────────────
-    const formButtonEdges = graph.edges
-        .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'form'))
-        .map(e => e.to);
-    const formButtons = graph.nodes.filter(n => n.group === 'button' && formButtonEdges.includes(n.id));
-    const alreadyPositioned = new Set([...toolbarButtons.map(n => n.id)]);
-    formButtons.forEach((node, i) => {
-        if (!alreadyPositioned.has(node.id)) {
-            positions.set(node.id, { x: contentX + i * 155, y: runY });
-            alreadyPositioned.add(node.id);
-        }
-    });
-    if (formButtons.length > 0) runY += 48 + PADDING;
-
-    // ── 12. Remaining unpositioned buttons ────────────────────────────────────
-    let remainBtnX = contentX;
-    graph.nodes.filter(n => n.group === 'button' && !alreadyPositioned.has(n.id)).forEach(node => {
-        positions.set(node.id, { x: remainBtnX, y: runY });
-        remainBtnX += 155;
-        alreadyPositioned.add(node.id);
-    });
-    if (graph.nodes.some(n => n.group === 'button' && !alreadyPositioned.has(n.id))) {
-        runY += 48 + PADDING;
-    }
-
-    // ── 13. Empty state ───────────────────────────────────────────────────────
+    // ── 10. Empty state ───────────────────────────────────────────────────────
     const emptyNodes = graph.nodes.filter(n => n.group === 'empty');
     if (emptyNodes.length > 0) {
-        const emptyH = config.groups['empty']?.height || 100;
-        const emptyW = config.groups['empty']?.width || 340;
+        const emptyH = config.groups['empty']?.height || 120;
+        const emptyW = config.groups['empty']?.width  || 400;
         emptyNodes.forEach(node => {
             positions.set(node.id, {
-                x: contentX + (contentW - emptyW) / 2,
+                x: contentX + Math.max(0, (contentW - emptyW) / 2),
                 y: runY,
             });
         });
         runY += emptyH + PADDING;
     }
 
-    // ── 14. Modal — centered over screen ─────────────────────────────────────
+    // ── 11. Modal — centered over entire screen ───────────────────────────────
     const modalNodes = graph.nodes.filter(n => n.group === 'modal');
-    const modalW = config.groups['modal']?.width || 360;
-    const modalH = config.groups['modal']?.height || 220;
+    const modalW = config.groups['modal']?.width  || 420;
+    const modalH = config.groups['modal']?.height || 260;
     modalNodes.forEach(node => {
         positions.set(node.id, {
-            x: SCREEN_X + (SCREEN_W - modalW) / 2,
-            y: SCREEN_Y + (SCREEN_H - modalH) / 2,
+            x: SCREEN_X + Math.round((SCREEN_W - modalW) / 2),
+            y: SCREEN_Y + Math.round((SCREEN_H - modalH) / 2),
         });
     });
 
-    // ── 15. Modal buttons (inside modal) ─────────────────────────────────────
-    const modalButtonEdges = graph.edges
-        .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'modal'))
-        .map(e => e.to);
-    const modalButtons = graph.nodes.filter(n => n.group === 'button' && modalButtonEdges.includes(n.id));
-    if (modalNodes.length > 0 && modalButtons.length > 0) {
-        const modalPos = positions.get(modalNodes[0].id)!;
-        modalButtons.forEach((node, i) => {
-            if (!alreadyPositioned.has(node.id)) {
+    // ── 12. Modal-child buttons — bottom of modal ─────────────────────────────
+    if (modalNodes.length > 0) {
+        const modalPos = positions.get(modalNodes[0].id);
+        const modalButtonIds = new Set(
+            graph.edges
+                .filter(e => graph.nodes.find(n => n.id === e.from && n.group === 'modal'))
+                .map(e => e.to)
+        );
+        const btnW3 = config.groups['button']?.width  || 150;
+        const btnH3 = config.groups['button']?.height || 40;
+        let mbX = (modalPos?.x ?? 0) + modalW - btnW3 - 12;
+        graph.nodes
+            .filter(n => n.group === 'button' && modalButtonIds.has(n.id) && !alreadyPositioned.has(n.id))
+            .forEach(node => {
                 positions.set(node.id, {
-                    x: modalPos.x + 10 + i * 155,
-                    y: modalPos.y + modalH - 48 - 10,
+                    x: mbX,
+                    y: (modalPos?.y ?? 0) + modalH - btnH3 - 12,
                 });
                 alreadyPositioned.add(node.id);
-            }
-        });
+                mbX -= (btnW3 + 8);
+            });
     }
 
-    // ── 16. Fallback: any remaining unpositioned nodes ────────────────────────
+    // ── 13. Remaining unpositioned buttons ────────────────────────────────────
+    const btnW4 = config.groups['button']?.width || 150;
+    let remBtnX = contentX;
+    graph.nodes
+        .filter(n => n.group === 'button' && !alreadyPositioned.has(n.id))
+        .forEach(node => {
+            positions.set(node.id, { x: remBtnX, y: runY });
+            alreadyPositioned.add(node.id);
+            remBtnX += btnW4 + 10;
+        });
+    if (graph.nodes.some(n => n.group === 'button' && !alreadyPositioned.has(n.id))) {
+        runY += (config.groups['button']?.height || 40) + PADDING;
+    }
+
+    // ── 14. Fallback for any remaining unpositioned nodes ─────────────────────
     let fallbackX = contentX;
     let fallbackY = Math.min(runY, contentMaxY - 60);
     graph.nodes.forEach(node => {
         if (!positions.has(node.id)) {
             positions.set(node.id, { x: fallbackX, y: fallbackY });
-            fallbackX += 160;
-            if (fallbackX > contentX + contentW - 100) {
+            fallbackX += 170;
+            if (fallbackX > contentX + contentW - 80) {
                 fallbackX = contentX;
-                fallbackY += 60;
+                fallbackY += 70;
             }
         }
     });
@@ -1092,7 +1115,34 @@ function createShapeElement(opts: {
     height: number;
     backgroundColor: string;
     boundTextId: string;
+    /** Wireframe group for special stroke/fill treatment */
+    group?: string;
 }): any {
+    // Wireframe-specific stroke colours for each zone
+    const wireframeStrokes: Record<string, string> = {
+        screen:     '#94a3b8',
+        topbar:     '#1e293b',
+        sidebar:    '#cbd5e1',
+        breadcrumb: '#cbd5e1',
+        toolbar:    '#cbd5e1',
+        card:       '#e2e8f0',
+        table:      '#e2e8f0',
+        form:       '#fcd34d',
+        modal:      '#94a3b8',
+        button:     '#2563eb',
+        badge:      '#86efac',
+        empty:      '#e2e8f0',
+        footer:     '#cbd5e1',
+    };
+    const strokeColor = opts.group && wireframeStrokes[opts.group]
+        ? wireframeStrokes[opts.group]
+        : '#1e1e1e';
+
+    const strokeWidth = opts.group === 'screen' ? 2
+        : opts.group === 'topbar' ? 0
+        : opts.group === 'button' ? 0
+        : 1;
+
     return {
         id: opts.id,
         type: opts.type,
@@ -1101,17 +1151,19 @@ function createShapeElement(opts: {
         width: opts.width,
         height: opts.height,
         angle: 0,
-        strokeColor: '#1e1e1e',
+        strokeColor,
         backgroundColor: opts.backgroundColor,
         fillStyle: 'solid',
-        strokeWidth: 2,
+        strokeWidth,
         strokeStyle: 'solid',
-        roughness: 1,
+        roughness: 0,
         opacity: 100,
         seed: Math.floor(Math.random() * 1e9),
         groupIds: [],
         frameId: null,
-        roundness: opts.type === 'rectangle' ? { type: 3 } : null,
+        roundness: opts.type === 'rectangle'
+            ? (opts.group === 'button' || opts.group === 'badge' ? { type: 3 } : null)
+            : null,
         boundElements: [{ type: 'text', id: opts.boundTextId }],
         updated: Date.now(),
         link: null,
@@ -1131,29 +1183,54 @@ function createBoundTextElement(opts: {
     height: number;
     text: string;
     fontSize: number;
+    /** Wireframe group for colour overrides */
+    group?: string;
 }): any {
-    // Truncate text to fit container
-    const maxChars = Math.floor((opts.width - 10) / (opts.fontSize * 0.55));
-    const displayText = opts.text.length > maxChars
-        ? opts.text.substring(0, maxChars - 1) + '…'
-        : opts.text;
-    const textWidth = opts.width - 8;
-    const textHeight = opts.fontSize * 1.25;
+    // Multi-line text: the AI uses \n as line separator
+    const lines = opts.text.split('\n');
+    const lineHeight = 1.3;
+    const lineHeightPx = opts.fontSize * lineHeight;
+    const totalTextH = lines.length * lineHeightPx;
+
+    // For very tall containers (sidebar, form, modal) show all lines;
+    // For small ones (button, badge, breadcrumb) keep a single truncated line.
+    const maxLines = Math.max(1, Math.floor((opts.height - 8) / lineHeightPx));
+    const visibleLines = lines.slice(0, maxLines);
+
+    // Per-line truncation based on container width
+    const charsPerLine = Math.max(10, Math.floor((opts.width - 12) / (opts.fontSize * 0.58)));
+    const truncatedLines = visibleLines.map(line =>
+        line.length > charsPerLine ? line.substring(0, charsPerLine - 1) + '…' : line
+    );
+    const displayText = truncatedLines.join('\n');
+
+    const textWidth  = opts.width - 12;
+    const textHeight = Math.min(totalTextH, opts.height - 8);
+
+    // Colour overrides
+    const textColor = opts.group === 'topbar' ? '#f8fafc'
+        : opts.group === 'button'  ? '#ffffff'
+        : '#1e293b';
+
+    // Alignment
+    const textAlign = (opts.group === 'topbar' || opts.group === 'toolbar' || opts.group === 'breadcrumb')
+        ? 'left' : 'center';
+    const verticalAlign = 'middle';
 
     return {
         id: opts.id,
         type: 'text',
-        x: opts.x + (opts.width - textWidth) / 2,
-        y: opts.y + (opts.height - textHeight) / 2,
+        x: opts.x + 6,
+        y: opts.y + Math.max(4, (opts.height - textHeight) / 2),
         width: textWidth,
         height: textHeight,
         angle: 0,
-        strokeColor: '#1e1e1e',
+        strokeColor: textColor,
         backgroundColor: 'transparent',
         fillStyle: 'solid',
-        strokeWidth: 2,
+        strokeWidth: 1,
         strokeStyle: 'solid',
-        roughness: 1,
+        roughness: 0,
         opacity: 100,
         seed: Math.floor(Math.random() * 1e9),
         groupIds: [],
@@ -1165,12 +1242,12 @@ function createBoundTextElement(opts: {
         locked: false,
         text: displayText,
         fontSize: opts.fontSize,
-        fontFamily: 1,
-        textAlign: 'center',
-        verticalAlign: 'middle',
+        fontFamily: opts.group ? 3 : 1,   // monospace for wireframe groups, hand-drawn for others
+        textAlign,
+        verticalAlign,
         containerId: opts.containerId,
         originalText: displayText,
-        lineHeight: 1.25,
+        lineHeight,
         version: 1,
         versionNonce: Math.floor(Math.random() * 1e9),
         isDeleted: false,
