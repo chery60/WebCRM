@@ -520,10 +520,24 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
   const effectiveSandpackLibrary = sandpackLibrary || library;
   const actualIsCustomLibrary = !!effectiveSandpackLibrary && !effectiveSandpackLibrary.name?.includes('No component library');
 
-  // Conditionally build Sandpack files containing just index.js (for custom libs) or all shadcn files
-  const shadcnFiles = useMemo(() => buildShadcnFiles(actualIsCustomLibrary), [actualIsCustomLibrary]);
-  // Key to force Sandpack remount when library changes (Sandpack only installs deps on mount)
-  const sandpackKey = `sp-${effectiveSandpackLibrary?.id || 'default'}`;
+  // Stable Sandpack configuration — only update intentionally at send time, NOT on every render.
+  // This prevents orientation changes / window resizes from causing transient re-renders that
+  // flip these values (e.g. when React Query briefly returns undefined for the library), which
+  // would remount SandpackProvider and lose the user's generated code.
+  const sandpackKeyRef = useRef<string>(`sp-${effectiveSandpackLibrary?.id || 'default'}`);
+  const [sandpackKey, setSandpackKey] = useState<string>(sandpackKeyRef.current);
+
+  // Track whether we have hydrated code/messages from the saved prototype.
+  // SandpackProvider should not mount until hydration is complete, so it always
+  // receives the correct saved code as its initial files — not the placeholder.
+  const [isHydrated, setIsHydrated] = useState<boolean>(prototypeId === 'new');
+
+  const [sandpackIsCustomLibrary, setSandpackIsCustomLibrary] = useState<boolean>(actualIsCustomLibrary);
+  const [sandpackLibraryForDeps, setSandpackLibraryForDeps] = useState<any>(effectiveSandpackLibrary);
+
+  // Stable sandpack files and deps — derived from the sandpack-specific state, not live reactive values
+  const shadcnFiles = useMemo(() => buildShadcnFiles(sandpackIsCustomLibrary), [sandpackIsCustomLibrary]);
+  const sandpackDepsStable = useMemo(() => buildSandpackDeps(sandpackLibraryForDeps), [sandpackLibraryForDeps]);
 
   // Adjust DEFAULT_CODE if MUI is selected, so the initial state doesn't look like Shadcn
   const defaultMuiCode = `export default function App() {
@@ -622,13 +636,28 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
   }, [mentions, effectiveLibraryId, urlProvider, activeProvider, urlModel]);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Load saved messages/code from prototype
+  // Load saved messages/code from prototype and mark hydration complete.
+  // We bump sandpackKey here so SandpackProvider remounts with the real saved code
+  // as its initial /App.js file — not the placeholder that was used before data loaded.
   useEffect(() => {
     if (prototype) {
       if (prototype.chatHistory?.length) setMessages(prototype.chatHistory);
-      if (prototype.codeContent) setCode(prototype.codeContent);
+      const savedCode = prototype.codeContent;
+      if (savedCode) {
+        setCode(savedCode);
+        // Force SandpackProvider to remount with the saved code by changing the key.
+        // Without this, Sandpack treats its initial files as immutable after mount,
+        // so the placeholder code would stay even after setCode updates React state.
+        const hydratedKey = `sp-${prototype.id}-${prototype.updatedAt?.getTime?.() ?? Date.now()}`;
+        sandpackKeyRef.current = hydratedKey;
+        setSandpackKey(hydratedKey);
+      }
+      setIsHydrated(true);
+    } else if (!prototypeLoading && prototypeId === 'new') {
+      // New prototype: nothing to load, mark as hydrated immediately
+      setIsHydrated(true);
     }
-  }, [prototype]);
+  }, [prototype, prototypeLoading, prototypeId]);
 
   const handleSend = useCallback(async (text: string, mentions: MentionItem[], config: ChatConfig) => {
     if (!text.trim() || isStreaming) return;
@@ -672,8 +701,19 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
     const libraryContext = buildLibraryContext(sendLibrary, sendComponents);
     const mentionContext = buildContextFromMentions(mentions);
 
-    // Update Sandpack deps/files to match the library we're generating for
+    // Update Sandpack configuration intentionally at send time.
+    // We update sandpackKey, sandpackIsCustomLibrary, and sandpackLibraryForDeps together
+    // so the SandpackProvider only remounts when the library truly changes — not on
+    // transient re-renders caused by orientation changes / window resizes.
     setSandpackLibrary(sendLibrary || null);
+    const newIsCustom = !!sendLibrary && !sendLibrary.name?.includes('No component library');
+    setSandpackIsCustomLibrary(newIsCustom);
+    setSandpackLibraryForDeps(sendLibrary || null);
+    const newSandpackKey = `sp-${sendLibrary?.id || 'default'}`;
+    if (sandpackKeyRef.current !== newSandpackKey) {
+      sandpackKeyRef.current = newSandpackKey;
+      setSandpackKey(newSandpackKey);
+    }
 
     console.log('[handleSend] actualLibraryId:', actualLibraryId);
     console.log('[handleSend] sendLibrary:', sendLibrary?.name, sendLibrary?.packageName);
@@ -804,7 +844,7 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
     setIsEditingTitle(false);
   }, []);
 
-  const sandpackDeps = buildSandpackDeps(effectiveSandpackLibrary);
+  // sandpackDeps is now stable (sandpackDepsStable) — computed only at send time
 
   if (prototypeLoading) {
     return (
@@ -942,16 +982,21 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
 
           {/* Sandpack area */}
           <div className="flex-1 relative overflow-hidden">
-            <SandpackProvider
+            {!isHydrated && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {isHydrated && <SandpackProvider
               key={sandpackKey}
               template="react"
               theme="light"
               files={{
-                '/App.js': { code, active: true },
+                '/App.js': { code: code, active: true },
                 ...(shadcnFiles as Record<string, any>),
               }}
               customSetup={{
-                dependencies: sandpackDeps,
+                dependencies: sandpackDepsStable,
                 entry: '/index.js',
               }}
               options={{
@@ -980,7 +1025,7 @@ function PrototypeWorkspaceInner({ params }: { params: Promise<{ id: string }> }
                   />
                 </div>
               </SandpackLayout>
-            </SandpackProvider>
+            </SandpackProvider>}
           </div>
         </div>
 
