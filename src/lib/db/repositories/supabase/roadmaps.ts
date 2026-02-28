@@ -45,7 +45,7 @@ export const roadmapsRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('Error fetching roadmaps:', error);
+        console.error('Error fetching roadmaps:', error?.message || error);
       }
       return [];
     }
@@ -71,7 +71,7 @@ export const roadmapsRepository = {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching roadmap:', error);
+      console.error('Error fetching roadmap:', error?.message || error);
       return undefined;
     }
 
@@ -99,7 +99,7 @@ export const roadmapsRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('Error creating roadmap:', error);
+      console.error('Error creating roadmap:', error?.message || error);
       throw new Error(error?.message || 'Failed to create roadmap');
     }
 
@@ -148,7 +148,7 @@ export const roadmapsRepository = {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting roadmap:', error);
+      console.error('Error deleting roadmap:', error?.message || error);
       return false;
     }
 
@@ -166,7 +166,7 @@ export const roadmapsRepository = {
       .eq('pipeline_id', pipelineId);
 
     if (error) {
-      console.error('Error deleting roadmaps by pipeline:', error);
+      console.error('Error deleting roadmaps by pipeline:', error?.message || error);
     }
   },
 
@@ -187,7 +187,7 @@ export const roadmapsRepository = {
     const { count, error } = await query;
 
     if (error) {
-      console.error('Error counting roadmaps:', error);
+      console.error('Error counting roadmaps:', error?.message || error);
       return 0;
     }
 

@@ -112,7 +112,7 @@ export async function getTasks(
     const { data, error } = await query;
 
     if (error) {
-        console.error('[Tasks Repository] Error fetching tasks:', error);
+        console.error('[Tasks Repository] Error fetching tasks:', error?.message || error);
         return [];
     }
 
@@ -144,7 +144,7 @@ export async function getTaskById(id: string): Promise<Task | undefined> {
         .single();
 
     if (error || !data) {
-        console.error('Error fetching task:', error);
+        console.error('Error fetching task:', error?.message || error);
         return undefined;
     }
 
@@ -216,7 +216,7 @@ export async function createTask(data: TaskFormData): Promise<Task | null> {
         .single();
 
     if (error || !insertedData) {
-        console.error('[Tasks Repository] Error creating task:', error);
+        console.error('[Tasks Repository] Error creating task:', error?.message || error);
         return null;
     }
 
@@ -274,7 +274,7 @@ export async function updateTaskStatus(
         .single();
 
     if (error || !data) {
-        console.error('Error updating task status:', error);
+        console.error('Error updating task status:', error?.message || error);
         return undefined;
     }
 
@@ -292,7 +292,7 @@ export async function deleteTask(id: string): Promise<boolean> {
         .eq('id', id);
 
     if (error) {
-        console.error('Error deleting task:', error);
+        console.error('Error deleting task:', error?.message || error);
         return false;
     }
 
@@ -328,7 +328,7 @@ export async function duplicateTask(id: string): Promise<Task | undefined> {
         .single();
 
     if (error || !data) {
-        console.error('Error duplicating task:', error);
+        console.error('Error duplicating task:', error?.message || error);
         return undefined;
     }
 

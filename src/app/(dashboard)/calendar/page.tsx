@@ -374,7 +374,7 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="p-6">
+        <div className="h-full overflow-y-auto p-6">
             <CalendarHeader
                 currentDate={currentDate}
                 view={view}

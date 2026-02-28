@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@source "../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -45,7 +47,7 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  
+
   /* Tag colors */
   --color-tag-weekly: var(--tag-weekly);
   --color-tag-weekly-foreground: var(--tag-weekly-foreground);
@@ -59,7 +61,7 @@
   --color-tag-personal-foreground: var(--tag-personal-foreground);
   --color-tag-badge: var(--tag-badge);
   --color-tag-badge-foreground: var(--tag-badge-foreground);
-  
+
   /* Note screen design tokens */
   --color-note-bg: var(--note-bg);
   --color-note-text: var(--note-text);
@@ -104,23 +106,30 @@
   --sidebar-accent-foreground: oklch(0.29 0.012 75);
   --sidebar-border: oklch(0.92 0.005 250);
   --sidebar-ring: oklch(0.17 0.002 80);
-  
+
   /* Sidebar design tokens for Medium-style design */
   --sidebar-text-primary: rgba(0, 0, 0, 0.8);
   --sidebar-text-secondary: rgb(107, 107, 107);
   --sidebar-separator: rgb(242, 242, 242);
   --sidebar-indicator: rgb(26, 137, 23);
-  
+
   /* Notes/Document warm design tokens */
-  --note-bg: oklch(0.983 0.008 85); /* rgb(250, 249, 245) - warm off-white */
-  --note-text: oklch(0.16 0.005 75); /* rgb(20, 20, 19) - deep charcoal */
-  --note-text-secondary: oklch(0.32 0.004 75); /* rgb(61, 61, 58) - medium gray */
-  --note-text-muted: oklch(0.5 0.003 85); /* rgb(115, 114, 108) - light gray */
-  --note-card: oklch(1 0 0); /* pure white */
-  --note-border: oklch(0.2 0.004 75 / 15%); /* rgba(31, 30, 29, 0.15) - subtle border */
-  --note-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); /* subtle shadow */
+  --note-bg: oklch(0.983 0.008 85);
+  /* rgb(250, 249, 245) - warm off-white */
+  --note-text: oklch(0.16 0.005 75);
+  /* rgb(20, 20, 19) - deep charcoal */
+  --note-text-secondary: oklch(0.32 0.004 75);
+  /* rgb(61, 61, 58) - medium gray */
+  --note-text-muted: oklch(0.5 0.003 85);
+  /* rgb(115, 114, 108) - light gray */
+  --note-card: oklch(1 0 0);
+  /* pure white */
+  --note-border: oklch(0.2 0.004 75 / 15%);
+  /* rgba(31, 30, 29, 0.15) - subtle border */
+  --note-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  /* subtle shadow */
   --note-shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  
+
   /* Tag colors - matching Figma design */
   --tag-weekly: oklch(0.95 0.06 85);
   --tag-weekly-foreground: oklch(0.45 0.12 75);
@@ -170,23 +179,29 @@
   --sidebar-accent-foreground: oklch(0.965 0.001 90);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.75 0.004 85);
-  
+
   /* Sidebar design tokens for Medium-style design - dark mode */
   --sidebar-text-primary: rgba(255, 255, 255, 0.9);
   --sidebar-text-secondary: rgba(255, 255, 255, 0.6);
   --sidebar-separator: rgba(255, 255, 255, 0.1);
   --sidebar-indicator: rgb(26, 137, 23);
-  
+
   /* Notes/Document warm design tokens - dark mode */
-  --note-bg: oklch(0.19 0.003 80); /* dark warm background */
-  --note-text: oklch(0.965 0.001 90); /* light text */
-  --note-text-secondary: oklch(0.75 0.004 85); /* secondary text */
-  --note-text-muted: oklch(0.6 0.004 85); /* muted text */
-  --note-card: oklch(0.24 0.004 80); /* dark card */
-  --note-border: oklch(1 0 0 / 12%); /* subtle border */
+  --note-bg: oklch(0.19 0.003 80);
+  /* dark warm background */
+  --note-text: oklch(0.965 0.001 90);
+  /* light text */
+  --note-text-secondary: oklch(0.75 0.004 85);
+  /* secondary text */
+  --note-text-muted: oklch(0.6 0.004 85);
+  /* muted text */
+  --note-card: oklch(0.24 0.004 80);
+  /* dark card */
+  --note-border: oklch(1 0 0 / 12%);
+  /* subtle border */
   --note-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.1);
   --note-shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.2);
-  
+
   /* Tag colors - dark mode */
   --tag-weekly: oklch(0.35 0.08 85);
   --tag-weekly-foreground: oklch(0.85 0.1 85);
@@ -206,6 +221,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
   }
@@ -255,12 +271,12 @@
   gap: 0.5rem;
 }
 
-.tiptap ul[data-type="taskList"] li > label {
+.tiptap ul[data-type="taskList"] li>label {
   flex-shrink: 0;
   margin-top: 0.25rem;
 }
 
-.tiptap ul[data-type="taskList"] li > div {
+.tiptap ul[data-type="taskList"] li>div {
   flex: 1;
 }
 
@@ -565,7 +581,7 @@
 }
 
 /* Override Excalidraw's default positioning */
-.excalidraw-embed-container > div:first-child {
+.excalidraw-embed-container>div:first-child {
   position: absolute !important;
   inset: 0 !important;
 }
@@ -733,7 +749,8 @@
 
 /* Mermaid code block in PRD */
 .tiptap pre code.language-mermaid {
-  display: none; /* Hide raw mermaid code, render diagram instead */
+  display: none;
+  /* Hide raw mermaid code, render diagram instead */
 }
 
 /* Style mermaid blocks that haven't been converted yet */

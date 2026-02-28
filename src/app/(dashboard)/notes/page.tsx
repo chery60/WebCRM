@@ -65,7 +65,7 @@ function NotesContent() {
   };
 
   return (
-    <div className="p-6">
+    <div className="h-full overflow-y-auto p-6">
       <NotesHeader
         projectId={projectId}
         projectName={project?.name}

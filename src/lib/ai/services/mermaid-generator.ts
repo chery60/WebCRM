@@ -9,6 +9,13 @@ import type { AIGenerateRequest } from '@/types';
 import { generateAIContent } from '../use-ai-service';
 import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 import { MERMAID_SYNTAX_EXAMPLES } from '../prompts/prd-structured-prompts';
+import {
+  validateMermaidCompleteness,
+  scoreMermaidDiagram,
+} from './diagram-validator';
+
+// Max total attempts (1 initial + up to 2 retries)
+const MAX_ATTEMPTS = 3;
 
 // ============================================================================
 // TYPES
@@ -30,6 +37,10 @@ export interface MermaidGenerationOptions {
   focus?: string;
   /** AI provider to use */
   provider?: AIProviderType;
+  /**
+   * Optional callback invoked when a retry is triggered due to incomplete diagram.
+   */
+  onRetry?: (attempt: number, maxAttempts: number, issues: string[]) => void;
 }
 
 export interface MermaidGenerationResult {
@@ -63,35 +74,84 @@ const DIAGRAM_METADATA: Record<MermaidDiagramType, { title: string; description:
 // GENERATION PROMPTS
 // ============================================================================
 
-const MERMAID_SYSTEM_PROMPT = `You are an expert at creating clear, informative Mermaid diagrams for product documentation.
+const MERMAID_SYSTEM_PROMPT = `You are a world-class Mermaid diagram specialist. Your diagrams are clear, syntactically perfect, and render on the first attempt every time. You have zero tolerance for syntax errors — a diagram that doesn't render is worse than no diagram.
 
-## Critical Syntax Rules
-1. Generate ONLY valid Mermaid syntax that will render correctly
-2. Keep diagrams focused and readable (not too many nodes)
-3. Use clear, concise labels
-4. **ALWAYS complete all arrow connections** - NEVER leave an arrow without a target node
-   - WRONG: \`A --> B -->\` (incomplete arrow)
-   - CORRECT: \`A --> B --> C\` (complete connection)
-5. **IMPORTANT**: If node labels contain parentheses, brackets, or special characters, wrap the entire label in double quotes
-   - WRONG: \`A[User Login (OAuth)]\`
-   - CORRECT: \`A["User Login (OAuth)"]\`
-   - WRONG: \`B(Process Data)\`
-   - CORRECT: \`B["Process Data"]\`
-6. Avoid using these characters in labels unless quoted: ( ) [ ] { } | < > #
-7. Ensure all brackets, parentheses, and braces are properly matched
-8. Always provide a valid diagram type declaration (flowchart TD, sequenceDiagram, etc.)
-9. Test your syntax mentally before outputting - check every line for completeness
+## Identity & Non-Negotiables
+- You ONLY output a single \`\`\`mermaid code block — nothing before, nothing after
+- You ONLY use \`flowchart TD\` or \`sequenceDiagram\` — other types cause rendering failures
+- You NEVER leave an arrow without both a source node and a target node
+- You NEVER use unquoted special characters in node labels
+- You ALWAYS mentally trace every arrow before outputting to confirm it connects two nodes
 
-## Common Errors to Avoid
-- Incomplete arrows: Every arrow must have both source and target
-- Unmatched brackets: Every opening bracket must have a closing bracket
-- Missing node IDs: Every node must have an identifier
-- Unquoted special characters in labels
+## Output Format (STRICT)
+Your entire response must be:
+\`\`\`mermaid
+[diagram code here]
+\`\`\`
+Zero prose before the opening fence. Zero prose after the closing fence.
 
-## Output Format
-Return ONLY the Mermaid code block, no explanation needed.
-Start with \`\`\`mermaid and end with \`\`\`
-Do not include any text before or after the code block.`;
+## Supported Diagram Types
+
+**flowchart TD** — for user flows, process flows, decision trees, system architecture:
+\`\`\`mermaid
+flowchart TD
+    start([User opens app]) --> auth_check{Authenticated?}
+    auth_check -->|Yes| dashboard[Dashboard]
+    auth_check -->|No| login["Login Page (OAuth)"]
+    login --> auth_check
+    dashboard --> create_note[Create Note]
+\`\`\`
+
+**sequenceDiagram** — for API interactions, system-to-system flows, auth flows:
+\`\`\`mermaid
+sequenceDiagram
+    participant U as User
+    participant A as App
+    participant S as Server
+    participant D as Database
+    U->>A: Submit form
+    A->>S: POST /api/resource
+    S->>D: INSERT record
+    D-->>S: Return ID
+    S-->>A: 201 Created
+    A-->>U: Show success
+\`\`\`
+
+## Syntax Rules (memorize these — violations cause render failures)
+
+**Node label quoting (CRITICAL):**
+- Labels with parentheses, brackets, pipes, or angle brackets MUST be in double quotes
+- WRONG: \`A[User Login (OAuth)]\` → CORRECT: \`A["User Login (OAuth)"]\`
+- WRONG: \`B(Process Data)\` → CORRECT: \`B["Process Data"]\`
+- WRONG: \`C{Is Valid?}\` → CORRECT: \`C{"Is Valid?"}\`
+
+**Arrow completeness (CRITICAL):**
+- Every arrow MUST connect exactly two nodes
+- WRONG: \`A --> B -->\` (dangling arrow — renders as error)
+- CORRECT: \`A --> B --> C\`
+- For conditional arrows: \`A -->|Yes| B\` and \`A -->|No| C\`
+
+**Node IDs:**
+- Use snake_case or camelCase IDs: \`auth_check\`, \`sendEmail\`, \`userDashboard\`
+- NOT single letters: \`A\`, \`B\`, \`C\` (impossible to debug)
+
+**Brackets for node shapes:**
+- \`[text]\` = rectangle, \`(text)\` = rounded, \`{text}\` = diamond, \`([text])\` = cylinder
+- If label has special chars, wrap in double quotes INSIDE the bracket: \`node["label (detail)"]\`
+
+**Matching brackets:**
+- Count every opening bracket — it must have a closing bracket
+- \`[\` pairs with \`]\`, \`(\` pairs with \`)\`, \`{\` pairs with \`}\`
+
+## SELF-VALIDATION (Run before outputting)
+□ Diagram starts with \`flowchart TD\` or \`sequenceDiagram\` — nothing else
+□ Every arrow has BOTH a source node id AND a target node id — trace each one
+□ All node labels with ( ) [ ] { } | < > are wrapped in double quotes
+□ All opening brackets have matching closing brackets
+□ Response contains ONLY the \`\`\`mermaid code block — no prose before or after
+□ Diagram has meaningful node IDs (not just A, B, C)
+
+If ANY criterion fails → fix it before outputting.`;
 
 function getDiagramPrompt(type: MermaidDiagramType, context: string, focus?: string): string {
   const metadata = DIAGRAM_METADATA[type];
@@ -117,66 +177,123 @@ function getDiagramPrompt(type: MermaidDiagramType, context: string, focus?: str
 
 export class MermaidGeneratorService {
   /**
-   * Generate a specific type of Mermaid diagram
+   * Generate a specific type of Mermaid diagram with completeness validation and auto-retry.
+   *
+   * Flow:
+   * 1. Generate diagram via AI
+   * 2. Validate syntax (existing validator)
+   * 3. Validate completeness against PRD (new validator)
+   * 4. If incomplete, retry with targeted fix prompt (up to MAX_ATTEMPTS total)
+   * 5. Return the best result (highest score) across all attempts
    */
   async generateDiagram(options: MermaidGenerationOptions): Promise<MermaidGenerationResult> {
-    const { type, context, focus, provider } = options;
+    const { type, context, focus, provider, onRetry } = options;
     const metadata = DIAGRAM_METADATA[type];
 
-    try {
-      const request: AIGenerateRequest = {
-        type: 'custom' as any,
-        prompt: getDiagramPrompt(type, context, focus),
-        context: MERMAID_SYSTEM_PROMPT,
-        provider,
-      };
+    // Track all valid diagrams across attempts so we can return the best one
+    const attempts: Array<{ diagram: string; score: number }> = [];
+    let lastError: string | undefined;
 
-      const response = await generateAIContent(request, provider);
-      const diagram = this.extractMermaidCode(response.content);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        console.log(`[MermaidGenerator] Attempt ${attempt}/${MAX_ATTEMPTS} for "${type}" diagram`);
 
-      if (!diagram) {
-        return {
-          success: false,
-          diagram: null,
-          title: metadata.title,
-          description: metadata.description,
-          error: 'Failed to extract valid Mermaid code from response',
+        // Build prompt — on retries, prepend the fix hint
+        let prompt: string;
+        if (attempt === 1) {
+          prompt = getDiagramPrompt(type, context, focus);
+        } else {
+          // Get fix hint from the last attempt's completeness validation
+          const lastDiagram = attempts[attempts.length - 1]?.diagram;
+          let fixHint = '## The previous diagram was incomplete. Generate a more comprehensive version.\n\n';
+          if (lastDiagram) {
+            const completeness = validateMermaidCompleteness(lastDiagram, context, type);
+            if (completeness.fixHint) fixHint = completeness.fixHint + '\n\n';
+          }
+          prompt = fixHint + getDiagramPrompt(type, context, focus);
+        }
+
+        const request: AIGenerateRequest = {
+          type: 'custom' as any,
+          prompt,
+          context: MERMAID_SYSTEM_PROMPT,
+          provider,
         };
+
+        const response = await generateAIContent(request, provider);
+        const diagram = this.extractMermaidCode(response.content);
+
+        if (!diagram) {
+          console.warn(`[MermaidGenerator] Attempt ${attempt}: no mermaid code extracted`);
+          lastError = 'Failed to extract valid Mermaid code from response';
+          continue;
+        }
+
+        // Syntax validation
+        const { validateMermaidDiagram } = await import('@/lib/utils/mermaid-validator');
+        const syntaxValidation = validateMermaidDiagram(diagram);
+
+        if (!syntaxValidation.valid) {
+          console.warn(`[MermaidGenerator] Attempt ${attempt}: syntax invalid — ${syntaxValidation.error}`);
+          lastError = syntaxValidation.error;
+          continue;
+        }
+
+        const finalDiagram = syntaxValidation.sanitizedCode || diagram;
+
+        // Completeness validation
+        const completeness = validateMermaidCompleteness(finalDiagram, context, type);
+        const score = scoreMermaidDiagram(finalDiagram);
+
+        console.log(
+          `[MermaidGenerator] Attempt ${attempt} complete: ${completeness.complete}, ` +
+          `nodes: ${completeness.nodeCount}, score: ${score}`
+        );
+
+        attempts.push({ diagram: finalDiagram, score });
+
+        if (completeness.complete) {
+          console.log(`[MermaidGenerator] Diagram complete on attempt ${attempt}`);
+          return {
+            success: true,
+            diagram: finalDiagram,
+            title: metadata.title,
+            description: metadata.description,
+          };
+        }
+
+        // Incomplete — notify caller and retry if attempts remain
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`[MermaidGenerator] Incomplete on attempt ${attempt}, retrying…`);
+          onRetry?.(attempt, MAX_ATTEMPTS, completeness.issues);
+        }
+
+      } catch (error) {
+        console.error(`[MermaidGenerator] Attempt ${attempt} error:`, error);
+        lastError = error instanceof Error ? error.message : 'Unknown error';
       }
+    }
 
-      // Validate the diagram syntax using the shared validator
-      const { validateMermaidDiagram } = await import('@/lib/utils/mermaid-validator');
-      const validation = validateMermaidDiagram(diagram);
-
-      if (!validation.valid) {
-        return {
-          success: false,
-          diagram: null,
-          title: metadata.title,
-          description: metadata.description,
-          error: validation.error,
-        };
-      }
-
-      // Use sanitized version if available
-      const finalDiagram = validation.sanitizedCode || diagram;
-
+    // All attempts done — return best result if any valid diagram was produced
+    if (attempts.length > 0) {
+      attempts.sort((a, b) => b.score - a.score);
+      const best = attempts[0];
+      console.log(`[MermaidGenerator] Using best result (score ${best.score}) after ${MAX_ATTEMPTS} attempts`);
       return {
         success: true,
-        diagram: finalDiagram,
+        diagram: best.diagram,
         title: metadata.title,
         description: metadata.description,
-      };
-    } catch (error) {
-      console.error('Mermaid generation failed:', error);
-      return {
-        success: false,
-        diagram: null,
-        title: metadata.title,
-        description: metadata.description,
-        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+
+    return {
+      success: false,
+      diagram: null,
+      title: metadata.title,
+      description: metadata.description,
+      error: lastError || 'Failed to generate diagram after multiple attempts. Please try again.',
+    };
   }
 
   /**

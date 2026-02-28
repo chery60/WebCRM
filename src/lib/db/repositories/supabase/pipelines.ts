@@ -53,7 +53,7 @@ export const pipelinesRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('[Pipelines Repository] Error fetching pipelines:', error);
+        console.error('[Pipelines Repository] Error fetching pipelines:', error?.message || error);
       }
       return [];
     }
@@ -76,7 +76,7 @@ export const pipelinesRepository = {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching pipeline:', error);
+      console.error('Error fetching pipeline:', error?.message || error);
       return undefined;
     }
 
@@ -114,7 +114,7 @@ export const pipelinesRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('[Pipelines Repository] Error creating pipeline:', error);
+      console.error('[Pipelines Repository] Error creating pipeline:', error?.message || error);
       throw new Error(error?.message || 'Failed to create pipeline');
     }
 
@@ -162,7 +162,7 @@ export const pipelinesRepository = {
     const { error } = await supabase.rpc('delete_pipeline', { target_pipeline_id: id });
 
     if (error) {
-      console.error('Error deleting pipeline:', error);
+      console.error('Error deleting pipeline:', error?.message || error);
       throw new Error(`Failed to delete pipeline: ${error.message}`);
     }
 
@@ -180,7 +180,7 @@ export const pipelinesRepository = {
       .eq('is_deleted', false);
 
     if (error) {
-      console.error('Error counting pipelines:', error);
+      console.error('Error counting pipelines:', error?.message || error);
       return 0;
     }
 

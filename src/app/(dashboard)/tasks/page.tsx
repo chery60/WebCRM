@@ -198,7 +198,7 @@ export default function TasksPage() {
     const isLoading = loadingByStatus || loadingAll || tabsLoading;
 
     return (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col h-full overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b">
                 <div className="flex items-center gap-4">

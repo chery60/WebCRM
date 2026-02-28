@@ -5,11 +5,12 @@
  * Provides a clean interface for components to interact with the canvas generator.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { canvasGenerator } from '@/lib/ai/services/canvas-generator';
 import type { CanvasGenerationType, GeneratedCanvasContent } from '@/components/canvas/prd-canvas';
 import type { AIProviderType } from '@/lib/stores/ai-settings-store';
 import { useAISettingsStore } from '@/lib/stores/ai-settings-store';
+import { CHUNKED_DIAGRAM_TYPES } from '@/lib/ai/prompts/canvas-prompts';
 import { toast } from 'sonner';
 
 export interface UseCanvasGenerationOptions {
@@ -19,6 +20,11 @@ export interface UseCanvasGenerationOptions {
   productDescription?: string;
   /** Override AI provider */
   provider?: AIProviderType;
+  /**
+   * Called after each chunk is ready during chunked generation.
+   * Use this to progressively add elements to the canvas without waiting for the full diagram.
+   */
+  onChunkReady?: (chunkElements: any[], chunkIndex: number, totalChunks: number) => void;
 }
 
 export interface UseCanvasGenerationReturn {
@@ -41,7 +47,7 @@ export interface UseCanvasGenerationReturn {
 }
 
 export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): UseCanvasGenerationReturn {
-  const { prdContent = '', productDescription = '' } = options;
+  const { prdContent = '', productDescription = '', onChunkReady } = options;
   const { activeProvider: storeProvider } = useAISettingsStore();
   const provider = options.provider || storeProvider || undefined;
 
@@ -49,6 +55,10 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
   const [generatingType, setGeneratingType] = useState<CanvasGenerationType | null>(null);
   const [tokensUsed, setTokensUsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep a stable ref to onChunkReady so it can be used inside callbacks without stale closure issues
+  const onChunkReadyRef = useRef(onChunkReady);
+  onChunkReadyRef.current = onChunkReady;
 
   const generateDiagram = useCallback(
     async (type: CanvasGenerationType, existingElements: any[] = []): Promise<GeneratedCanvasContent | null> => {
@@ -62,14 +72,32 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
       setGeneratingType(type);
       setError(null);
 
+      // Show a persistent progress toast that we'll update during retries
+      const progressToastId = toast.loading('Generating diagram…', { duration: Infinity });
+
       try {
         const result = await canvasGenerator.generateDiagram({
           type,
           prdContent,
           productDescription,
           provider,
-          existingElements, // Pass existing elements for offset calculation
+          existingElements,
+          onChunkReady: (chunkElements, chunkIndex, totalChunks) => {
+            // Propagate chunk to parent (enables live canvas updates)
+            onChunkReadyRef.current?.(chunkElements, chunkIndex, totalChunks);
+          },
+          onRetry: (attempt, maxAttempts, issues) => {
+            // Update toast to show retry progress with a summary of why
+            const issueCount = issues.length;
+            toast.loading(
+              `Diagram incomplete — improving… (attempt ${attempt + 1} of ${maxAttempts}, fixing ${issueCount} issue${issueCount !== 1 ? 's' : ''})`,
+              { id: progressToastId, duration: Infinity }
+            );
+          },
         });
+
+        // Dismiss progress toast
+        toast.dismiss(progressToastId);
 
         if (result.tokensUsed) {
           setTokensUsed((prev) => prev + result.tokensUsed!);
@@ -84,6 +112,7 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
         toast.success(`${result.content.title} generated successfully`);
         return result.content;
       } catch (err) {
+        toast.dismiss(progressToastId);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMessage);
         toast.error(`Generation failed: ${errorMessage}`);
@@ -109,12 +138,24 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
 
       const results = new Map<CanvasGenerationType, GeneratedCanvasContent | null>();
 
+      // Show a persistent progress toast for the whole batch
+      const batchToastId = toast.loading(
+        `Generating ${types.length} diagram${types.length !== 1 ? 's' : ''} in parallel…`,
+        { duration: Infinity }
+      );
+
       try {
         const batchResults = await canvasGenerator.generateBatch(
           types,
           prdContent,
           productDescription,
-          provider
+          provider,
+          (type, attempt, maxAttempts, issues) => {
+            toast.loading(
+              `Improving ${type} diagram… (attempt ${attempt + 1}/${maxAttempts}, fixing ${issues.length} issue${issues.length !== 1 ? 's' : ''})`,
+              { id: batchToastId, duration: Infinity }
+            );
+          }
         );
 
         let totalTokens = 0;
@@ -134,14 +175,17 @@ export function useCanvasGeneration(options: UseCanvasGenerationOptions = {}): U
 
         setTokensUsed((prev) => prev + totalTokens);
 
+        toast.dismiss(batchToastId);
+
         if (successCount > 0) {
-          toast.success(`Generated ${successCount} of ${types.length} diagrams`);
+          toast.success(`Generated ${successCount} of ${types.length} diagram${types.length !== 1 ? 's' : ''}`);
         } else {
           toast.error('Failed to generate diagrams');
         }
 
         return results;
       } catch (err) {
+        toast.dismiss(batchToastId);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMessage);
         toast.error(`Batch generation failed: ${errorMessage}`);

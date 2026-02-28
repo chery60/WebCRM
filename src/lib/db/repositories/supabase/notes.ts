@@ -81,7 +81,7 @@ export const notesRepository = {
         const { data, error } = await query;
 
         if (error) {
-            console.error('Error fetching notes:', error);
+            console.error('Error fetching notes:', error?.message || error);
             return [];
         }
 
@@ -100,7 +100,7 @@ export const notesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error fetching note:', error);
+            console.error('Error fetching note:', error?.message || error);
             return undefined;
         }
 
@@ -200,7 +200,7 @@ export const notesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deleting note:', error);
+            console.error('Error deleting note:', error?.message || error);
         }
     },
 
@@ -215,7 +215,7 @@ export const notesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error hard deleting note:', error);
+            console.error('Error hard deleting note:', error?.message || error);
         }
     },
 
@@ -230,7 +230,7 @@ export const notesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error restoring note:', error);
+            console.error('Error restoring note:', error?.message || error);
         }
     },
 
@@ -245,7 +245,7 @@ export const notesRepository = {
             .eq('is_deleted', true);
 
         if (error) {
-            console.error('Error fetching deleted notes:', error);
+            console.error('Error fetching deleted notes:', error?.message || error);
             return [];
         }
 
@@ -287,7 +287,7 @@ export const notesRepository = {
             .single();
 
         if (error || !insertedData) {
-            console.error('Error duplicating note:', error);
+            console.error('Error duplicating note:', error?.message || error);
             return undefined;
         }
 

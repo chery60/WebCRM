@@ -40,7 +40,7 @@ export default function PipelinesPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="h-full overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-semibold">Pipelines</h1>
         </div>
@@ -54,7 +54,7 @@ export default function PipelinesPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="h-full overflow-y-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Pipelines</h1>

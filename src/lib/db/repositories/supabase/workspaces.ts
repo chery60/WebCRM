@@ -60,7 +60,7 @@ export const supabaseWorkspacesRepository = {
             .eq('status', 'active');
 
         if (membershipError || !memberships?.length) {
-            console.error('Error fetching workspace memberships:', membershipError);
+            console.error('Error fetching workspace memberships:', membershipError?.message || membershipError?.message || membershipError);
             return [];
         }
 
@@ -75,7 +75,7 @@ export const supabaseWorkspacesRepository = {
             .eq('is_deleted', false);
 
         if (error) {
-            console.error('Error fetching workspaces:', error);
+            console.error('Error fetching workspaces:', error?.message || error?.message || error);
             return [];
         }
 
@@ -99,7 +99,7 @@ export const supabaseWorkspacesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error fetching workspace:', error);
+            console.error('Error fetching workspace:', error?.message || error?.message || error);
             return undefined;
         }
 
@@ -182,7 +182,7 @@ export const supabaseWorkspacesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error updating workspace:', error);
+            console.error('Error updating workspace:', error?.message || error?.message || error);
             return undefined;
         }
 
@@ -200,7 +200,7 @@ export const supabaseWorkspacesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deleting workspace:', error);
+            console.error('Error deleting workspace:', error?.message || error?.message || error);
         }
     },
 
@@ -216,7 +216,7 @@ export const supabaseWorkspacesRepository = {
             .eq('status', 'active');
 
         if (error) {
-            console.error('Error fetching memberships:', error);
+            console.error('Error fetching memberships:', error?.message || error?.message || error);
             return [];
         }
 
@@ -270,7 +270,7 @@ export const supabaseWorkspacesRepository = {
             .eq('id', membershipId);
 
         if (error) {
-            console.error('Error removing member:', error);
+            console.error('Error removing member:', error?.message || error?.message || error);
         }
     },
 
@@ -288,7 +288,7 @@ export const supabaseWorkspacesRepository = {
             .eq('id', membershipId);
 
         if (error) {
-            console.error('Error updating member role:', error);
+            console.error('Error updating member role:', error?.message || error?.message || error);
         }
     },
 
@@ -319,7 +319,7 @@ export const supabaseWorkspacesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error creating invitation:', error);
+            console.error('Error creating invitation:', error?.message || error?.message || error);
             return null;
         }
 
@@ -383,7 +383,7 @@ export const supabaseWorkspacesRepository = {
             .eq('id', invitationId);
 
         if (error) {
-            console.error('Error cancelling invitation:', error);
+            console.error('Error cancelling invitation:', error?.message || error?.message || error);
         }
     },
 };

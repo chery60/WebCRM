@@ -28,10 +28,26 @@ interface TipTapMark {
  * Parses inline markdown (bold, italic, code) and returns TipTap text nodes with marks
  */
 function parseInlineMarks(text: string): TipTapNode[] {
+  // Fast path: if no special characters at all, return a single text node
+  if (!/[*_`]/.test(text)) {
+    return text.length > 0 ? [{ type: 'text', text }] : [];
+  }
+
   const nodes: TipTapNode[] = [];
   let remaining = text;
 
+  // Safety guard: max iterations to prevent infinite loops on malformed content
+  const maxIterations = text.length * 2;
+  let iterations = 0;
+
   while (remaining.length > 0) {
+    iterations++;
+    if (iterations > maxIterations) {
+      // Bail out: push whatever is left as plain text
+      nodes.push({ type: 'text', text: remaining });
+      break;
+    }
+
     // Check for bold (**text** or __text__)
     const boldMatch = remaining.match(/^\*\*(.+?)\*\*|^__(.+?)__/);
     if (boldMatch) {
@@ -51,8 +67,10 @@ function parseInlineMarks(text: string): TipTapNode[] {
       continue;
     }
 
-    // Check for italic (*text* or _text_) - but not **
-    const italicMatch = remaining.match(/^\*([^*]+?)\*|^_([^_]+?)_/);
+    // Check for italic (*text* or _text_) - but not ** and not stray marks
+    // Require the closing marker to be followed by a non-word char or end of string
+    // to avoid matching inside technical notation like --> or file_name_here
+    const italicMatch = remaining.match(/^\*([^*]+?)\*(?=[^*\w]|$)|^_([^_]+?)_(?=[^_\w]|$)/);
     if (italicMatch && !remaining.startsWith('**')) {
       const italicText = italicMatch[1] || italicMatch[2];
       const innerNodes = parseInlineMarks(italicText);
@@ -86,25 +104,21 @@ function parseInlineMarks(text: string): TipTapNode[] {
     if (nextSpecial === -1) {
       // No more special characters, add remaining as plain text
       if (remaining.length > 0) {
-        nodes.push({
-          type: 'text',
-          text: remaining,
-        });
+        nodes.push({ type: 'text', text: remaining });
       }
       break;
     } else if (nextSpecial === 0) {
       // Special character at start but no match - treat as plain text
-      nodes.push({
-        type: 'text',
-        text: remaining[0],
-      });
-      remaining = remaining.slice(1);
+      // Consume consecutive unmatched special chars in one go to avoid O(n²)
+      let end = 1;
+      while (end < remaining.length && /[*_`]/.test(remaining[end]) && end < 10) {
+        end++;
+      }
+      nodes.push({ type: 'text', text: remaining.slice(0, end) });
+      remaining = remaining.slice(end);
     } else {
       // Add text before the special character
-      nodes.push({
-        type: 'text',
-        text: remaining.slice(0, nextSpecial),
-      });
+      nodes.push({ type: 'text', text: remaining.slice(0, nextSpecial) });
       remaining = remaining.slice(nextSpecial);
     }
   }
@@ -117,7 +131,7 @@ function parseInlineMarks(text: string): TipTapNode[] {
  */
 function createParagraph(text: string): TipTapNode {
   const trimmed = text.trim();
-  
+
   // Return paragraph with empty text node if no content
   if (!trimmed) {
     return {
@@ -125,9 +139,9 @@ function createParagraph(text: string): TipTapNode {
       content: [{ type: 'text', text: '' }],
     };
   }
-  
+
   const content = parseInlineMarks(trimmed);
-  
+
   // Ensure we always have at least one text node, even if empty
   if (content.length === 0) {
     return {
@@ -135,7 +149,7 @@ function createParagraph(text: string): TipTapNode {
       content: [{ type: 'text', text: '' }],
     };
   }
-  
+
   return {
     type: 'paragraph',
     content,
@@ -147,7 +161,7 @@ function createParagraph(text: string): TipTapNode {
  */
 function createHeading(level: number, text: string): TipTapNode {
   const trimmed = text.trim();
-  
+
   // Return heading with empty text node if no content
   if (!trimmed) {
     return {
@@ -156,9 +170,9 @@ function createHeading(level: number, text: string): TipTapNode {
       content: [{ type: 'text', text: '' }],
     };
   }
-  
+
   const content = parseInlineMarks(trimmed);
-  
+
   // Ensure we always have at least one text node
   if (content.length === 0) {
     return {
@@ -167,7 +181,7 @@ function createHeading(level: number, text: string): TipTapNode {
       content: [{ type: 'text', text: '' }],
     };
   }
-  
+
   return {
     type: 'heading',
     attrs: { level },
@@ -311,7 +325,7 @@ function createTable(rows: string[][], hasHeader: boolean = true): TipTapNode {
 export function markdownToTipTap(markdown: string): TipTapNode {
   const lines = markdown.split('\n');
   const content: TipTapNode[] = [];
-  
+
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -389,7 +403,7 @@ export function markdownToTipTap(markdown: string): TipTapNode {
     if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
       const tableRows: string[][] = [];
       let hasSeparator = false;
-      
+
       while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
         const rowLine = lines[i].trim();
         // Check if this is a separator row (| --- | --- |)
@@ -403,7 +417,7 @@ export function markdownToTipTap(markdown: string): TipTapNode {
         tableRows.push(cells);
         i++;
       }
-      
+
       if (tableRows.length > 0) {
         content.push(createTable(tableRows, hasSeparator));
       }
@@ -482,7 +496,7 @@ export function markdownToTipTap(markdown: string): TipTapNode {
       paragraphLines.push(lines[i].trim());
       i++;
     }
-    
+
     if (paragraphLines.length > 0) {
       content.push(createParagraph(paragraphLines.join(' ')));
     }
@@ -649,7 +663,7 @@ export function tipTapToMarkdown(doc: TipTapNode): string {
         if (node.content && node.content.length > 0) {
           const rows: string[][] = [];
           let hasHeader = false;
-          
+
           node.content.forEach((row, rowIndex) => {
             if (row.type === 'tableRow') {
               const cells: string[] = [];
@@ -663,17 +677,17 @@ export function tipTapToMarkdown(doc: TipTapNode): string {
               rows.push(cells);
             }
           });
-          
+
           if (rows.length > 0) {
             // Output first row
             lines.push('| ' + rows[0].join(' | ') + ' |');
-            
+
             // Output separator row after header (or first row if no explicit header)
             if (rows[0].length > 0) {
               const separator = rows[0].map(() => '---').join(' | ');
               lines.push('| ' + separator + ' |');
             }
-            
+
             // Output remaining rows
             for (let i = 1; i < rows.length; i++) {
               lines.push('| ' + rows[i].join(' | ') + ' |');
@@ -756,12 +770,12 @@ export function tipTapToMarkdown(doc: TipTapNode): string {
   }
 
   processNode(doc);
-  
+
   // Remove trailing empty lines and join
   while (lines.length > 0 && lines[lines.length - 1] === '') {
     lines.pop();
   }
-  
+
   return lines.join('\n');
 }
 

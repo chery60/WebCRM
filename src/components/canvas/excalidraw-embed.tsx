@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { CANVAS_TEMPLATES, type CanvasTemplateType } from '@/lib/ai/canvas-templates';
+import { toast } from 'sonner';
 
 // ============================================================================
 // TYPES
@@ -824,8 +825,9 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
   const handleExcalidrawAPI = useCallback((api: any) => {
     excalidrawAPIRef.current = api;
     // Store initial data hash when API is ready
+    // IMPORTANT: Include isDeleted status so deletions are detected as hash changes
     if (api && data?.elements) {
-      lastDataHashRef.current = JSON.stringify(data.elements.map((e: any) => e.id).sort());
+      lastDataHashRef.current = JSON.stringify(data.elements.map((e: any) => `${e.id}:${e.isDeleted ? 1 : 0}`).sort());
     }
   }, [data?.elements]);
 
@@ -834,14 +836,15 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
   useEffect(() => {
     if (!excalidrawAPIRef.current || !data?.elements || isApplyingExternalUpdateRef.current) return;
 
-    // Create a hash of element IDs to detect if data actually changed
-    const newDataHash = JSON.stringify(data.elements.map((e: any) => e.id).sort());
+    // Create a hash of element IDs + isDeleted status to detect if data actually changed
+    // IMPORTANT: Include isDeleted status so deletions are detected as hash changes
+    const newDataHash = JSON.stringify(data.elements.map((e: any) => `${e.id}:${e.isDeleted ? 1 : 0}`).sort());
 
-    // Only update if the data actually changed (different elements)
+    // Only update if the data actually changed (different elements or deletion state)
     if (newDataHash !== lastDataHashRef.current) {
       // Check if the change is from external source (more elements than current)
       const currentElements = excalidrawAPIRef.current.getSceneElements();
-      const currentHash = JSON.stringify(currentElements.map((e: any) => e.id).sort());
+      const currentHash = JSON.stringify(currentElements.map((e: any) => `${e.id}:${e.isDeleted ? 1 : 0}`).sort());
 
       // If the new data has different elements than what's in Excalidraw, apply the update
       if (newDataHash !== currentHash) {
@@ -869,11 +872,23 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
 
   // Handle AI generation
   const handleGenerate = useCallback(async (type: CanvasGenerationType) => {
-    if (!onGenerateContent) return;
+    if (!onGenerateContent) {
+      toast.error('AI generation is not available. Please add some note content first.');
+      return;
+    }
 
     try {
       const result = await onGenerateContent(type);
-      if (!result || !result.elements || result.elements.length === 0) return;
+
+      if (!result) {
+        // Error already shown by the generation hook (e.g. "No content to generate from")
+        return;
+      }
+
+      if (!result.elements || result.elements.length === 0) {
+        toast.error('Failed to generate diagram elements. Please try again or add more content to your note.');
+        return;
+      }
 
       if (excalidrawAPIRef.current) {
         const currentElements = excalidrawAPIRef.current.getSceneElements();
@@ -892,9 +907,21 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
           appState: excalidrawAPIRef.current.getAppState(),
           files: excalidrawAPIRef.current.getFiles(),
         });
+
+        toast.success(`${result.title || 'Diagram'} generated successfully`);
       }
     } catch (error) {
       console.error('[ExcalidrawEmbed] Generation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('API key') || errorMessage.includes('authentication') || errorMessage.includes('401')) {
+        toast.error('Invalid or missing API key. Please configure your API key in Settings > Features.');
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        toast.error('Rate limit exceeded. Please wait a moment and try again.');
+      } else if (errorMessage.includes('quota') || errorMessage.includes('billing')) {
+        toast.error('API quota exceeded. Please check your billing status.');
+      } else {
+        toast.error(`Diagram generation failed: ${errorMessage}`);
+      }
     }
   }, [onGenerateContent, onChange]);
 
@@ -974,7 +1001,8 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
       if (!onChange || isApplyingExternalUpdateRef.current) return;
 
       // Update the hash to track current state
-      const newHash = JSON.stringify([...elements].map((e: any) => e.id).sort());
+      // IMPORTANT: Include isDeleted status in hash so deletions trigger onChange and get persisted
+      const newHash = JSON.stringify([...elements].map((e: any) => `${e.id}:${e.isDeleted ? 1 : 0}`).sort());
       lastDataHashRef.current = newHash;
 
       // Filter out sensitive/unnecessary appState properties
@@ -995,8 +1023,14 @@ export const ExcalidrawEmbed = memo(function ExcalidrawEmbed({
         zoom: appState.zoom,
       };
 
+      // CRITICAL FIX: Filter out isDeleted elements before persisting.
+      // Excalidraw marks deleted elements with isDeleted: true instead of removing them.
+      // Without this filter, deleted diagrams reappear after page reload because
+      // the isDeleted elements get saved to Supabase and restored on reload.
+      const persistableElements = [...elements].filter((e: any) => !e.isDeleted);
+
       onChange({
-        elements: [...elements] as any[],
+        elements: persistableElements as any[],
         appState: filteredAppState,
         files: files || {},
       });

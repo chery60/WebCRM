@@ -108,7 +108,7 @@ export async function getCustomTemplateById(id: string): Promise<CustomPRDTempla
     .single();
 
   if (error) {
-    console.error('Error fetching custom template:', error);
+    console.error('Error fetching custom template:', error?.message || error?.message || error);
     return null;
   }
 
@@ -229,7 +229,7 @@ export async function getCustomTemplatesByCategory(
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching templates by category:', error);
+    console.error('Error fetching templates by category:', error?.message || error?.message || error);
     return [];
   }
 
@@ -247,7 +247,7 @@ export async function getCustomCategories(userId: string): Promise<CustomCategor
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching custom categories:', error);
+    console.error('Error fetching custom categories:', error?.message || error?.message || error);
     return [];
   }
 
@@ -273,7 +273,7 @@ export async function createCustomCategory(
     .single();
 
   if (error) {
-    console.error('Error creating custom category:', error);
+    console.error('Error creating custom category:', error?.message || error?.message || error);
     return null;
   }
 

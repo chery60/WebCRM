@@ -25,7 +25,7 @@ export const tagsRepository = {
             .order('name');
 
         if (error) {
-            console.error('Error fetching tags:', error);
+            console.error('Error fetching tags:', error?.message || error);
             return [];
         }
 
@@ -44,7 +44,7 @@ export const tagsRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error fetching tag:', error);
+            console.error('Error fetching tag:', error?.message || error);
             return undefined;
         }
 
@@ -63,7 +63,7 @@ export const tagsRepository = {
             .order('name');
 
         if (error) {
-            console.error('Error fetching tags by category:', error);
+            console.error('Error fetching tags by category:', error?.message || error);
             return [];
         }
 
@@ -86,7 +86,7 @@ export const tagsRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error creating tag:', error);
+            console.error('Error creating tag:', error?.message || error);
             return null;
         }
 
@@ -158,7 +158,7 @@ export const tagsRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deleting tag:', error);
+            console.error('Error deleting tag:', error?.message || error);
             return false;
         }
 

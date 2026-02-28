@@ -108,7 +108,7 @@ export const employeesRepository = {
         const { data, error } = await query.order('first_name');
 
         if (error) {
-            console.error('[Employees Repository] Error fetching employees:', error);
+            console.error('[Employees Repository] Error fetching employees:', error?.message || error);
             return [];
         }
 
@@ -129,7 +129,7 @@ export const employeesRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error fetching employee:', error);
+            console.error('Error fetching employee:', error?.message || error);
             return undefined;
         }
 
@@ -303,7 +303,7 @@ export const employeesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deleting employee:', error);
+            console.error('Error deleting employee:', error?.message || error);
             return false;
         }
 
@@ -321,7 +321,7 @@ export const employeesRepository = {
             .in('id', ids);
 
         if (error) {
-            console.error('Error bulk deleting employees:', error);
+            console.error('Error bulk deleting employees:', error?.message || error);
             return false;
         }
 
@@ -339,7 +339,7 @@ export const employeesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error updating employee status:', error);
+            console.error('Error updating employee status:', error?.message || error);
             return false;
         }
 
@@ -361,7 +361,7 @@ export const employeesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error activating employee:', error);
+            console.error('Error activating employee:', error?.message || error);
             return false;
         }
 
@@ -383,7 +383,7 @@ export const employeesRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deactivating employee:', error);
+            console.error('Error deactivating employee:', error?.message || error);
             return false;
         }
 
@@ -405,7 +405,7 @@ export const employeesRepository = {
             .in('id', ids);
 
         if (error) {
-            console.error('Error bulk activating employees:', error);
+            console.error('Error bulk activating employees:', error?.message || error);
             return false;
         }
 
@@ -427,7 +427,7 @@ export const employeesRepository = {
             .in('id', ids);
 
         if (error) {
-            console.error('Error bulk deactivating employees:', error);
+            console.error('Error bulk deactivating employees:', error?.message || error);
             return false;
         }
 

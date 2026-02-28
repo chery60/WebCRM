@@ -9,35 +9,42 @@
 // PRD GENERATION PROMPT
 // ============================================================================
 
-export const PRD_GENERATION_PROMPT = `Generate a comprehensive Product Requirements Document (PRD) using the Linear-style format.
+export const PRD_GENERATION_PROMPT = `Generate a production-quality Product Requirements Document (PRD) using the Linear-style format.
 
-## Required Sections (USE ONLY THESE):
-1. ## 📋 Overview - Executive summary: what we're building and why
-2. ## 🎯 Problem - Clear problem statement from user perspective
-3. ## 📍 Current Scenario - How things work today, pain points
-4. ## ⚖️ Considerations - Trade-offs, constraints, dependencies
-5. ## 💭 Assumptions - Explicit assumptions with confidence levels
-6. ## 📊 Diagrams - 2-4 Mermaid diagrams illustrating the solution
-7. ## ✨ Solution - Approach, Requirements (MoSCoW), Success Metrics
+## Output Contract — follow this exactly:
+1. Generate ALL 7 sections below in the exact order shown — do not skip or reorder
+2. Every section must have real, specific content — NEVER use placeholders like "[Add content here]"
+3. Include AT LEAST 2 Mermaid diagrams — one user flow, one system/sequence interaction
+4. Every Must Have requirement must include a user story and acceptance criteria
+5. Every assumption must have a confidence level (High/Medium/Low) and consequence if wrong
+6. Success metrics must have actual numbers — no vague targets like "improve performance"
+7. Complete ALL sections before stopping — a partial PRD is worse than no PRD
 
-## Instructions:
-1. Analyze the user's product idea thoroughly
-2. Make reasonable assumptions and document them
-3. Include 2-4 Mermaid diagrams (flowchart, sequence, ER, etc.)
-4. Be specific and actionable - avoid vague statements
-5. Use MoSCoW prioritization for requirements (Must/Should/Could/Won't Have)
-6. **IMPORTANT for Mermaid syntax**: If node labels contain parentheses or special characters, wrap the label text in double quotes:
-   - WRONG: A[User Login (OAuth)] 
-   - CORRECT: A["User Login (OAuth)"]
+## Required Sections (USE ONLY THESE, in this exact order):
+1. ## 📋 Overview — Concrete description of what's being built, why now, measurable success
+2. ## 🎯 Problem — User pain with real scenario + quantified impact + why current solutions fail
+3. ## 📍 Current Scenario — Step-by-step current workflow, friction points, current-state Mermaid flowchart
+4. ## ⚖️ Considerations — Technical/business constraints, trade-offs WITH rationale, dependencies
+5. ## 💭 Assumptions — Table: Assumption | Confidence (H/M/L) | If Wrong | How to Validate
+6. ## 📊 Diagrams — 2-4 Mermaid diagrams: user flow (required) + system/sequence (required) + extras
+7. ## ✨ Solution — Approach, MoSCoW requirements (Must Haves with user stories + ACs), Success Metrics table
 
-## Important:
-- Do NOT include sections like "User Personas", "Jobs to be Done", "Goals & Success Metrics" as separate sections
-- User context goes in the Problem section
-- Success metrics go in the Solution section
-- Use the exact section headers with emojis as shown above
+## Mermaid Syntax Rules (STRICT — violations cause rendering failures):
+- Use ONLY \`\`\`mermaid flowchart TD\`\`\` or \`\`\`mermaid sequenceDiagram\`\`\`
+- Node labels with parentheses or special characters MUST use double quotes:
+  - WRONG: \`A[User Login (OAuth)]\`
+  - CORRECT: \`A["User Login (OAuth)"]\`
+- Every arrow MUST have both a source node AND a target node — no dangling arrows
+- Use meaningful node IDs (e.g., \`auth_check\`, \`send_email\`) not just \`A\`, \`B\`, \`C\`
 
-## Output Format:
-Use clear Markdown with the 7 section headers above. Include valid Mermaid code blocks.`;
+## SELF-VALIDATION (Run before outputting):
+□ All 7 sections present with real content
+□ At least 2 valid Mermaid diagrams
+□ Every Must Have has user story + acceptance criteria
+□ Every assumption has confidence level + consequence
+□ Success metrics have real numbers
+□ No placeholders or filler content anywhere
+If any criterion fails → fix it before outputting.`;
 
 // ============================================================================
 // FEATURE GENERATION PROMPT
@@ -198,34 +205,46 @@ IMPORTANT: Return ONLY the JSON array, no additional text or markdown code fence
 // PRD IMPROVEMENT PROMPT
 // ============================================================================
 
-export const PRD_IMPROVEMENT_PROMPT = `You are a senior product manager reviewing and improving a PRD using the Linear-style format.
+export const PRD_IMPROVEMENT_PROMPT = `You are a world-class Senior Product Manager doing a rigorous PRD review. Your job is to make this PRD excellent, not just better. Rewrite it fully — don't just add comments.
 
-## Required Sections (USE ONLY THESE):
-1. 📋 Overview - Executive summary
-2. 🎯 Problem - Clear problem statement
-3. 📍 Current Scenario - How things work today
-4. ⚖️ Considerations - Trade-offs, constraints
-5. 💭 Assumptions - Explicit assumptions
-6. 📊 Diagrams - Mermaid diagrams
-7. ✨ Solution - Approach, Requirements (MoSCoW), Metrics
+## Review Process
+First, identify the top weaknesses:
+- Where is content vague, generic, or missing specificity?
+- Are there missing sections or sections with placeholder content?
+- Are Mermaid diagrams absent, incomplete, or syntactically broken?
+- Are requirements not testable? Do Must Haves lack user stories?
+- Are success metrics missing real numbers?
 
-## Review Criteria:
-1. **Clarity**: Is every statement unambiguous?
-2. **Completeness**: Are all 7 sections covered adequately?
-3. **Specificity**: Are requirements specific and measurable?
-4. **Diagrams**: Are there helpful Mermaid diagrams?
-5. **User Focus**: Is the user's perspective central?
+## Output Contract
+1. Return the COMPLETE improved PRD — all 7 sections in full
+2. Use these inline markers to show your changes:
+   - **[ADDED]** — new content that was missing
+   - **[IMPROVED]** — content rewritten to be more specific/actionable
+   - **[QUESTION]** — genuine ambiguity needing stakeholder input
+3. Restructure to the 7 Linear-style sections if needed
+4. Remove any non-standard sections (User Personas, Goals & Success Metrics as standalone sections, etc.)
 
-## Instructions:
-1. Read the PRD thoroughly
-2. Restructure to match the 7-section Linear format if needed
-3. Add or improve Mermaid diagrams
-4. Remove sections like "User Personas", "Jobs to be Done", "Goals & Success Metrics" as separate sections
-5. Consolidate user context into Problem section
-6. Consolidate success metrics into Solution section
+## Required Output Sections (USE ONLY THESE):
+1. ## 📋 Overview — Concrete, specific, measurable
+2. ## 🎯 Problem — Real scenario + quantified impact + why current solutions fail
+3. ## 📍 Current Scenario — Step-by-step workflow + current-state Mermaid flowchart
+4. ## ⚖️ Considerations — Constraints + trade-offs WITH rationale
+5. ## 💭 Assumptions — Table with Confidence (H/M/L) + consequence if wrong
+6. ## 📊 Diagrams — At least 2 Mermaid diagrams
+7. ## ✨ Solution — MoSCoW requirements (Must Haves with user stories + ACs) + Success Metrics table with numbers
 
-## Output Format:
-Return the improved PRD using ONLY the 7 Linear-style sections with emoji headers.`;
+## Mermaid Rules
+- ONLY \`\`\`mermaid flowchart TD\`\`\` or \`\`\`mermaid sequenceDiagram\`\`\`
+- Node labels with parentheses MUST use double quotes: \`A["Login (OAuth)"]\`
+- Every arrow must have both source and target — fix any broken arrows
+
+## SELF-VALIDATION (Before outputting)
+□ All 7 sections present with real, specific content
+□ At least 2 valid Mermaid diagrams
+□ Every Must Have has user story + acceptance criteria
+□ Every assumption has confidence level
+□ All metrics have real numbers
+If any criterion fails → fix it before outputting.`;
 
 // ============================================================================
 // SECTION-SPECIFIC GENERATION PROMPTS (Linear-style)

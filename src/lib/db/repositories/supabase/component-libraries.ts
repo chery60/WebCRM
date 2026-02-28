@@ -139,7 +139,7 @@ export const componentLibrariesRepository = {
       .single();
 
     if (error || !data) {
-      console.error('[ComponentLibraries] Error creating library:', error?.message || error);
+      console.error('[ComponentLibraries] Error creating library:', error?.message || error?.message || error);
       if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
         throw new Error('Database tables not set up yet. Please run the migration (035_prototyping_schema.sql) in your Supabase SQL editor first.');
       }
@@ -169,7 +169,7 @@ export const componentLibrariesRepository = {
       .single();
 
     if (error || !data) {
-      console.error('[ComponentLibraries] Error updating library:', error);
+      console.error('[ComponentLibraries] Error updating library:', error?.message || error);
       return undefined;
     }
 
@@ -186,7 +186,7 @@ export const componentLibrariesRepository = {
       .eq('id', id);
 
     if (error) {
-      console.error('[ComponentLibraries] Error deleting library:', error);
+      console.error('[ComponentLibraries] Error deleting library:', error?.message || error);
       return false;
     }
     return true;
@@ -205,7 +205,7 @@ export const componentLibrariesRepository = {
       .order('name', { ascending: true });
 
     if (error) {
-      console.error('[ComponentLibraries] Error fetching components:', error);
+      console.error('[ComponentLibraries] Error fetching components:', error?.message || error);
       return [];
     }
 
@@ -236,7 +236,7 @@ export const componentLibrariesRepository = {
       .select();
 
     if (error) {
-      console.error('[ComponentLibraries] Error inserting components:', error);
+      console.error('[ComponentLibraries] Error inserting components:', error?.message || error);
       return [];
     }
 
@@ -253,7 +253,7 @@ export const componentLibrariesRepository = {
       .eq('library_id', libraryId);
 
     if (error) {
-      console.error('[ComponentLibraries] Error deleting components:', error);
+      console.error('[ComponentLibraries] Error deleting components:', error?.message || error);
       return false;
     }
     return true;

@@ -69,6 +69,207 @@ type AppState = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BinaryFiles = any;
 
+// ============================================================================
+// ELEMENT NORMALIZATION
+// Excalidraw requires specific fields on linear elements (arrows/lines).
+// AI-generated elements often lack these, causing "Linear element is not normalized" errors.
+// This utility normalizes any element array before it touches Excalidraw.
+// ============================================================================
+
+/**
+ * Normalize elements produced by AI generation so Excalidraw accepts them without errors.
+ *
+ * Fixes:
+ * - "Linear element is not normalized" — arrows/lines need lastCommittedPoint, startBinding,
+ *   endBinding, elbowed fields
+ * - Missing required shape fields (strokeColor, fillStyle, roughness, etc.)
+ * - Invalid/missing points arrays on arrows
+ * - Duplicate IDs — de-duplicated by appending a suffix
+ * - Text truncation/annotation bug — when a shape has a `text` property, Excalidraw requires
+ *   a SEPARATE bound text element (type:"text", containerId: shapeId). Without this, Excalidraw
+ *   shows the text as a "double-click to edit" annotation instead of rendering it inline.
+ *   We auto-generate the bound text child element here.
+ */
+function normalizeElementsForExcalidraw(elements: any[]): any[] {
+  if (!Array.isArray(elements)) return [];
+
+  const seenIds = new Set<string>();
+  const result: any[] = [];
+
+  for (const el of elements) {
+    if (!el || typeof el !== 'object' || !el.type || !el.id) continue;
+
+    // De-duplicate IDs
+    let id = String(el.id);
+    if (seenIds.has(id)) {
+      id = `${id}-${Math.random().toString(36).slice(2, 7)}`;
+    }
+    seenIds.add(id);
+
+    const x = typeof el.x === 'number' ? el.x : 0;
+    const y = typeof el.y === 'number' ? el.y : 0;
+    const width = typeof el.width === 'number' ? el.width : 100;
+    const height = typeof el.height === 'number' ? el.height : 60;
+
+    // Base fields required by all Excalidraw elements
+    const base: any = {
+      version: el.version ?? 1,
+      versionNonce: el.versionNonce ?? Math.floor(Math.random() * 1e9),
+      isDeleted: false,
+      fillStyle: el.fillStyle ?? 'solid',
+      strokeWidth: el.strokeWidth ?? 1,
+      strokeStyle: el.strokeStyle ?? 'solid',
+      roughness: el.roughness ?? 0,
+      opacity: el.opacity ?? 100,
+      angle: el.angle ?? 0,
+      strokeColor: el.strokeColor ?? '#1e1e1e',
+      backgroundColor: el.backgroundColor ?? 'transparent',
+      seed: el.seed ?? Math.floor(Math.random() * 1e9),
+      groupIds: el.groupIds ?? [],
+      frameId: el.frameId ?? null,
+      roundness: el.roundness ?? null,
+      updated: el.updated ?? Date.now(),
+      link: el.link ?? null,
+      locked: el.locked ?? false,
+      ...el,
+      id,
+      // Override with validated values (el spread might have invalid values)
+      x,
+      y,
+      width,
+      height,
+    };
+
+    if (el.type === 'arrow' || el.type === 'line') {
+      // Validate / repair points array
+      let points: [number, number][] = [];
+      if (Array.isArray(el.points) && el.points.length >= 2) {
+        points = el.points.map((p: any) =>
+          Array.isArray(p) && p.length >= 2
+            ? [Number(p[0]) || 0, Number(p[1]) || 0]
+            : [0, 0]
+        ) as [number, number][];
+      } else {
+        points = [[0, 0], [100, 0]];
+      }
+
+      result.push({
+        ...base,
+        type: el.type,
+        points,
+        lastCommittedPoint: points[points.length - 1] ?? [100, 0],
+        startBinding: el.startBinding ?? null,
+        endBinding: el.endBinding ?? null,
+        startArrowhead: el.startArrowhead ?? null,
+        endArrowhead: el.endArrowhead ?? (el.type === 'arrow' ? 'arrow' : null),
+        elbowed: el.elbowed ?? false,
+        // Preserve any existing boundElements on arrows (e.g. from resolveArrowBindings)
+        boundElements: Array.isArray(el.boundElements) ? el.boundElements : [],
+        width: 0,
+        height: 0,
+        // Remove text from arrows - labels on arrows are a separate element type
+        text: undefined,
+      });
+      continue;
+    }
+
+    if (el.type === 'text') {
+      // Standalone text element (title, label, section header)
+      result.push({
+        ...base,
+        type: 'text',
+        text: el.text ?? '',
+        fontSize: el.fontSize ?? 16,
+        fontFamily: el.fontFamily ?? 1,
+        textAlign: el.textAlign ?? 'center',
+        verticalAlign: el.verticalAlign ?? 'middle',
+        containerId: el.containerId ?? null,
+        originalText: el.originalText ?? el.text ?? '',
+        autoResize: el.autoResize ?? true,
+        lineHeight: el.lineHeight ?? 1.25,
+        backgroundColor: 'transparent',
+        // Text elements must not have width/height set by AI (auto-sized)
+        width: el.width ?? 200,
+        height: el.height ?? 25,
+      });
+      continue;
+    }
+
+    // Shape types: rectangle, ellipse, diamond
+    const hasText = typeof el.text === 'string' && el.text.trim().length > 0;
+    const textId = `${id}-label`;
+
+    // Build the shape element
+    // If it has text, register a bound text element reference
+    // IMPORTANT: Preserve existing boundElements (especially arrow bindings from resolveArrowBindings)
+    const existingBoundElements = Array.isArray(el.boundElements) ? el.boundElements : [];
+    let shapeBoundElements: any[];
+    if (hasText) {
+      // Merge: keep all existing entries (arrow bindings) + add text binding if not already present
+      const hasTextBinding = existingBoundElements.some((b: any) => b.type === 'text' && b.id === textId);
+      shapeBoundElements = hasTextBinding ? existingBoundElements : [...existingBoundElements, { type: 'text', id: textId }];
+    } else {
+      shapeBoundElements = existingBoundElements;
+    }
+
+    const shapeElement: any = {
+      ...base,
+      type: el.type ?? 'rectangle',
+      // Shapes themselves do NOT carry the text property in Excalidraw v0.17+
+      // Text is stored in a separate bound text element (see below)
+      // We remove text from the shape to avoid the truncation/annotation issue
+      text: undefined,
+      boundElements: shapeBoundElements.length > 0 ? shapeBoundElements : null,
+    };
+    result.push(shapeElement);
+
+    // Auto-generate the bound text child element so Excalidraw renders the label inline
+    if (hasText) {
+      const rawText = String(el.text).trim();
+      // Excalidraw text element bound to a container
+      const boundTextEl: any = {
+        id: textId,
+        type: 'text',
+        x: x + 4,  // slight inset
+        y: y + height / 2 - 10, // vertically centered approx
+        width: width - 8,
+        height: 20,
+        angle: 0,
+        strokeColor: el.strokeColor ?? '#1e1e1e',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 0,
+        opacity: 100,
+        groupIds: base.groupIds ?? [],
+        frameId: base.frameId ?? null,
+        roundness: null,
+        seed: Math.floor(Math.random() * 1e9),
+        version: 1,
+        versionNonce: Math.floor(Math.random() * 1e9),
+        isDeleted: false,
+        updated: Date.now(),
+        link: null,
+        locked: false,
+        text: rawText,
+        fontSize: el.fontSize ?? 14,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle',
+        containerId: id,  // bound to the shape
+        originalText: rawText,
+        autoResize: true,
+        lineHeight: 1.25,
+      };
+      seenIds.add(textId);
+      result.push(boundTextEl);
+    }
+  }
+
+  return result;
+}
+
 // Load Excalidraw CSS on client side
 if (typeof window !== 'undefined' && !document.getElementById('excalidraw-css')) {
   const link = document.createElement('link');
@@ -698,10 +899,11 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // Current user for annotations (default fallback)
   const currentUser = 'Current User';
 
-  // Track if we have content
+  // Track if we have content - only count visible (non-deleted) elements
   useEffect(() => {
-    if (initialData?.elements && initialData.elements.length > 0) {
-      setHasContent(true);
+    if (initialData?.elements) {
+      const visibleElements = initialData.elements.filter((el: any) => !el.isDeleted);
+      setHasContent(visibleElements.length > 0);
     }
   }, [initialData]);
 
@@ -730,7 +932,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       if (!excalidrawAPIRef.current) return;
       const currentElements = excalidrawAPIRef.current.getSceneElements();
       excalidrawAPIRef.current.updateScene({
-        elements: [...currentElements, ...elements],
+        elements: [...currentElements, ...normalizeElementsForExcalidraw(elements)],
       });
       setHasContent(true);
     },
@@ -779,7 +981,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       setTimeout(() => {
         if (excalidrawAPIRef.current && pendingElementsRef.current) {
           const currentElements = excalidrawAPIRef.current.getSceneElements();
-          const newElements = [...currentElements, ...pendingElementsRef.current];
+          const newElements = [...currentElements, ...normalizeElementsForExcalidraw(pendingElementsRef.current)];
 
           excalidrawAPIRef.current.updateScene({
             elements: newElements,
@@ -796,9 +998,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
           // Clear pending elements
           pendingElementsRef.current = null;
 
+          // Filter out isDeleted elements before persisting
+          const persistableNewElements = (newElements as any[]).filter((el: any) => !el.isDeleted);
+
           // Trigger onChange using ref to avoid dependency
           onChangeRefForAPI.current?.({
-            elements: newElements,
+            elements: persistableNewElements,
             appState: excalidrawAPIRef.current.getAppState(),
             files: excalidrawAPIRef.current.getFiles(),
             annotations: annotationsRef.current,
@@ -833,11 +1038,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   // Handle canvas changes - use refs to avoid infinite loops and unnecessary re-renders
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
-      // Only update hasContent if it actually changes - use ref to check current value
+      // Count only non-deleted (visible) elements for hasContent tracking
+      // Excalidraw keeps deleted elements in the array with isDeleted: true
+      const visibleElements = elements.filter((el: any) => !el.isDeleted);
       const currentHasContent = hasContentRef.current;
-      if (elements.length > 0 && !currentHasContent) {
+      if (visibleElements.length > 0 && !currentHasContent) {
         setHasContent(true);
-      } else if (elements.length === 0 && currentHasContent) {
+      } else if (visibleElements.length === 0 && currentHasContent) {
         setHasContent(false);
       }
 
@@ -850,8 +1057,13 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         return;
       }
 
+      // CRITICAL FIX: Filter out isDeleted elements before persisting.
+      // Excalidraw marks deleted elements with isDeleted: true instead of removing them.
+      // Without this filter, deleted diagrams reappear after page reload.
+      const persistableElements = (elements as any[]).filter((el: any) => !el.isDeleted);
+
       onChange?.({
-        elements: elements as ExcalidrawElement[],
+        elements: persistableElements as ExcalidrawElement[],
         appState,
         files,
         annotations: annotationsRef.current,
@@ -861,6 +1073,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
   );
 
   // Annotation handlers
+  // Helper to get persistable (non-deleted) elements from current Excalidraw scene
+  const getPersistableElements = useCallback(() => {
+    if (!excalidrawAPIRef.current) return [];
+    return (excalidrawAPIRef.current.getSceneElements() as any[]).filter((el: any) => !el.isDeleted);
+  }, []);
+
   const handleAddAnnotation = useCallback((annotation: Omit<CanvasAnnotation, 'id' | 'createdAt'>) => {
     const newAnnotation: CanvasAnnotation = {
       ...annotation,
@@ -872,7 +1090,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       // Trigger onChange with updated annotations
       if (excalidrawAPIRef.current) {
         onChange?.({
-          elements: excalidrawAPIRef.current.getSceneElements(),
+          elements: getPersistableElements(),
           appState: excalidrawAPIRef.current.getAppState(),
           files: excalidrawAPIRef.current.getFiles(),
           annotations: updated,
@@ -880,14 +1098,14 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
       return updated;
     });
-  }, [onChange]);
+  }, [onChange, getPersistableElements]);
 
   const handleUpdateAnnotation = useCallback((id: string, updates: Partial<CanvasAnnotation>) => {
     setAnnotations(prev => {
       const updated = prev.map(a => a.id === id ? { ...a, ...updates } : a);
       if (excalidrawAPIRef.current) {
         onChange?.({
-          elements: excalidrawAPIRef.current.getSceneElements(),
+          elements: getPersistableElements(),
           appState: excalidrawAPIRef.current.getAppState(),
           files: excalidrawAPIRef.current.getFiles(),
           annotations: updated,
@@ -895,14 +1113,14 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
       return updated;
     });
-  }, [onChange]);
+  }, [onChange, getPersistableElements]);
 
   const handleDeleteAnnotation = useCallback((id: string) => {
     setAnnotations(prev => {
       const updated = prev.filter(a => a.id !== id);
       if (excalidrawAPIRef.current) {
         onChange?.({
-          elements: excalidrawAPIRef.current.getSceneElements(),
+          elements: getPersistableElements(),
           appState: excalidrawAPIRef.current.getAppState(),
           files: excalidrawAPIRef.current.getFiles(),
           annotations: updated,
@@ -910,7 +1128,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
       return updated;
     });
-  }, [onChange]);
+  }, [onChange, getPersistableElements]);
 
   const handleAddReply = useCallback((annotationId: string, reply: Omit<AnnotationReply, 'id' | 'createdAt'>) => {
     const newReply: AnnotationReply = {
@@ -926,7 +1144,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       );
       if (excalidrawAPIRef.current) {
         onChange?.({
-          elements: excalidrawAPIRef.current.getSceneElements(),
+          elements: getPersistableElements(),
           appState: excalidrawAPIRef.current.getAppState(),
           files: excalidrawAPIRef.current.getFiles(),
           annotations: updated,
@@ -934,7 +1152,7 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
       }
       return updated;
     });
-  }, [onChange]);
+  }, [onChange, getPersistableElements]);
 
   // Handle generation with robust error handling
   const handleGenerate = async (type: CanvasGenerationType) => {
@@ -981,10 +1199,9 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         return;
       }
 
-      // Filter out any invalid elements before adding to canvas
-      const validElements = result.elements.filter((el: any) =>
-        el && typeof el === 'object' && el.type && el.id
-      );
+      // Normalize elements for Excalidraw (fixes "Linear element is not normalized" error
+      // and ensures all required fields are present on AI-generated elements)
+      const validElements = normalizeElementsForExcalidraw(result.elements);
 
       if (validElements.length === 0) {
         if (process.env.NODE_ENV === 'development') {
@@ -1020,9 +1237,12 @@ export const PRDCanvas = forwardRef<PRDCanvasRef, PRDCanvasProps>(function PRDCa
         // before we call onChange. This prevents race conditions with Excalidraw's internal state.
         setTimeout(() => {
           // Re-fetch elements from Excalidraw to ensure we have the latest state
-          const finalElements = excalidrawAPIRef.current
+          const rawElements = excalidrawAPIRef.current
             ? excalidrawAPIRef.current.getSceneElements()
             : newElements;
+
+          // Filter out isDeleted elements before persisting
+          const finalElements = (rawElements as any[]).filter((el: any) => !el.isDeleted);
 
           // Clear the generation flag BEFORE calling onChange so the callback can process normally
           isGeneratingRef.current = false;

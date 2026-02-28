@@ -36,7 +36,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .limit(limit);
 
         if (error) {
-            console.error('Error fetching channel messages:', error);
+            console.error('Error fetching channel messages:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -52,7 +52,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .single();
 
         if (convError) {
-            console.error('Error fetching conversation:', convError);
+            console.error('Error fetching conversation:', convError?.message || convError?.message || convError);
             throw convError;
         }
 
@@ -71,7 +71,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .limit(limit);
 
         if (error) {
-            console.error('Error fetching direct messages:', error);
+            console.error('Error fetching direct messages:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -90,7 +90,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .order('created_at', { ascending: true });
 
         if (error) {
-            console.error('Error fetching thread messages:', error);
+            console.error('Error fetching thread messages:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -110,7 +110,7 @@ class SupabaseMessageRepository implements MessageRepository {
 
         if (error) {
             if (error.code === 'PGRST116') return null;
-            console.error('Error fetching message:', error);
+            console.error('Error fetching message:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -136,7 +136,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .single();
 
         if (error) {
-            console.error('Error creating message:', error);
+            console.error('Error creating message:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -154,7 +154,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .eq('id', messageId);
 
         if (error) {
-            console.error('Error updating message:', error);
+            console.error('Error updating message:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -166,7 +166,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .eq('id', messageId);
 
         if (error) {
-            console.error('Error deleting message:', error);
+            console.error('Error deleting message:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -180,7 +180,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .single();
 
         if (fetchError) {
-            console.error('Error fetching message reactions:', fetchError);
+            console.error('Error fetching message reactions:', fetchError?.message || fetchError?.message || fetchError);
             throw fetchError;
         }
 
@@ -206,7 +206,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .eq('id', messageId);
 
         if (error) {
-            console.error('Error adding reaction:', error);
+            console.error('Error adding reaction:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -220,7 +220,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .single();
 
         if (fetchError) {
-            console.error('Error fetching message reactions:', fetchError);
+            console.error('Error fetching message reactions:', fetchError?.message || fetchError?.message || fetchError);
             throw fetchError;
         }
 
@@ -242,7 +242,7 @@ class SupabaseMessageRepository implements MessageRepository {
             .eq('id', messageId);
 
         if (error) {
-            console.error('Error removing reaction:', error);
+            console.error('Error removing reaction:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -285,7 +285,7 @@ class SupabaseDirectMessageRepository implements DirectMessageRepository {
             .order('last_message_at', { ascending: false, nullsFirst: false });
 
         if (error) {
-            console.error('Error fetching DM conversations:', error);
+            console.error('Error fetching DM conversations:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -306,7 +306,7 @@ class SupabaseDirectMessageRepository implements DirectMessageRepository {
 
         if (error) {
             if (error.code === 'PGRST116') return null;
-            console.error('Error fetching conversation:', error);
+            console.error('Error fetching conversation:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -328,7 +328,7 @@ class SupabaseDirectMessageRepository implements DirectMessageRepository {
             .single();
 
         if (error) {
-            console.error('Error creating conversation:', error);
+            console.error('Error creating conversation:', error?.message || error?.message || error);
             throw error;
         }
 

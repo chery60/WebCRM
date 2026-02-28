@@ -39,7 +39,7 @@ export const taskTabsRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('Error fetching task tabs:', error);
+        console.error('Error fetching task tabs:', error?.message || error);
       }
       return [];
     }
@@ -59,7 +59,7 @@ export const taskTabsRepository = {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching task tab:', error);
+      console.error('Error fetching task tab:', error?.message || error);
       return undefined;
     }
 
@@ -96,7 +96,7 @@ export const taskTabsRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('Error creating task tab:', error);
+      console.error('Error creating task tab:', error?.message || error);
       throw new Error(error?.message || 'Failed to create task tab');
     }
 
@@ -151,7 +151,7 @@ export const taskTabsRepository = {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting task tab:', error);
+      console.error('Error deleting task tab:', error?.message || error);
       return false;
     }
 

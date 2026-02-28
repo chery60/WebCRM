@@ -106,7 +106,7 @@ export const featureRequestsRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('Error fetching feature requests:', error);
+        console.error('Error fetching feature requests:', error?.message || error);
       }
       return [];
     }
@@ -158,7 +158,7 @@ export const featureRequestsRepository = {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching feature request:', error);
+      console.error('Error fetching feature request:', error?.message || error);
       return undefined;
     }
 
@@ -220,7 +220,7 @@ export const featureRequestsRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('Error creating feature request:', error);
+      console.error('Error creating feature request:', error?.message || error);
       throw new Error(error?.message || 'Failed to create feature request');
     }
 
@@ -348,7 +348,7 @@ export const featureRequestsRepository = {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting feature request:', error);
+      console.error('Error deleting feature request:', error?.message || error);
       return false;
     }
 
@@ -366,7 +366,7 @@ export const featureRequestsRepository = {
       .eq('roadmap_id', roadmapId);
 
     if (error) {
-      console.error('Error deleting feature requests by roadmap:', error);
+      console.error('Error deleting feature requests by roadmap:', error?.message || error);
     }
   },
 

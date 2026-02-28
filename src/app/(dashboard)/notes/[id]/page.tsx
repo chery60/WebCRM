@@ -152,15 +152,22 @@ function normalizeCanvasElements(elements: any[]): any[] {
 
 /**
  * Serialize canvases for storage - strips runtime-only properties like Map
+ * and filters out deleted elements so they don't reappear after reload.
  */
 function serializeCanvasesForStorage(canvases: CanvasItem[]): string {
   if (canvases.length === 0) return '';
 
-  // Deep clone and remove non-serializable properties
+  // Deep clone, remove non-serializable properties, and filter deleted elements
   const serializable = canvases.map(canvas => ({
     ...canvas,
     data: {
       ...canvas.data,
+      // CRITICAL FIX: Filter out isDeleted elements before saving to Supabase.
+      // Excalidraw marks deleted elements with isDeleted: true instead of removing them.
+      // Without this filter, deleted diagrams reappear after page reload.
+      elements: Array.isArray(canvas.data.elements)
+        ? canvas.data.elements.filter((el: any) => !el.isDeleted)
+        : [],
       appState: canvas.data.appState ? {
         ...canvas.data.appState,
         collaborators: undefined, // Remove Map - can't be serialized
@@ -320,85 +327,89 @@ export default function NoteDetailPage() {
   }, [content]);
 
   // Extract inline canvases from editor content and sync with Canvas widget
+  // Debounced to avoid expensive parsing on every keystroke / large content insertion
   useEffect(() => {
     if (!content || !isInitialized.current) return;
 
-    try {
-      const parsed = JSON.parse(content);
-      const inlineCanvases: CanvasItem[] = [];
+    const timerId = setTimeout(() => {
+      try {
+        const parsed = JSON.parse(content);
+        const inlineCanvases: CanvasItem[] = [];
 
-      // Recursively find all excalidraw nodes
-      const findExcalidrawNodes = (node: any) => {
-        if (node.type === 'excalidraw' && node.attrs?.data) {
-          const canvasData = node.attrs.data;
-          // Generate a stable ID based on content or use existing
-          const canvasId = canvasData.canvasId || `inline-canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const canvasName = canvasData.canvasName || 'Untitled Canvas';
+        // Recursively find all excalidraw nodes
+        const findExcalidrawNodes = (node: any) => {
+          if (node.type === 'excalidraw' && node.attrs?.data) {
+            const canvasData = node.attrs.data;
+            // Generate a stable ID based on content or use existing
+            const canvasId = canvasData.canvasId || `inline-canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const canvasName = canvasData.canvasName || 'Untitled Canvas';
 
+            inlineCanvases.push({
+              id: canvasId,
+              name: canvasName,
+              data: {
+                elements: canvasData.elements || [],
+                appState: canvasData.appState || { viewBackgroundColor: '#ffffff' },
+                files: canvasData.files || {},
+              },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
 
-          inlineCanvases.push({
-            id: canvasId,
-            name: canvasName,
-            data: {
-              elements: canvasData.elements || [],
-              appState: canvasData.appState || { viewBackgroundColor: '#ffffff' },
-              files: canvasData.files || {},
-            },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
+          if (node.content && Array.isArray(node.content)) {
+            node.content.forEach(findExcalidrawNodes);
+          }
+        };
+
+        findExcalidrawNodes(parsed);
+
+        // Merge inline canvases with existing canvases from widget
+        // Keep widget-only canvases and update/add inline canvases
+        const existingCanvases = canvasesRef.current;
+        const mergedCanvases = [...existingCanvases];
+
+        inlineCanvases.forEach(inlineCanvas => {
+          const existingIndex = mergedCanvases.findIndex(c => c.id === inlineCanvas.id);
+          if (existingIndex >= 0) {
+            const existingName = mergedCanvases[existingIndex].name;
+            const inlineName = inlineCanvas.name;
+
+            // Smart name resolution:
+            // 1. If the existing canvas has a non-default name AND the inline content has the default name,
+            //    preserve the existing name (user likely edited it via UI and content hasn't updated yet)
+            // 2. Otherwise, use the inline canvas name from the editor content as source of truth
+            const isExistingNameCustom = existingName !== 'Untitled Canvas' && existingName.trim() !== '';
+            const isInlineNameDefault = inlineName === 'Untitled Canvas' || !inlineName || inlineName.trim() === '';
+
+            // Preserve existing custom name if inline still has default
+            const finalName = (isExistingNameCustom && isInlineNameDefault) ? existingName : inlineName;
+
+            // Update existing canvas - sync data from editor, but preserve name if user edited it
+            mergedCanvases[existingIndex] = {
+              ...mergedCanvases[existingIndex],
+              name: finalName,
+              data: inlineCanvas.data,
+              updatedAt: new Date().toISOString(),
+            };
+          } else {
+            // Add new inline canvas
+            mergedCanvases.push(inlineCanvas);
+          }
+        });
+
+        // Only update if there are actual changes
+        if (JSON.stringify(mergedCanvases) !== JSON.stringify(existingCanvases)) {
+          setCanvases(mergedCanvases);
+          canvasesRef.current = mergedCanvases;
+          setCanvasChangeCount(prev => prev + 1);
         }
-
-        if (node.content && Array.isArray(node.content)) {
-          node.content.forEach(findExcalidrawNodes);
-        }
-      };
-
-      findExcalidrawNodes(parsed);
-
-      // Merge inline canvases with existing canvases from widget
-      // Keep widget-only canvases and update/add inline canvases
-      const existingCanvases = canvasesRef.current;
-      const mergedCanvases = [...existingCanvases];
-
-      inlineCanvases.forEach(inlineCanvas => {
-        const existingIndex = mergedCanvases.findIndex(c => c.id === inlineCanvas.id);
-        if (existingIndex >= 0) {
-          const existingName = mergedCanvases[existingIndex].name;
-          const inlineName = inlineCanvas.name;
-
-          // Smart name resolution:
-          // 1. If the existing canvas has a non-default name AND the inline content has the default name,
-          //    preserve the existing name (user likely edited it via UI and content hasn't updated yet)
-          // 2. Otherwise, use the inline canvas name from the editor content as source of truth
-          const isExistingNameCustom = existingName !== 'Untitled Canvas' && existingName.trim() !== '';
-          const isInlineNameDefault = inlineName === 'Untitled Canvas' || !inlineName || inlineName.trim() === '';
-
-          // Preserve existing custom name if inline still has default
-          const finalName = (isExistingNameCustom && isInlineNameDefault) ? existingName : inlineName;
-
-          // Update existing canvas - sync data from editor, but preserve name if user edited it
-          mergedCanvases[existingIndex] = {
-            ...mergedCanvases[existingIndex],
-            name: finalName,
-            data: inlineCanvas.data,
-            updatedAt: new Date().toISOString(),
-          };
-        } else {
-          // Add new inline canvas
-          mergedCanvases.push(inlineCanvas);
-        }
-      });
-
-      // Only update if there are actual changes
-      if (JSON.stringify(mergedCanvases) !== JSON.stringify(existingCanvases)) {
-        setCanvases(mergedCanvases);
-        canvasesRef.current = mergedCanvases;
-        setCanvasChangeCount(prev => prev + 1);
+      } catch (error) {
+        console.warn('Failed to extract inline canvases:', error);
       }
-    } catch (error) {
-      console.warn('Failed to extract inline canvases:', error);
-    }
+    }, 500);
+
+    return () => clearTimeout(timerId);
   }, [content]);
 
   // Canvas generation hook

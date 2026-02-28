@@ -327,7 +327,7 @@ function safeJsonParse(content: string): any | null {
   }
 
   // Strategy 2: Strip markdown code fences and parse
-  let cleanContent = stripMarkdownCodeFences(content);
+  const cleanContent = stripMarkdownCodeFences(content);
   console.log('[safeJsonParse] After stripping markdown fences, length:', cleanContent.length);
   
   try {

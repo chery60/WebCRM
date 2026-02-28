@@ -49,7 +49,7 @@ export class GeminiProvider implements AIServiceProvider {
   constructor(config: GeminiConfig) {
     this.apiKey = config.apiKey;
     // Use gemini-2.5-flash as default (stable, best price-performance)
-    let model = config.model || 'gemini-2.5-flash';
+    const model = config.model || 'gemini-2.5-flash';
 
     this.model = model;
     this.webSearchEnabled = config.webSearchEnabled ?? true; // Default to enabled for Gemini
@@ -84,7 +84,7 @@ export class GeminiProvider implements AIServiceProvider {
     });
 
     // Use standard model IDs
-    let modelToUse = request.model || this.model;
+    const modelToUse = request.model || this.model;
 
     // Fallback models (in order of preference) - try Gemini 3 Flash first, then older stable models
     const fallbackModels = [

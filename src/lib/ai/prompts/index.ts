@@ -21,21 +21,21 @@ export {
 // ============================================================================
 // PRD PROMPTS - Master prompts for PRD generation
 // ============================================================================
-export { 
-  MASTER_PRD_SYSTEM_PROMPT, 
+export {
+  MASTER_PRD_SYSTEM_PROMPT,
   PRD_SECTIONS,
-  type PRDSectionDefinition 
+  type PRDSectionDefinition
 } from './prd-prompts';
 
 // ============================================================================
 // PRD TEMPLATES - Template definitions for different product types
 // ============================================================================
-export { 
-  PRD_TEMPLATES, 
+export {
+  PRD_TEMPLATES,
   TEMPLATE_CONTEXT_PROMPTS,
   getTemplate,
   getTemplateContextPrompt,
-  getAllTemplates 
+  getAllTemplates
 } from './prd-templates';
 
 // ============================================================================
@@ -58,6 +58,7 @@ export {
   CANVAS_GENERATION_PROMPTS,
   extractPRDContextForCanvas,
   parseCanvasResponse,
+  parseGraphResponse,
 } from './canvas-prompts';
 
 // ============================================================================

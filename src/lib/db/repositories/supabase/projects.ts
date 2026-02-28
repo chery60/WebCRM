@@ -54,7 +54,7 @@ export const projectsRepository = {
     if (error) {
       // 42P01 = table doesn't exist - silently return empty array
       if (error.code !== '42P01') {
-        console.error('[Projects Repository] Error fetching projects:', error);
+        console.error('[Projects Repository] Error fetching projects:', error?.message || error);
       }
       return [];
     }
@@ -77,7 +77,7 @@ export const projectsRepository = {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching project:', error);
+      console.error('Error fetching project:', error?.message || error);
       return undefined;
     }
 
@@ -116,7 +116,7 @@ export const projectsRepository = {
       .single();
 
     if (error || !insertedData) {
-      console.error('[Projects Repository] Error creating project:', error);
+      console.error('[Projects Repository] Error creating project:', error?.message || error);
       throw new Error(error?.message || 'Failed to create project');
     }
 
@@ -165,7 +165,7 @@ export const projectsRepository = {
     const { error } = await supabase.rpc('delete_project', { target_project_id: id });
 
     if (error) {
-      console.error('Error deleting project:', error);
+      console.error('Error deleting project:', error?.message || error);
       return false;
     }
 
@@ -184,7 +184,7 @@ export const projectsRepository = {
       .eq('is_deleted', false);
 
     if (error) {
-      console.error('Error counting notes:', error);
+      console.error('Error counting notes:', error?.message || error);
       return 0;
     }
 
@@ -204,7 +204,7 @@ export const projectsRepository = {
       .not('project_id', 'is', null);
 
     if (error) {
-      console.error('Error fetching note counts:', error);
+      console.error('Error fetching note counts:', error?.message || error);
       return new Map();
     }
 

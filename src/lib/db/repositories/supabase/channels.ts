@@ -27,7 +27,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .order('name');
 
         if (error) {
-            console.error('Error fetching channels:', error);
+            console.error('Error fetching channels:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -44,7 +44,7 @@ class SupabaseChannelRepository implements ChannelRepository {
 
         if (error) {
             if (error.code === 'PGRST116') return null;
-            console.error('Error fetching channel:', error);
+            console.error('Error fetching channel:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -92,7 +92,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .single();
 
         if (error) {
-            console.error('Error creating channel:', error);
+            console.error('Error creating channel:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -115,7 +115,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('id', channelId);
 
         if (error) {
-            console.error('Error updating channel:', error);
+            console.error('Error updating channel:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -127,7 +127,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('id', channelId);
 
         if (error) {
-            console.error('Error deleting channel:', error);
+            console.error('Error deleting channel:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -142,7 +142,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             });
 
         if (error) {
-            console.error('Error adding channel member:', error);
+            console.error('Error adding channel member:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -155,7 +155,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('user_id', userId);
 
         if (error) {
-            console.error('Error removing channel member:', error);
+            console.error('Error removing channel member:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -167,7 +167,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('channel_id', channelId);
 
         if (error) {
-            console.error('Error fetching channel members:', error);
+            console.error('Error fetching channel members:', error?.message || error?.message || error);
             throw error;
         }
 
@@ -181,7 +181,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('id', membershipId);
 
         if (error) {
-            console.error('Error updating member role:', error);
+            console.error('Error updating member role:', error?.message || error?.message || error);
             throw error;
         }
     }
@@ -194,7 +194,7 @@ class SupabaseChannelRepository implements ChannelRepository {
             .eq('user_id', userId);
 
         if (error) {
-            console.error('Error updating last read:', error);
+            console.error('Error updating last read:', error?.message || error?.message || error);
             throw error;
         }
     }

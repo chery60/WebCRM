@@ -582,6 +582,9 @@ export function NoteEditor({
           productDescription: prdContent.substring(0, 500), // Use first 500 chars as description
           provider: activeProvider || undefined,
           existingElements, // Pass for offset calculation to avoid overlapping
+          // onChunkReady is intentionally not wired here — inline canvases receive
+          // the full result via handleCanvasGenerate return value. Progressive updates
+          // for the PRDCanvas are handled in the page-level hook.
         });
 
         if (!result.success || !result.content) {
@@ -589,7 +592,11 @@ export function NoteEditor({
           return null;
         }
 
-        toast.success(`${result.content.title} generated successfully`);
+        // Show partial-success message if chunked generation had some failures
+        const elementCount = result.content.elements.length;
+        if (elementCount > 0) {
+          toast.success(`${result.content.title} generated (${elementCount} elements)`);
+        }
         return result.content;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -698,31 +705,45 @@ export function NoteEditor({
     }
 
     try {
-      // Convert markdown to TipTap JSON format
+      // Convert markdown to TipTap JSON format (this is fast, pure data transformation)
       const tiptapDoc = markdownToTipTap(generatedContent);
 
       if (tiptapDoc.content && tiptapDoc.content.length > 0) {
-        if (mode === 'overwrite') {
-          // Clear existing content and set new content
-          // Use setContent for overwrite to ensure clean replacement
-          editor.commands.setContent(tiptapDoc);
-        } else {
-          // Append: Move to end of document and insert content
-          // First, move cursor to the end of the document
-          const endPos = editor.state.doc.content.size;
-          editor
-            .chain()
-            .focus()
-            .setTextSelection(endPos)
-            .insertContent(tiptapDoc.content)
-            .run();
-        }
+        // Capture in a typed local so TypeScript narrowing carries into the rAF closure
+        const contentNodes = tiptapDoc.content;
+
+        // Defer the heavy DOM insertion to the next animation frame
+        // so that dialogs can close and the UI remains responsive
+        requestAnimationFrame(() => {
+          try {
+            if (mode === 'overwrite') {
+              // Clear existing content and set new content
+              editor.chain().focus().setContent(tiptapDoc).run();
+            } else {
+              // Append: insert at the very end of the document.
+              // doc.nodeSize - 2 is the last valid insertable position
+              // (nodeSize includes the opening+closing tokens of the doc node itself).
+              const safeEndPos = Math.max(0, editor.state.doc.nodeSize - 2);
+              editor
+                .chain()
+                .focus()
+                .insertContentAt(safeEndPos, contentNodes)
+                .run();
+            }
+
+            toast.success('Content added to note');
+          } catch (insertError) {
+            console.error('Failed to insert PRD content into editor:', insertError);
+            toast.error('Failed to add content to note');
+          }
+        });
       }
     } catch (error) {
-      console.error('Failed to apply PRD content:', error);
+      console.error('Failed to convert PRD content:', error);
       toast.error('Failed to add content to note');
     }
   }, [editor]);
+
 
   // Handle template selection
   const handleTemplateSelect = useCallback((_templateId: string, _template: CustomPRDTemplate) => {
@@ -809,17 +830,15 @@ export function NoteEditor({
       <PRDChatDrawer
         open={showPRDChatDrawer}
         onOpenChange={setShowPRDChatDrawer}
-        noteContent={editor?.state.doc.textContent || ''}
+        noteContent={editor ? editor.state.doc.textContent : ''}
         onApplyContent={handlePRDGenerated}
         noteId={noteId}
-        onGenerateFeatures={(content) => {
-          // Close chat drawer and open features panel
+        onGenerateFeatures={() => {
           setShowPRDChatDrawer(false);
           setAIPanelMode('generate-features');
           setShowAIPanel(true);
         }}
-        onGenerateTasks={(content) => {
-          // Close chat drawer and open tasks panel
+        onGenerateTasks={() => {
           setShowPRDChatDrawer(false);
           setAIPanelMode('generate-tasks');
           setShowAIPanel(true);

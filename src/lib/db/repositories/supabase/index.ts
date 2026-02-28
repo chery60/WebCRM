@@ -12,3 +12,4 @@ export { featureRequestsRepository } from './feature-requests';
 export { projectsRepository } from './projects';
 export { taskTabsRepository } from './task-tabs';
 export { componentLibrariesRepository } from './component-libraries';
+export { prototypesRepository } from './prototypes';

@@ -1,8 +1,12 @@
 /**
- * Canvas Generator Service
- * 
- * Generates Excalidraw diagrams from PRD content using AI.
- * Optimized for minimal token usage while producing high-quality diagrams.
+ * Canvas Generator Service — Two-Phase Architecture
+ *
+ * Phase 1: AI extracts structured graph data (nodes + edges) from PRD content.
+ * Phase 2: Deterministic layout engine converts graph data to Excalidraw elements.
+ *
+ * After generation, a completeness validator checks the diagram against the PRD.
+ * If incomplete, the generator retries (up to MAX_RETRIES total attempts) with a
+ * targeted fix prompt. The best result across all attempts is returned.
  */
 
 import type { AIGenerateRequest } from '@/types';
@@ -12,13 +16,22 @@ import {
   CANVAS_SYSTEM_PROMPT,
   CANVAS_GENERATION_PROMPTS,
   extractPRDContextForCanvas,
-  parseCanvasResponse,
+  parseGraphResponse,
 } from '../prompts/canvas-prompts';
+import { layoutDiagram } from './diagram-layout-engine';
 import type { AIProviderType } from '@/lib/stores/ai-settings-store';
+import {
+  validateCanvasDiagram,
+  scoreGraphData,
+  pickBestCanvasResult,
+} from './diagram-validator';
 
 // ============================================================================
 // TYPES
 // ============================================================================
+
+// Max total attempts (1 initial + up to 2 retries)
+const MAX_ATTEMPTS = 3;
 
 export interface CanvasGenerationOptions {
   /** Type of diagram to generate */
@@ -31,6 +44,16 @@ export interface CanvasGenerationOptions {
   provider?: AIProviderType;
   /** Existing canvas elements to consider (for additive generation) */
   existingElements?: any[];
+  /**
+   * Optional callback invoked after each chunk completes during chunked generation.
+   * Kept for backward compatibility — no longer used since chunking is removed.
+   */
+  onChunkReady?: (chunkElements: any[], chunkIndex: number, totalChunks: number) => void;
+  /**
+   * Optional callback invoked when a retry is triggered due to incomplete diagram.
+   * Useful for surfacing retry status in the UI.
+   */
+  onRetry?: (attempt: number, maxAttempts: number, issues: string[]) => void;
 }
 
 export interface CanvasGenerationResult {
@@ -110,7 +133,14 @@ const DIAGRAM_METADATA: Record<CanvasGenerationType, { title: string; descriptio
 
 export class CanvasGeneratorService {
   /**
-   * Generate a canvas diagram from PRD content
+   * Generate a canvas diagram from PRD content.
+   *
+   * Two-phase approach with completeness validation and auto-retry:
+   * 1. AI extracts structured graph data (nodes + edges) — single request
+   * 2. Layout engine converts to Excalidraw elements with proper positions and bindings
+   * 3. Completeness validator checks against PRD & diagram spec
+   * 4. If incomplete, retry with a targeted fix prompt (up to MAX_ATTEMPTS total)
+   * 5. Best result across all attempts is returned
    */
   async generateDiagram(options: CanvasGenerationOptions): Promise<CanvasGenerationResult> {
     const {
@@ -119,317 +149,235 @@ export class CanvasGeneratorService {
       productDescription,
       provider,
       existingElements = [],
+      onRetry,
     } = options;
 
-    try {
-      // Extract full PRD context for canvas generation
-      const context = extractPRDContextForCanvas(prdContent, productDescription, type);
+    const context = extractPRDContextForCanvas(prdContent, productDescription, type);
+    const typePrompt = CANVAS_GENERATION_PROMPTS[type];
+    const metadata = DIAGRAM_METADATA[type];
 
-      // Build the prompt
-      const typePrompt = CANVAS_GENERATION_PROMPTS[type];
+    // Track all attempts so we can return the best one even if never fully complete
+    const attempts: Array<{ graphData: ReturnType<typeof parseGraphResponse>; score: number }> = [];
+    let totalTokens = 0;
+    let lastError: string | undefined;
 
-      // Calculate offset if adding to existing elements
-      const offset = this.calculateElementOffset(existingElements);
-      const hasExistingContent = existingElements.length > 0 && (offset.x > 0 || offset.y > 0);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        console.log(`[CanvasGenerator] Attempt ${attempt}/${MAX_ATTEMPTS} for "${type}" diagram`);
 
-      // Inject a unique seed so the AI generates fresh, varied content on every call
-      const uniqueSeed = `[Generation ID: ${Date.now()}-${Math.random().toString(36).slice(2, 8)}]`;
+        // Build prompt — on retries, prepend the fix hint from the previous validation
+        const uniqueSeed = `[Generation ID: ${Date.now()}-${Math.random().toString(36).slice(2, 8)}]`;
+        let userPrompt: string;
 
-      let userPrompt = `${uniqueSeed}\n\n${context}\n\n${typePrompt}`;
+        if (attempt === 1) {
+          userPrompt = `${uniqueSeed}\n\n${context}\n\n${typePrompt}`;
+        } else {
+          // Use the fix hint from the most recent failed attempt
+          const lastAttempt = attempts[attempts.length - 1];
+          const lastGraphData = lastAttempt?.graphData;
+          const validation = lastGraphData
+            ? validateCanvasDiagram(lastGraphData, prdContent, type)
+            : null;
+          const fixHint = validation?.fixHint || '## The previous diagram was incomplete. Generate a more comprehensive version.';
 
-      // Note: We don't ask AI to offset - we apply offset after parsing
-      // This produces more reliable results as AI sometimes ignores positioning instructions
-      if (hasExistingContent) {
-        // Add context about existing elements to help AI understand what's already drawn
-        const existingSummary = this.summarizeExistingElements(existingElements);
-        if (existingSummary) {
-          userPrompt += `\n\nNote: Canvas already contains: ${existingSummary}. Generate DIFFERENT complementary content that does not duplicate what is already shown.`;
+          userPrompt = `${uniqueSeed}\n\n${fixHint}\n\n${context}\n\n${typePrompt}`;
         }
-      }
 
-      const request: AIGenerateRequest = {
-        type: 'generate-canvas', // Use dedicated canvas generation type
-        prompt: userPrompt,
-        // Don't pass CANVAS_SYSTEM_PROMPT in context - providers handle system prompts via getSystemPrompt()
-        provider,
-      };
-
-      console.log('CanvasGenerator: Making AI request for type:', type);
-      console.log('CanvasGenerator: User prompt:', userPrompt);
-      console.log('CanvasGenerator: Context length:', context.length);
-      console.log('CanvasGenerator: Request object:', JSON.stringify(request, null, 2).substring(0, 500));
-      
-      const response = await generateAIContent(request, provider);
-
-      console.log('CanvasGenerator: Response received:', response);
-      console.log('CanvasGenerator: Response content type:', typeof response.content);
-      console.log('CanvasGenerator: Response content length:', response.content?.length || 0);
-      console.log('CanvasGenerator: Response first 1000 chars:', response.content?.substring(0, 1000));
-      console.log('CanvasGenerator: Response last 500 chars:', response.content?.substring(response.content?.length - 500));
-
-      // Parse the response into Excalidraw elements
-      let elements = parseCanvasResponse(response.content);
-
-      if (elements.length === 0) {
-        return {
-          success: false,
-          content: null,
-          error: 'Failed to generate diagram elements. Please try again.',
+        const request: AIGenerateRequest = {
+          type: 'generate-canvas',
+          prompt: userPrompt,
+          provider,
         };
+
+        const response = await generateAIContent(request, provider);
+        if (response.tokens) totalTokens += response.tokens;
+
+        console.log(`[CanvasGenerator] Attempt ${attempt} response length: ${response.content?.length || 0}`);
+
+        // Parse graph data
+        const graphData = parseGraphResponse(response.content);
+
+        if (!graphData || graphData.nodes.length === 0) {
+          console.warn(`[CanvasGenerator] Attempt ${attempt}: failed to parse graph data`);
+          lastError = 'Failed to extract diagram data from AI response.';
+          attempts.push({ graphData: null, score: 0 });
+          continue;
+        }
+
+        console.log(`[CanvasGenerator] Attempt ${attempt}: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`);
+
+        // Score this attempt
+        const score = scoreGraphData(graphData, type);
+        attempts.push({ graphData, score });
+
+        // Validate completeness
+        const validation = validateCanvasDiagram(graphData, prdContent, type);
+        console.log(`[CanvasGenerator] Attempt ${attempt} complete: ${validation.complete}, issues: ${validation.issues.length}`);
+
+        if (validation.complete) {
+          // Perfect — use this result immediately
+          console.log(`[CanvasGenerator] Diagram complete on attempt ${attempt}`);
+          const offset = this.calculateElementOffset(existingElements);
+          const elements = layoutDiagram(graphData, type, offset.x, offset.y);
+
+          return {
+            success: true,
+            content: {
+              type,
+              elements,
+              title: metadata.title,
+              description: metadata.description,
+            },
+            tokensUsed: totalTokens,
+          };
+        }
+
+        // Incomplete — notify caller and retry if attempts remain
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`[CanvasGenerator] Incomplete on attempt ${attempt}, retrying…`);
+          onRetry?.(attempt, MAX_ATTEMPTS, validation.issues);
+        }
+
+      } catch (error) {
+        console.error(`[CanvasGenerator] Attempt ${attempt} error:`, error);
+        lastError = error instanceof Error ? error.message : 'Unknown error occurred';
+        attempts.push({ graphData: null, score: 0 });
       }
+    }
 
-      // Apply offset to position new elements away from existing ones
-      if (hasExistingContent) {
-        elements = this.applyOffsetToElements(elements, offset);
-        console.log(`CanvasGenerator: Applied offset (${offset.x}, ${offset.y}) to ${elements.length} elements`);
-      }
+    // All attempts exhausted — return the best result found, even if incomplete
+    const bestGraphData = pickBestCanvasResult(attempts);
 
-      const metadata = DIAGRAM_METADATA[type];
-
-      return {
-        success: true,
-        content: {
-          type,
-          elements,
-          title: metadata.title,
-          description: metadata.description,
-        },
-        tokensUsed: response.tokens,
-      };
-    } catch (error) {
-      console.error('Canvas generation failed:', error);
+    if (!bestGraphData) {
       return {
         success: false,
         content: null,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: lastError || 'Failed to generate diagram after multiple attempts. Please try again.',
       };
     }
+
+    console.log(`[CanvasGenerator] Using best result with ${bestGraphData.nodes.length} nodes after ${MAX_ATTEMPTS} attempts`);
+
+    const offset = this.calculateElementOffset(existingElements);
+    const elements = layoutDiagram(bestGraphData, type, offset.x, offset.y);
+
+    if (elements.length === 0) {
+      return {
+        success: false,
+        content: null,
+        error: 'Layout engine produced no elements. Please try again.',
+      };
+    }
+
+    return {
+      success: true,
+      content: {
+        type,
+        elements,
+        title: metadata.title,
+        description: metadata.description,
+      },
+      tokensUsed: totalTokens,
+    };
   }
 
   /**
-   * Summarize existing canvas elements for AI context.
+   * Calculate offset for positioning new elements away from existing ones.
    */
-  private summarizeExistingElements(elements: any[]): string {
-    if (!elements || elements.length === 0) return '';
-
-    const validElements = elements.filter(el => !el.isDeleted);
-    if (validElements.length === 0) return '';
-
-    const typeCounts: Record<string, number> = {};
-    const textLabels: string[] = [];
-
-    for (const el of validElements) {
-      const type = el.type || 'shape';
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
-
-      // Collect text labels
-      if (el.text && typeof el.text === 'string' && el.text.trim()) {
-        const label = el.text.trim().substring(0, 25);
-        if (!textLabels.includes(label)) {
-          textLabels.push(label);
-        }
-      }
+  private calculateElementOffset(existingElements: any[]): { x: number; y: number } {
+    if (!existingElements || existingElements.length === 0) {
+      return { x: 0, y: 0 };
     }
 
-    const parts: string[] = [];
-
-    // Count summary
-    const typeDesc = Object.entries(typeCounts)
-      .map(([t, c]) => `${c} ${t}${c > 1 ? 's' : ''}`)
-      .join(', ');
-    if (typeDesc) parts.push(typeDesc);
-
-    // Sample labels
-    if (textLabels.length > 0) {
-      const sampleLabels = textLabels.slice(0, 4).join(', ');
-      parts.push(`labeled "${sampleLabels}${textLabels.length > 4 ? '...' : ''}"`);
+    let maxY = 0;
+    for (const el of existingElements) {
+      if (el.isDeleted) continue;
+      const elBottom = (el.y || 0) + (el.height || 60);
+      if (elBottom > maxY) maxY = elBottom;
     }
 
-    return parts.join(' ');
+    return { x: 0, y: maxY + 100 };
   }
 
   /**
-   * Generate multiple diagram types at once (batch generation)
-   * Optimized to reduce overall token usage by sharing context
+   * Generate multiple diagram types at once (semi-parallel batch generation).
+   *
+   * All diagram types are fired concurrently via Promise.allSettled so they
+   * run in parallel rather than sequentially. Each individual diagram still
+   * uses the retry loop internally. Results are stacked vertically by yOffset.
    */
   async generateBatch(
     types: CanvasGenerationType[],
     prdContent: string,
     productDescription: string,
-    provider?: AIProviderType
+    provider?: AIProviderType,
+    onRetry?: (type: CanvasGenerationType, attempt: number, maxAttempts: number, issues: string[]) => void
   ): Promise<Map<CanvasGenerationType, CanvasGenerationResult>> {
     const results = new Map<CanvasGenerationType, CanvasGenerationResult>();
 
-    // Generate in sequence to avoid rate limiting and manage token usage
+    console.log(`[CanvasGenerator] Starting parallel batch for ${types.length} diagram type(s)`);
+
+    // Fire all diagram generations in parallel
+    const settled = await Promise.allSettled(
+      types.map(type =>
+        this.generateDiagram({
+          type,
+          prdContent,
+          productDescription,
+          provider,
+          existingElements: [],
+          onRetry: onRetry
+            ? (attempt, maxAttempts, issues) => onRetry(type, attempt, maxAttempts, issues)
+            : undefined,
+        })
+      )
+    );
+
+    // Stack results vertically — each diagram positioned below the previous
     let yOffset = 0;
+    for (let i = 0; i < types.length; i++) {
+      const type = types[i];
+      const outcome = settled[i];
 
-    for (const type of types) {
-      const result = await this.generateDiagram({
-        type,
-        prdContent,
-        productDescription,
-        provider,
-        existingElements: [], // Start fresh for batch
-      });
-
-      // Offset elements vertically for batch generation
-      if (result.success && result.content) {
-        result.content.elements = result.content.elements.map((el: any) => ({
-          ...el,
-          y: (el.y || 0) + yOffset,
-        }));
-        yOffset += 500; // Space between diagrams
+      if (outcome.status === 'fulfilled') {
+        const result = outcome.value;
+        if (result.success && result.content) {
+          result.content.elements = result.content.elements.map((el: any) => ({
+            ...el,
+            y: (el.y || 0) + yOffset,
+          }));
+          yOffset += 700;
+        }
+        results.set(type, result);
+      } else {
+        // Promise rejected — treat as failure
+        console.error(`[CanvasGenerator] Batch: "${type}" rejected:`, outcome.reason);
+        results.set(type, {
+          success: false,
+          content: null,
+          error: outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error',
+        });
       }
-
-      results.set(type, result);
     }
 
     return results;
   }
 
   /**
-   * Generate a quick overview diagram from PRD summary
-   * Uses minimal tokens for fast generation
+   * Generate a quick overview diagram from PRD summary.
    */
   async generateQuickOverview(
     productDescription: string,
     provider?: AIProviderType
   ): Promise<CanvasGenerationResult> {
-    const quickPrompt = `Create a simple product overview diagram as JSON array.
-
-Product: ${productDescription.slice(0, 300)}
-
-Generate 6-8 elements showing:
-- Product name (center, large rectangle)
-- 3-4 key features (surrounding rectangles)
-- Arrows connecting features to product
-
-Keep it simple and visual.`;
-
-    const request: AIGenerateRequest = {
-      type: 'generate-canvas',
-      prompt: quickPrompt,
-      // Don't pass CANVAS_SYSTEM_PROMPT in context - providers handle system prompts via getSystemPrompt()
+    return this.generateDiagram({
+      type: 'information-architecture',
+      prdContent: productDescription,
+      productDescription,
       provider,
-    };
-
-    try {
-      const response = await generateAIContent(request, provider);
-      const elements = parseCanvasResponse(response.content);
-
-      return {
-        success: elements.length > 0,
-        content: elements.length > 0 ? {
-          type: 'information-architecture',
-          elements,
-          title: 'Product Overview',
-          description: 'Quick visual overview of the product',
-        } : null,
-        tokensUsed: response.tokens,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        content: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
-
-  /**
-   * Calculate offset to avoid overlapping with existing elements.
-   * Returns the best position for new content based on existing layout.
-   */
-  private calculateElementOffset(elements: any[]): { x: number; y: number } {
-    if (!elements || elements.length === 0) {
-      return { x: 0, y: 0 };
-    }
-
-    // Filter out deleted elements and elements without position
-    const validElements = elements.filter(el => 
-      !el.isDeleted && 
-      typeof el.x === 'number' && 
-      typeof el.y === 'number'
-    );
-
-    if (validElements.length === 0) {
-      return { x: 0, y: 0 };
-    }
-
-    let maxX = 0;
-    let maxY = 0;
-    let minX = Infinity;
-    let minY = Infinity;
-
-    for (const el of validElements) {
-      const elX = el.x || 0;
-      const elY = el.y || 0;
-      const elWidth = el.width || 100;
-      const elHeight = el.height || 60;
-      
-      const elRight = elX + elWidth;
-      const elBottom = elY + elHeight;
-      
-      minX = Math.min(minX, elX);
-      minY = Math.min(minY, elY);
-      maxX = Math.max(maxX, elRight);
-      maxY = Math.max(maxY, elBottom);
-    }
-
-    // Calculate the dimensions of existing content
-    const existingWidth = maxX - minX;
-    const existingHeight = maxY - minY;
-
-    // Determine best placement strategy:
-    // - If content is wider than tall, place new content below
-    // - If content is taller than wide, place new content to the right
-    // - Default to placing below with generous vertical spacing
-    
-    const VERTICAL_GAP = 150;   // Gap when placing below
-    const HORIZONTAL_GAP = 200; // Gap when placing to the right
-
-    if (existingWidth > existingHeight * 1.5) {
-      // Wide content - place below, aligned to left edge
-      return { 
-        x: Math.max(0, minX), 
-        y: maxY + VERTICAL_GAP 
-      };
-    } else if (existingHeight > existingWidth * 1.5) {
-      // Tall content - place to the right, aligned to top
-      return { 
-        x: maxX + HORIZONTAL_GAP, 
-        y: Math.max(0, minY) 
-      };
-    } else {
-      // Square-ish content - default to placing below
-      return { 
-        x: Math.max(0, minX), 
-        y: maxY + VERTICAL_GAP 
-      };
-    }
-  }
-
-  /**
-   * Apply offset to generated elements to position them correctly.
-   */
-  applyOffsetToElements(elements: any[], offset: { x: number; y: number }): any[] {
-    if (offset.x === 0 && offset.y === 0) {
-      return elements;
-    }
-
-    return elements.map(el => ({
-      ...el,
-      x: (el.x || 0) + offset.x,
-      y: (el.y || 0) + offset.y,
-      // Also update points for arrows
-      ...(el.type === 'arrow' && el.points ? {
-        // Arrow points are relative to x,y, so they don't need offset
-      } : {}),
-    }));
+    });
   }
 }
 
-// Export singleton instance
+// Export singleton
 export const canvasGenerator = new CanvasGeneratorService();
-
-export default canvasGenerator;

@@ -60,18 +60,19 @@ export interface PRDChatDrawerV2Props {
 // ============================================================================
 
 function convertUIMessageToMessage(uiMessage: any): Message {
-  // Extract text content from parts
+  // Extract ONLY text content from parts (not reasoning/tool parts)
   let content = '';
   if (uiMessage.parts && Array.isArray(uiMessage.parts)) {
     for (const part of uiMessage.parts) {
-      if (part.type === 'text' && part.text) {
+      // Only accumulate actual text parts (skip reasoning, tool-call, etc.)
+      if (part.type === 'text' && typeof part.text === 'string') {
         content += part.text;
       }
     }
   }
 
-  // Also handle direct content property (for backward compatibility)
-  if (!content && uiMessage.content) {
+  // Fallback to direct content property (backward compatibility)
+  if (!content && typeof uiMessage.content === 'string') {
     content = uiMessage.content;
   }
 
@@ -107,30 +108,49 @@ function extractToolInvocations(uiMessage: any): ToolInvocation[] {
 }
 
 function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
-  // First try to extract from special markers in content
   const steps: ThinkingStep[] = [];
-  const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/g;
-  let match;
   let index = 0;
 
+  // 1. Extract from <thinking> tags in content (legacy / fallback)
+  const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/g;
+  let match;
   while ((match = thinkingRegex.exec(content)) !== null) {
     const thinkingContent = match[1].trim();
-    steps.push({
-      id: `step-${index++}`,
-      type: 'reasoning',
-      content: thinkingContent,
-      status: 'completed',
-      timestamp: new Date(),
-    });
+    if (thinkingContent) {
+      steps.push({
+        id: `step-${index++}`,
+        type: 'reasoning',
+        content: thinkingContent,
+        status: 'completed',
+        timestamp: new Date(),
+      });
+    }
   }
 
-  // Also extract from UI message parts (reasoning chunks from backend)
+  // 2. Extract from AI SDK UIMessage parts.
+  //    The AI SDK accumulates reasoning stream events into parts with:
+  //      { type: 'reasoning', reasoning: string }          ← completed reasoning block
+  //    It may also have intermediate forms during streaming:
+  //      { type: 'reasoning-delta', id, delta }            ← raw stream (rare in messages[])
   if (uiMessage.parts && Array.isArray(uiMessage.parts)) {
-    const reasoningParts = uiMessage.parts.filter((part: any) =>
-      part.type === 'reasoning-delta' || part.type === 'reasoning-start' || part.type === 'reasoning-end'
-    );
+    // 2a. Fully-accumulated reasoning parts (standard AI SDK v6 format)
+    // The AI SDK accumulates reasoning-delta events into: { type: 'reasoning', text: string }
+    for (const part of uiMessage.parts) {
+      if (part.type === 'reasoning' && typeof part.text === 'string') {
+        const text = part.text.trim();
+        if (text) {
+          steps.push({
+            id: `reasoning-part-${index++}`,
+            type: 'reasoning',
+            content: text,
+            status: 'completed',
+            timestamp: new Date(),
+          });
+        }
+      }
+    }
 
-    // Group reasoning parts by their id
+    // 2b. Raw delta parts (may appear while streaming, group by id)
     const reasoningGroups = new Map<string, string>();
     for (const part of uiMessage.parts) {
       if (part.type === 'reasoning-delta' && part.delta) {
@@ -138,14 +158,13 @@ function extractThinkingSteps(content: string, uiMessage: any): ThinkingStep[] {
         reasoningGroups.set(part.id, existing + part.delta);
       }
     }
-
-    // Convert to thinking steps
-    for (const [id, content] of reasoningGroups.entries()) {
-      if (content.trim()) {
+    for (const [id, reasoningText] of reasoningGroups.entries()) {
+      const trimmed = reasoningText.trim();
+      if (trimmed) {
         steps.push({
-          id: `reasoning-${id}`,
+          id: `reasoning-delta-${id}`,
           type: 'reasoning',
-          content: content.trim(),
+          content: trimmed,
           status: 'completed',
           timestamp: new Date(),
         });
@@ -617,7 +636,7 @@ export function PRDChatDrawerV2({
       </AlertDialog>
 
       {/* Overwrite/Append Dialog */}
-      <AlertDialog open={showApplyModeDialog} onOpenChange={setShowApplyModeDialog}>
+      <AlertDialog open={showApplyModeDialog} onOpenChange={(open) => { if (!open) { setPendingContent(null); setShowApplyModeDialog(false); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Add PRD to Note</AlertDialogTitle>
@@ -626,23 +645,26 @@ export function PRDChatDrawerV2({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel onClick={() => setShowApplyModeDialog(false)}>
+            <AlertDialogCancel
+              onClick={() => { setPendingContent(null); setShowApplyModeDialog(false); }}
+            >
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction
+            {/* Use Button instead of AlertDialogAction to prevent Radix auto-close racing with our state updates */}
+            <Button
+              variant="secondary"
               onClick={() => handleApplyModeSelect('append')}
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
             >
               <Plus className="w-4 h-4 mr-2" />
               Append to Note
-            </AlertDialogAction>
-            <AlertDialogAction
+            </Button>
+            <Button
+              variant="destructive"
               onClick={() => handleApplyModeSelect('overwrite')}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               <Replace className="w-4 h-4 mr-2" />
               Overwrite
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -46,7 +46,7 @@ export const eventsRepository = {
             .eq('is_deleted', false);
 
         if (error) {
-            console.error('Error fetching events:', error);
+            console.error('Error fetching events:', error?.message || error);
             return [];
         }
 
@@ -64,7 +64,7 @@ export const eventsRepository = {
             .single();
 
         if (error || !data) {
-            console.error('Error fetching event:', error);
+            console.error('Error fetching event:', error?.message || error);
             return undefined;
         }
 
@@ -88,7 +88,7 @@ export const eventsRepository = {
             .gt('end_time', start.toISOString());
 
         if (error) {
-            console.error('Error fetching events in range:', error);
+            console.error('Error fetching events in range:', error?.message || error);
             return [];
         }
 
@@ -131,7 +131,7 @@ export const eventsRepository = {
             .single();
 
         if (error || !insertedData) {
-            console.error('Error creating event:', error);
+            console.error('Error creating event:', error?.message || error);
             return null;
         }
 
@@ -181,7 +181,7 @@ export const eventsRepository = {
             .eq('id', id);
 
         if (error) {
-            console.error('Error deleting event:', error);
+            console.error('Error deleting event:', error?.message || error);
         }
     },
 
@@ -229,7 +229,7 @@ export const eventsRepository = {
             .eq('is_deleted', false);
 
         if (error) {
-            console.error('Error fetching events by source:', error);
+            console.error('Error fetching events by source:', error?.message || error);
             return [];
         }
 
